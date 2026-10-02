@@ -1,4 +1,4 @@
-"""Rival tracker: who is gaining points, and on what. Public data only (no team key), so it can run anywhere.
+"""Rival tracker: who is gaining points, and on what; and when an epic or legendary first appears. Public data only (no team key), so it can run anywhere.
 
 Like a sailing leader covering the boats behind: every poll it snapshots the public leaderboard, and when a team's
 score moves by at least --min points it prints the change (negotiating / market split) with the public events that
@@ -73,8 +73,30 @@ def report(prev, cur, events, min_move, now_label):
     return [x for _, x in sorted(lines, reverse=True)]
 
 
+def scarce(catalog):
+    """{ref: minted} for epics and legendaries: the real scarcity (0 of 9 and 0 of 3 minted on Friday night)."""
+    return {c["id"]: c.get("minted", 0) for st in catalog.get("sets", []) for c in st.get("cards", [])
+            if c.get("rarity") in ("epic", "legendary")}
+
+
+def scarce_alerts(before, after, events):
+    """One line per epic/legendary whose minted count moved, with who pulled or bought it if the feed says."""
+    out = []
+    for ref, n in after.items():
+        if n > before.get(ref, 0):
+            who = []
+            for e in events:
+                p = e.get("payload") or {}
+                if e.get("type") == "pack.opened" and ref in json.dumps(p.get("best") or ""):
+                    who.append(f"{p.get('team')} pulled it from {p.get('pack')}")
+                elif e.get("type") == "settlement" and any(i.get("ref") == ref for i in p.get("items") or []):
+                    who += [f"{i.get('frm')} -> {i.get('to')} @{p.get('price')}" for i in p["items"] if i.get("ref") == ref]
+            out.append(f"SCARCE {ref}: minted {before.get(ref, 0)} -> {n}" + (f" | {'; '.join(who)}" if who else ""))
+    return out
+
+
 def live(every, min_move):
-    prev, last_id = None, None
+    prev, last_id, minted, n = None, None, None, 0
     while True:
         try:
             cur = board(get("/api/leaderboard"))
@@ -86,6 +108,13 @@ def live(every, min_move):
                 for line in report(prev, cur, new, min_move, time.strftime("%H:%M")):
                     print(line, flush=True)
             prev = cur
+            if n % 3 == 0:  # the catalog is bigger: every third poll
+                m = scarce(get("/api/catalog"))
+                if minted is not None:
+                    for line in scarce_alerts(minted, m, new):
+                        print(f"[{time.strftime('%H:%M')}] {line}", flush=True)
+                minted = m
+            n += 1
         except Exception as e:  # keep watching through network errors
             print(f"RIVALS-ERROR {type(e).__name__}: {e}", flush=True)
         time.sleep(every)

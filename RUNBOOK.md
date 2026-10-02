@@ -282,3 +282,21 @@ payloads are logged as `unknown_shape` instead of crashing. Fixed: the broker's 
 cash of ours the feed does not explain is added to every team's high bound). Left as is: 3 duel accepts per tick
 (the server publishes no duel limit), `FLIP_PATIENCE` 40 ticks.
 
+## 12. Card strategy (what to hunt, what to sell, what not to do)
+
+Scarcity on Friday night (catalog `minted`): rares 2 to 5 of 30 per card, **epics 0 of 9, legendaries 0 of 3** in
+every set. Chato sells rare singles at ~85 by minting new copies, so a rare's price is capped by his price.
+
+1. **Complete the Malasaña page**: MAL-03 and MAL-07 at once (cheap), MAL-09 and MAL-10 inside caps.
+2. **Sell to collectors at their prices** what we value least: LAT (x0.5), RET (x0.7, Saturday), CHA (x0.9, Sunday)
+   and duplicates. This is how t12 scored.
+3. **Flip** (`flipper.py`).
+4. **War chest for SAL-11 and SAL-12** (288 and 720 to us; caps 200 and 500). They enter through Silver packs at
+   Chato (epic 12%, legendary 2%), Gold packs (on no menu yet: epic 85%, legendary 15%) or a vault dealer.
+   `agent/rivals.py live` prints `SCARCE <ref>: minted 0 -> 1 | who pulled or bought it` the moment one appears.
+5. **Do not hoard rares** (Chato caps their price) and **do not buy to block**: a trade counts at our values, so a
+   card bought above its value to us is a loss now, and as the leader we gain nothing by lowering others. The only
+   exception: a card that completes a close chaser's page and that we can resell to them for more.
+6. Silver packs for an epic: no. A Salamanca epic from one pack is ~2% (12% x 1/6 sets) and the pack's expected
+   book (~160) is about its price: a lottery, not a plan.
+
