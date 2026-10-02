@@ -136,7 +136,10 @@ class Duels:
         if r_price is not None:
             u_r = util(r_price, r_days if r_days is not None else days)
             u_next = util(price, days) * (1 - decay)
-            if u_r > 0 and (u_r >= S["duel_accept"] * u_next or k >= ROUNDS):
+            clk = getattr(ctx, "clock", None) or {}
+            ticks_left = (d["deadline_tick"] - clk["tick"]) if d.get("deadline_tick") and clk.get("tick") else 99
+            last_chance = ticks_left <= 2  # practice: two duels ended no_deal with a rival offer inside our limit
+            if u_r > 0 and (last_chance or u_r >= S["duel_accept"] * u_next or k >= ROUNDS):
                 if ctx.take_accept(kind="duel"):
                     ctx.api.duel_accept(d["id"])
                     ctx.log("duel", "accept", duel=d["id"], price=r_price, days=r_days, our_surplus=round(u_r, 1), limit=limit)
