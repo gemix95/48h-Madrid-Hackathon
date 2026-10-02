@@ -136,7 +136,17 @@ class Duels:
         if r_price is not None:
             u_r = util(r_price, r_days if r_days is not None else days)
             u_next = util(price, days) * (1 - decay)
-            if u_r > 0 and (u_r >= S["duel_accept"] * u_next or k >= ROUNDS):
+            # Friday practice: real rivals concede 3-8% of the price every round while the pie decays 6%. Waiting
+            # one round wins step x (1 - decay) and loses decay x surplus, so keep talking while the rival's recent
+            # step beats decay / (1 - decay) x our surplus and there is time left; accept once it has slowed down.
+            r_hist = [first(m, "price", default=None) for m in theirs][-3:]
+            steps = [abs(b - a) for a, b in zip(r_hist, r_hist[1:]) if (b > a if seller else b < a)]
+            r_step = sum(steps) / len(steps) if steps else 0.0
+            clk = getattr(ctx, "clock", None) or {}
+            left = (d["deadline_tick"] - clk["tick"]) if d.get("deadline_tick") and clk.get("tick") else 99
+            worth_waiting = (S.get("duel_wait_rule", 1) and u_r > 0 and left >= 3 and k < ROUNDS
+                             and r_step * (1 - decay) > decay * u_r)
+            if u_r > 0 and not worth_waiting and (u_r >= S["duel_accept"] * u_next or k >= ROUNDS or (steps and r_step * (1 - decay) <= decay * u_r)):
                 if ctx.take_accept(kind="duel"):
                     ctx.api.duel_accept(d["id"])
                     ctx.log("duel", "accept", duel=d["id"], price=r_price, days=r_days, our_surplus=round(u_r, 1), limit=limit)
