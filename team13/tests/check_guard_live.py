@@ -1,4 +1,5 @@
-"""Live read-only check of guard.py: three bad offers must be cancelled, a capped bid and a pack bid kept.
+"""Live read-only check of guard.py: three bad offers must be cancelled, a pack bid kept, and a capped SAL-10 bid kept
+only while SAL-10 is still worth more than the bid to us.
 
     source ../bazaar.env && python3 tests/check_guard_live.py     (reads /api/me and /api/catalog only)
 """
@@ -29,5 +30,8 @@ ctx.raw = type("Raw", (), {"my_offers": lambda self: {"offers": fake}})()
 ctx.api = type("Api", (), {"cancel": lambda self, i: cancelled.append(i), "close_thread": lambda self, i: None})()
 ctx.log = lambda *a, **k: print(" ", k.get("offer"), k.get("why"), "loss", k.get("loss"), "gain", k.get("gain"))
 Guard(ctx).step()
-assert cancelled == [1, 2, 3], cancelled
+# offer 4 (a 70 P bid for SAL-10, at the team cap) must be kept while SAL-10 is worth more than 70 P to us, and
+# cancelled once we hold it (then a second copy is worth far less): follow the live album, not a fixed answer
+expected = [1, 2, 3] + ([4] if ctx.values.gain_of_adding(["SAL-10"]) < 70 else [])
+assert cancelled == expected, (cancelled, expected)
 print("OK")
