@@ -350,6 +350,26 @@ class Trader:
                     ctx.log("trade", "bid_dropped", offer=oid, ref=L["ref"], price=L["price"], our_value=round(gain, 1))
                 except BazaarError as e:
                     ctx.log("trade", "cancel_refused", offer=oid, error=str(e))
+        # the same for every other cash-for-one-card bid we have open (thread counters, hand-placed bids): drop it
+        # once the card is worth less to us than we would pay (as maker we pay no fee, the accepting side does)
+        for oid, o in list(mine.items()):
+            give, want = o.get("give") or {}, o.get("want") or {}
+            types = want.get("types") or []
+            if any(not t.startswith("card:") for t in types):
+                continue  # packs and other items: not ours to judge here (dealer haggles bid for packs)
+            refs = refs_of(want, ctx)
+            if oid in listed or o.get("maker") != ctx.me["id"] or not give.get("cash") or give.get("assets") \
+                    or want.get("cash") or len(refs) != 1 or refs[0] not in v.cards:
+                continue
+            gain = v.gain_of_adding(refs)
+            if gain < give["cash"]:
+                try:
+                    ctx.api.cancel(int(oid))
+                    mine.pop(oid)
+                    open_total -= 1
+                    ctx.log("trade", "stale_bid_dropped", offer=oid, ref=refs[0], price=give["cash"], our_value=round(gain, 1))
+                except BazaarError as e:
+                    ctx.log("trade", "cancel_refused", offer=oid, error=str(e))
 
         # reprice stale listings toward their floor
         for oid, L in list(listed.items()):
