@@ -91,6 +91,9 @@ class Trader:
             keep = min(keep, ctx.S.get("seek_keep_cash", 100))  # a page completer may use the bond reserve, not below this
         if cash_out + f > ctx.me["cash"] - keep:
             return {"gain": None, "why": "cash reserved"}
+        completer = bool(they_give) and any(v.gain_of_adding([r]) > v.book(r) * v.m(r) * 1.2 for r in they_give)
+        if cash_out and not completer and hasattr(ctx, "budget_left") and cash_out + f > ctx.budget_left():
+            return {"gain": None, "why": "over today's budget"}
         caps = team_caps()
         if len(they_give) == 1 and they_give[0] in caps and cash_out > caps[they_give[0]]:
             return {"gain": None, "why": f"above the team cap of {caps[they_give[0]]} P"}
@@ -168,6 +171,8 @@ class Trader:
             try:
                 ctx.api.accept(o["id"], assets=assets)
                 ctx.log("trade", "accept", offer=o["id"], venue=o.get("venue"), gain=round(ev["gain"], 1), detail=ev)
+                if ev.get("cash_out") and hasattr(ctx, "record_spend"):
+                    ctx.record_spend(ev["cash_out"] + ev.get("fee", 0), f"board:{','.join(ev.get('give') or [])}")
             except BazaarError as e:
                 ctx.log("trade", "accept_refused", offer=o["id"], error=str(e))
 
@@ -274,6 +279,8 @@ class Trader:
                 free = ctx.me["cash"] - ctx.reserve() - sum(L["price"] for L in ctx.state.get("listings", {}).values() if L["kind"] == "bid")
                 p_max = min(p_max, math.floor(free / (1 + bps / 10000)) - per)  # never promise cash we keep back
                 p_max = min(p_max, team_caps().get(ref, 10 ** 9))                # the team's agreed cap for this card
+                if hasattr(ctx, "budget_left") and value <= v.book(ref) * v.m(ref) * 1.2:
+                    p_max = min(p_max, ctx.budget_left())                        # not a page completer: today's budget
                 if 1 <= p_max < ask and p_max >= 0.5 * ask:
                     cands.append((value - ask, "buy", venue, maker, ref, ask, p_max, o))
             elif len(w_refs) == 1 and give.get("cash") and not g_refs and v.held[w_refs[0]] > 0 and not self.protected(w_refs[0]):  # they buy one card
@@ -348,6 +355,8 @@ class Trader:
             cash_ok = ctx.me["cash"] - keep
             limit = math.floor(min(gain * (0.6 if completer else 0.75), gain - 2 * S["trade_min_gain"], cash_ok,
                                    team_caps().get(ref, 10 ** 9)))
+            if not completer and hasattr(ctx, "budget_left"):
+                limit = min(limit, ctx.budget_left())
             for team, (seen, paid) in sorted(holders.get(ref, {}).items(), key=lambda x: -x[1][0]):
                 if team == ctx.me["id"] or (team, ref) in busy or tried.get(f"{team}:{ref}", -999) > tick - 120 or tick - seen > 240:
                     continue
@@ -505,7 +514,7 @@ class Trader:
                 ctx.log("trade", "list_refused", ref=a["ref"], error=str(e))
                 break
         # bids: cards worth a lot to us, offered below that value; total committed stays inside free cash
-        free = S["trade_bid_share"] * (ctx.me["cash"] - ctx.reserve()) - sum(L["price"] for L in bids)
+        free = S["trade_bid_share"] * (ctx.budget_left() if hasattr(ctx, "budget_left") else ctx.me["cash"] - ctx.reserve()) - sum(L["price"] for L in bids)
         # best value per prima committed first: cheap cards from our high-multiplier sets and page completers
         wants = sorted(v.wishlist(limit=30), key=lambda x: (-round(x[1] / max(1, v.book(x[0])), 2), v.book(x[0])))
         for ref, gain in wants:

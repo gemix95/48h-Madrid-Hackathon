@@ -89,17 +89,23 @@ class Haggler:
                     for ref, gain in ctx.values.wishlist(limit=40):
                         if ctx.values.cards[ref]["rarity"] == s["rarity"] and (best is None or gain > best[2]):
                             best = (s, ref, gain)
-            if best and best[0].get("list_price", 99) * S["haggle_cap"] <= cash:
+            # the welcome price is ~70% of list: a bargain worth more than the per-item cap, but never past today's budget
+            if best and best[0].get("list_price", 99) * 0.75 <= min(cash, ctx.budget_left()):
                 s, ref, gain = best
                 return {"buy": {"card": ref}}, {"side": "buy", "key": f"{dealer['id']}:buy:{s['rarity']}", "lo": 1,
-                                                "hi": math.floor(s["list_price"] * S["haggle_cap"]), "list": s["list_price"],
+                                                "hi": min(math.floor(s["list_price"] * S["haggle_cap"]), ctx.budget_left()), "list": s["list_price"],
                                                 "ref": ref, "beginner": True}
 
         S = ctx.S
-        for s in menu.get("sells", []):  # 1) packs: the cleanest price range to capture
+        buys_today = ctx.state.setdefault("dealer_buys", {}).get(f"{ctx.day_key()}:{dealer['id']}", 0)
+        can_buy = buys_today < S.get("deals_per_dealer_day", 5)
+        item_cap = min(S.get("max_dealer_buy", 40), ctx.budget_left())
+        for s in (menu.get("sells", []) if can_buy else []):  # 1) packs: the cleanest price range to capture
             if S["haggle_buy_packs"] and "pack" in s and counts["packs"] < s.get("per_team_per_hour", 3):
                 key = f"{dealer['id']}:buy:{s['pack']}"
-                hi = min(math.floor((s.get("list_price") or s.get("opening_ask", 30)) * S["haggle_cap"]), cash)
+                hi = min(math.floor((s.get("list_price") or s.get("opening_ask", 30)) * S["haggle_cap"]), cash, item_cap)
+                if (s.get("list_price") or 0) * 0.6 > item_cap:
+                    continue  # too expensive for the ladder: the same capture is available on cheaper items
                 if hi < 5 or key in unsupported:
                     continue
                 lo = self._opening(stats.get(key), s, side="buy")
@@ -120,14 +126,14 @@ class Haggler:
             return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": floor, "hi": hi_ask,
                                                    "list": book, "asset": a["id"], "ref": a["ref"]}
         for s in menu.get("sells", []):  # 3) buy single cards we want, cheaply
-            if S["haggle_buy_cards"] and s.get("rarity") and cash > 15:
+            if can_buy and S["haggle_buy_cards"] and s.get("rarity") and cash > 15 and item_cap >= 5:
                 for ref, gain in ctx.values.wishlist():
                     if ctx.values.cards[ref]["rarity"] != s["rarity"]:
                         continue
                     key = f"{dealer['id']}:buy:{s['rarity']}"
                     if key in unsupported:
                         break
-                    hi = min(math.floor(s.get("list_price", 10) * S["haggle_cap"]), cash, math.floor(gain))
+                    hi = min(math.floor(s.get("list_price", 10) * S["haggle_cap"]), cash, math.floor(gain), item_cap)
                     if hi < 3:
                         break
                     lo = self._opening(stats.get(key), s, side="buy")
@@ -240,12 +246,12 @@ class Haggler:
         buy = plan["side"] == "buy"
         nxt = self._next_price(plan)
 
-        def good(p):  # inside our limits, and (buying) never with the cash kept for the market bond
-            return p is not None and ((buy and p <= plan["hi"] and p <= ctx.me["cash"] - ctx.reserve()) or (not buy and p >= plan["lo"]))
+        def good(p):  # inside our limits, and (buying) within today's budget and never with the cash we keep
+            return p is not None and ((buy and p <= plan["hi"] and p <= ctx.budget_left()) or (not buy and p >= plan["lo"]))
 
         def good_final(p):  # finals: up to the threshold learned from every team's conversations
-            if buy and p is not None and p > ctx.me["cash"] - ctx.reserve():
-                return False  # never dip into the cash we keep for the market bond
+            if buy and p is not None and p > ctx.budget_left():
+                return False  # never past today's budget or into the cash we keep
             if good(p):
                 return True
             asks = plan.get("asks") or []
@@ -259,7 +265,7 @@ class Haggler:
             else:
                 ctx.log("haggle", "final_declined", thread=th["id"], ask=ask, plan=plan)
             return
-        if buy and ask is not None and ask > ctx.me["cash"] - ctx.reserve():
+        if buy and ask is not None and ask > ctx.budget_left():
             pass  # cannot afford it without touching the bond reserve: keep talking, never accept
         elif last and ask is not None and good(ask) and (plan.get("beginner") or (plan.get("target") is not None and (
                 (buy and ask <= plan["target"]) or (not buy and ask >= plan["target"])))):
@@ -327,7 +333,12 @@ class Haggler:
         ctx = self.ctx
         try:
             ctx.api.accept(offer["id"])
-            ctx.log("haggle", "accept", thread=th["id"], offer=offer["id"], price=plan.get("asks", [None])[-1], reason=reason)
+            price = plan.get("asks", [None])[-1]
+            ctx.log("haggle", "accept", thread=th["id"], offer=offer["id"], price=price, reason=reason)
+            if plan.get("side") == "buy" and price:
+                ctx.record_spend(price, plan.get("key"))
+                k = f"{ctx.day_key()}:{plan.get('dealer')}"
+                ctx.state.setdefault("dealer_buys", {})[k] = ctx.state["dealer_buys"].get(k, 0) + 1
         except BazaarError as e:
             ctx.log("haggle", "accept_refused", thread=th["id"], error=str(e))
 

@@ -75,6 +75,15 @@ KNOBS = {
     "venue_fee_bps": (0, 0, 1000, 25, "Market", "Our market fee (bps)",
                       "0 = free. The fee rounds UP per trade (ceil(bps x price / 10000)), so even 1% costs 1 P on every match, and a broker may only "
                       "match when price + fee <= bid: any fee kills thin-margin Market Test pairs. Fees earned never score; free attracts trades, which do."),
+    "day_budget": (120, 20, 400, 10, "Money", "Buying budget per game day (P)",
+                   "Most we spend on dealer purchases, bids and posted offers per day (Friday, Saturday, Sunday each get "
+                   "their own). Page completers are exempt. The ladder scores how well we buy, not how much."),
+    "max_dealer_buy": (40, 10, 200, 5, "Money", "Most we pay for one dealer item (P)",
+                       "Cheap items score the same on the ladder as expensive ones: skip 150 P packs."),
+    "cash_floor": (40, 0, 200, 10, "Money", "Cash we always keep (P)",
+                   "Never spent, even after our market bond is paid: room for a great trade or tomorrow's first deals."),
+    "deals_per_dealer_day": (5, 1, 12, 1, "Money", "Most buys per dealer per day",
+                             "Only our best 3 deals per level count each day; a couple more is enough to improve them."),
     "reserve_cash": (270, 0, 400, 10, "Market", "Cash kept for the market bond (P)",
                      "The bond is 250 + 20. Set 0 to spend everything on deals."),
 }

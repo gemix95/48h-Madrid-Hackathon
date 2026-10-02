@@ -103,8 +103,26 @@ class Context:
         return True
 
     def reserve(self):
-        """Cash we keep back: the venue bond until our market is open (it is worth up to 30 points)."""
-        return 10 if self.state.get("venue") else self.S["reserve_cash"]
+        """Cash we keep back: the venue bond until our market is open (it is worth up to 30 points), then a floor."""
+        floor = self.S.get("cash_floor", 40)
+        return floor if self.state.get("venue") else max(floor, self.S["reserve_cash"])
+
+    # ---------------------------------------------------------------- daily money plan
+    def day_key(self):
+        return self.clock.get("today") or "day"
+
+    def spent_today(self):
+        return self.state.setdefault("spent", {}).get(self.day_key(), 0)
+
+    def budget_left(self):
+        """What we may still spend today: the day budget minus what we spent, never below the cash we keep."""
+        return max(0, min(self.S.get("day_budget", 120) - self.spent_today(), self.me.get("cash", 0) - self.reserve()))
+
+    def record_spend(self, amount, what):
+        if amount and amount > 0:
+            sp = self.state.setdefault("spent", {})
+            sp[self.day_key()] = sp.get(self.day_key(), 0) + amount
+            self.log("money", "spent", amount=amount, what=what, today=sp[self.day_key()], budget=self.S.get("day_budget", 120))
 
     def locked_assets(self):
         ids = set()
