@@ -315,7 +315,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <div class="grid">
       <section class="card s12"><h2>Markets <span class="hint">every place we can trade: our agent scans all of them, lists on the best three, and haggles with sellers</span></h2><div id="markets"></div></section>
       <section class="card s8"><h2>Every market's offers <span class="hint">best for us first, after each market's fee</span></h2>
-        <div class="empty" style="margin:0 0 8px">Offers posted by other teams. <b>Gives</b> = what they hand over, <b>Wants</b> = what they ask. <b>For us</b> = what we would gain by accepting now (card's value to us − price − fee). Green = worth taking.</div>
+        <div class="empty" style="margin:0 0 8px">Offers posted by other teams. <b>Gives</b> = what they hand over, <b>Wants</b> = what they ask. <b>For us</b> = what we would gain by accepting now (card's value to us − price − fee). Green = worth taking. <b>Missing for our pages</b> = they sell a card we don't have yet.</div>
         <div id="boardbar" style="display:flex;gap:10px;align-items:center;margin-bottom:8px"></div><div id="board"></div></section>
       <section class="card s4"><h2>Our offers &amp; haggles</h2><div id="mine"></div></section>
     </div>
@@ -763,7 +763,7 @@ function refsOf(side, d) {
   for (const a of side.items || []) out.push(a.ref || a.card || a);
   return out;
 }
-const MKT = { good: false };   // market board filter
+const MKT = { view: "all" };   // market board tab: all | good (worth taking) | need (missing for our pages)
 function cardTag(ref, d, M) {
   const id = String(ref).replace(/^card:/, ""), c = M.byRef[id];
   if (!c) return `<span class="ctag">${esc(id)}</span>`;
@@ -818,14 +818,18 @@ function market(d, M) {
   // identical offers (same team, market, cards and price) are grouped into one row with ×N
   const groups = new Map();
   for (const r of rows) { const k = [r.venue, r.maker, side(r.o.give, r.give), side(r.o.want, r.want)].join("|"); const g = groups.get(k); if (g) g.n++; else groups.set(k, { ...r, n: 1 }); }
-  const all = [...groups.values()], good = all.filter(r => r.gain > 0), shown = MKT.good ? good : all;
-  $("boardbar").innerHTML = `<button class="btn-s ${MKT.good ? "on" : ""}" onclick="MKT.good=!MKT.good;market(D,model(D))">${MKT.good ? "Showing only worth-taking" : "Show only worth-taking"}</button>
-    <span class="muted" style="font-size:12px"><b style="color:var(--up)">${good.length}</b> worth taking · ${all.length} distinct offers (${rows.length} listed)</span>`;
+  // a card we do not hold that sits on an album page: buying it fills a slot
+  const needs = r => !r.mine && r.give.some(ref => { const c = M.byRef[String(ref).replace(/^card:/, "")]; return c && c.page && !(M.held[c.id] || []).length; });
+  const all = [...groups.values()].map(r => ({ ...r, need: needs(r) })), good = all.filter(r => r.gain > 0), need = all.filter(r => r.need);
+  const shown = MKT.view === "good" ? good : MKT.view === "need" ? need : all;
+  const tab = (v, label, n) => `<button class="btn-s ${MKT.view === v ? "on" : ""}" onclick="MKT.view='${v}';market(D,model(D))">${label} · ${n}</button>`;
+  $("boardbar").innerHTML = tab("all", "All", all.length) + tab("good", "Worth taking", good.length) + tab("need", "Missing for our pages", need.length)
+    + `<span class="muted" style="font-size:12px">${rows.length} listed</span>`;
   $("board").innerHTML = shown.length ? `<table><thead><tr><th>Market</th><th>Team</th><th>Gives</th><th>Wants</th><th class="num">For us</th></tr></thead><tbody>`
     + shown.slice(0, 60).map(r => { const [kc, kl] = kind(r);
-      return `<tr class="${r.gain > 0 ? "good" : ""}"><td class="sec">${esc(vname(r.venue))}</td><td>${esc(nm(r.maker))}${r.mine ? " <span class='chip'>us</span>" : ""}${r.n > 1 ? ` <span class="chip">×${r.n}</span>` : ""}<div><span class="side ${kc}">${kl}</span></div></td><td>${sideHtml(r.o.give, r.give)}</td><td>${sideHtml(r.o.want, r.want)}</td>
+      return `<tr class="${r.gain > 0 ? "good" : ""}"><td class="sec">${esc(vname(r.venue))}</td><td>${esc(nm(r.maker))}${r.mine ? " <span class='chip'>us</span>" : ""}${r.n > 1 ? ` <span class="chip">×${r.n}</span>` : ""}<div><span class="side ${kc}">${kl}</span>${r.need ? ` <span class="side" style="background:color-mix(in srgb, var(--good) 18%, transparent);color:var(--up)">we need it</span>` : ""}</div></td><td>${sideHtml(r.o.give, r.give)}</td><td>${sideHtml(r.o.want, r.want)}</td>
       <td class="num">${r.gain == null ? `<span class="muted">–</span>` : r.gain > 0 ? `<span style="color:var(--up);font-weight:600">✓ +${fmt(r.gain)}</span>` : `<span class="muted">${fmt(r.gain)}</span>`}</td></tr>`; }).join("") + `</tbody></table>`
-    : `<div class="empty">${MKT.good ? "Nothing worth taking right now." : "No offers on any market yet."}</div>`;
+    : `<div class="empty">${MKT.view === "good" ? "Nothing worth taking right now." : MKT.view === "need" ? "Nobody is selling a card we are missing right now." : "No offers on any market yet."}</div>`;
   // our offers grouped by market + live haggles
   const byVenue = {}; for (const o of offers.filter(o => o.venue)) (byVenue[o.venue] ||= []).push(o);
   const haggles = recs.filter(r => r.module === "trade" && r.action.startsWith("haggle")).slice(-8).reverse();
