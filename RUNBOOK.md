@@ -133,3 +133,26 @@ venue fee, so post our price and let them accept.
 - Patience 0.35, memory 0.9, strictness 0.85: few rounds, steps of 5 to 6 P, no tricks, never repeat a price.
   Walk away politely when the midpoint is above the cap ("That is our limit for tonight"): he remembers.
 - Friday: MAL-09 thread 195, we opened 58, he 97; walked at 74 vs 86 (midpoint 80 above our cap 75).
+
+## 7. Duels: what the practice round showed (Fri 22:20, 12 of our duels)
+
+- Payload: the id is `duel` (not `id`), rival messages are signed with an alias in `from`, ours with `"you"`,
+  our standing offer is `your_offer`, and `result` is our surplus x (1 - decay)^rounds (duel 15: 46 x 0.94^2 = 40.6).
+- Real rivals open near a fair price and **concede steadily, 3 to 8% of the price per round**, whatever we do
+  (a buyer went 78, 84, 87, 90, 93, 96, 99, 102, 105 while we came down from 181). Some rivals never speak.
+- Decay is 6% per round, so while our surplus is small, waiting beats accepting: one more round wins the rival's
+  step x 0.94 and costs 6% of our surplus. We accepted 54 at once in duel 16 (surplus 20) against a rival moving
+  about 5 P a round.
+- Branch `duels-wait-rule`: keep talking while the rival's recent step beats decay / (1 - decay) x our surplus,
+  with 3+ ticks left. Simulator: better against conceders, tough rivals and clones; worse against step-matchers
+  (tit-for-tat 0.43 -> 0.37). Merge if Duels I rivals look like Friday's practice rivals.
+
+## 8. Flags (a correct flag scores, a wrong one costs)
+
+`team13/flags.py` runs every tick on dealer messages sent to us. It flags only what the dealer's own structured
+offer proves false: a stated price that differs from the offer's price, or a card code (LAV-03) that differs from
+the card the offer gives. Proven bluffs ("final", then a better price in the same conversation) and catalog
+contradictions are logged as candidates (`flag_bluffs`, `flag_catalog` switch them on). Card names are never
+flagged automatically: Abuela names her gifts. Friday's 912 dealer messages had no provable lie, so expect the
+first real flags from the dealers still to come. Check `logs/decisions.jsonl` for `flag candidate` lines.
+
