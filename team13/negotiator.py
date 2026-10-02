@@ -62,12 +62,12 @@ class Negotiator:
         self.disabled_until = 0.0
         self.stats = {"calls": 0, "fails": 0, "ms": 0}
         if anthropic is not None and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
-            self.client = anthropic.Anthropic(timeout=20.0, max_retries=1)
+            self.client = anthropic.Anthropic(timeout=8.0, max_retries=0)  # ticks are 30 s on Saturday, 15 s on Sunday
 
     def ready(self) -> bool:
         return self.client is not None and time.time() >= self.disabled_until
 
-    def propose(self, situation: dict, band: tuple, fallback: tuple, effort: str = "low") -> tuple:
+    def propose(self, situation: dict, band: tuple, fallback: tuple, effort: str = "low", timeout: float = 8.0) -> tuple:
         """Return (message, price, source). `band` = (lo, hi) inclusive; `fallback` = (message, price) from the rules."""
         lo, hi = int(band[0]), int(band[1])
         if not self.ready() or lo > hi:
@@ -80,7 +80,7 @@ class Negotiator:
         )
         t0 = time.time()
         try:
-            resp = self.client.beta.messages.create(
+            resp = self.client.with_options(timeout=max(1.0, timeout)).beta.messages.create(
                 model=MODEL,
                 max_tokens=2000,
                 system=SYSTEM,
@@ -105,6 +105,8 @@ class Negotiator:
             self._fail(e, pause=60)
         except anthropic.APIStatusError as e:
             self._fail(e, pause=300 if e.status_code in (401, 403) else 30)
+        except anthropic.APITimeoutError as e:  # slow call: skip it, try again next tick
+            self._fail(e, pause=0)
         except anthropic.APIConnectionError as e:
             self._fail(e, pause=30)
         except (ValueError, KeyError, StopIteration, json.JSONDecodeError) as e:

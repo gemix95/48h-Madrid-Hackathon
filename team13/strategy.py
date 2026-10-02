@@ -16,6 +16,7 @@ KNOBS = {
     "enable_trader": (1, 0, 1, 1, "Modules", "Team trading", "Trade with other teams on El Rastro at our private values."),
     "enable_duels": (1, 0, 1, 1, "Modules", "Duels", "Play the duel tournament automatically."),
     "enable_venue": (1, 0, 1, 1, "Modules", "Open our market", "Open our own market as soon as we reach level 2."),
+    "enable_guard": (1, 0, 1, 1, "Modules", "Guard", "Last each tick: cancel any open offer of ours that loses value at our private values or breaks a team cap."),
     "llm_negotiator": (1, 0, 1, 1, "Modules", "AI negotiator (Claude Opus 5.5)",
                        "Claude writes each message and picks the price inside the safe band the rules allow; "
                        "falls back to templates if the API is slow or unavailable."),

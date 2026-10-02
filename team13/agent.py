@@ -20,6 +20,7 @@ import urllib.request
 import sys
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from bazaar_sdk import Bazaar, BazaarError
@@ -27,6 +28,7 @@ from duels import Duels
 from market import Market
 from haggler import Haggler
 from trader import Trader
+from guard import Guard
 from values import Values
 from intel import Intel
 from learner import Learner
@@ -116,9 +118,14 @@ class Context:
         return ids
 
     def speak(self, situation, band, fallback, effort="low"):
-        """Message + price for a negotiation: Claude inside the safe band when enabled, else the rules."""
-        if self.S.get("llm_negotiator", 1) and self.llm.ready():
-            return self.llm.propose(situation, band, fallback, effort=effort)
+        """Message + price for a negotiation: Claude inside the safe band when enabled, else the rules.
+        Claude only gets the time left in this tick's budget (ticks shrink to 15 s on Sunday): a late call is
+        a missed tick and an expired offer, so past the budget the rules write the message."""
+        left = getattr(self, "tick_deadline", time.time() + 8) - time.time()
+        if self.S.get("llm_negotiator", 1) and self.llm.ready() and left >= 2.5:
+            return self.llm.propose(situation, band, fallback, effort=effort, timeout=min(8.0, left - 1.0))
+        if left < 2.5:
+            self.log("llm", "skipped_tick_budget", left_s=round(left, 1))
         return fallback[0], fallback[1], "rules"
 
     def catalog_loaded(self):
@@ -138,14 +145,16 @@ class Context:
         except Exception:
             pass
         boards = {}
-        for v in self.venues:
-            if v["venue"] == self.state.get("venue"):
-                continue  # our own market: we may not trade there
+        venues = [v for v in self.venues if v["venue"] != self.state.get("venue")]  # our own market: we may not trade there
+
+        def read(v):
             try:
-                boards[v["venue"]] = [{**o, "venue": o.get("venue") or v["venue"]}
-                                      for o in self.public_get(f"/api/venues/{v['venue']}/offers").get("offers", [])]
+                return v["venue"], [{**o, "venue": o.get("venue") or v["venue"]}
+                                    for o in self.public_get(f"/api/venues/{v['venue']}/offers").get("offers", [])]
             except Exception:
-                boards[v["venue"]] = self.boards.get(v["venue"], [])
+                return v["venue"], self.boards.get(v["venue"], [])
+        with ThreadPoolExecutor(max_workers=8) as pool:  # one venue per team on Saturday: read the books in parallel
+            boards.update(pool.map(read, venues))
         self.boards = boards
 
     def venue_fee(self, venue):
@@ -243,7 +252,9 @@ def main():
     modules = [("duels", Duels(ctx)), ("haggler", Haggler(ctx)), ("venue", Market(ctx))]
     if not args.no_trade:
         modules.append(("trader", Trader(ctx)))
-    switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue"}
+    modules.append(("guard", Guard(ctx)))  # last: undo anything this tick left open that loses value
+    switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue",
+              "guard": "enable_guard"}
     ctx.log("agent", "start", dry=args.dry_run)
     last_tick, n = None, 0
     while True:
@@ -259,6 +270,8 @@ def main():
                 time.sleep(max(0.2, min(5.0, float(ctx.clock.get("next_tick_in", 1)) + 0.3)))
                 continue
             last_tick = ctx.clock["tick"]
+            # budget for slow work (Claude messages) in this tick: 70% of the time left before the next tick
+            ctx.tick_deadline = time.time() + 0.7 * float(ctx.clock.get("next_tick_in") or ctx.clock.get("tick_seconds") or 30)
             ctx.observe(full=(n % 20 == 0))
             n += 1
             for extra in (ctx.watch_levels, ctx.maybe_flag):
