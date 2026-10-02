@@ -168,7 +168,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <span class="err" id="err"></span>
     <nav id="tabs">
       <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a><a href="#album">Album</a>
-      <a href="#market">Market</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a>
+      <a href="#market">Market</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a>
     </nav>
   </header>
 
@@ -257,6 +257,26 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <div class="grid">
       <section class="card s8"><h2>El Rastro <span class="hint">offers from all teams, best for us first (fees 5% + 1 P per card)</span></h2><div id="board"></div></section>
       <section class="card s4"><h2>Our offers &amp; markets</h2><div id="mine"></div></section>
+    </div>
+  </main>
+
+  <main class="tab" id="tab-intel">
+    <div class="grid">
+      <section class="card s12">
+        <h2>What the other teams teach us <span class="hint">from the public feed: every team's offers, deals and gifts</span></h2>
+        <div class="moves" id="intel-insights"></div>
+      </section>
+      <section class="card s12">
+        <h2>Dealer prices everyone got <span class="hint">each dot is one settled deal · hover for the team</span></h2>
+        <div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Haggled deal</span>
+          <span><i class="swatch" style="border:2px solid var(--muted);border-radius:50%"></i>Fixed first-deal price</span>
+          <span><i class="swatch" style="background:var(--text-primary);border-radius:50%"></i>Ours</span>
+          <span><i class="swatch" style="background:var(--series-2);width:3px"></i>Dealer's usual opening</span>
+          <span><i class="swatch" style="border-top:2px dashed var(--muted);height:0"></i>List price</span></div>
+        <div id="intel-prices"></div>
+      </section>
+      <section class="card s7"><h2>Rivals at the dealers <span class="hint">negotiated = not the fixed first deal</span></h2><div id="intel-teams"></div></section>
+      <section class="card s5"><h2>Latest market listings</h2><div id="intel-listings"></div></section>
     </div>
   </main>
 
@@ -825,7 +845,9 @@ function strategyForm() {
   const groups = {};
   for (const [k, kn] of Object.entries(SD.knobs)) (groups[kn.group] ||= []).push([k, kn]);
   const active = Object.entries(SD.presets).find(([, ov]) => Object.entries({ ...Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])), ...ov }).every(([k, v]) => draft[k] == v));
-  $("presets").innerHTML = Object.keys(SD.presets).map(n => `<button class="btn ${active && active[0] === n ? "on" : ""}" data-p="${esc(n)}">${esc(n)}</button>`).join("");
+  const R = SD.results || {};
+  $("presets").innerHTML = Object.keys(SD.presets).map(n => `<button class="btn ${active && active[0] === n ? "on" : ""}" data-p="${esc(n)}">${esc(n)}${R[n] ? `<span class="muted" style="display:block;font-size:11px;font-weight:400">dealers ${Math.round(R[n].dealers * 100)}% · duels ${Math.round(R[n].duels * 100)}%</span>` : ""}</button>`).join("")
+    + `<div class="muted" style="font-size:11px;width:100%;margin-top:4px">Simulated share captured (dealer price range · duel pie). Trading settings are not simulated.</div>`;
   $("presets").querySelectorAll("[data-p]").forEach(b => b.onclick = () => {
     draft = { ...Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])), ...SD.presets[b.dataset.p] };
     $("saved").textContent = `${b.dataset.p} loaded, not saved yet`; strategyForm(); });
@@ -907,6 +929,74 @@ function strategyPlan(d, M) {
     ${a.stats.length ? `<div class="stats">${a.stats.map(([l, v]) => `<div><b>${v}</b>${l}</div>`).join("")}</div>` : ""}</div>`).join("");
 }
 
+
+// ---------- intel ----------
+const CLS_LABEL = c => c.replace("buy:pack:sobre_barrio", "Buy · Neighbourhood pack").replace(/^buy:pack:(.+)$/, "Buy · pack $1")
+  .replace(/^buy:card:(.+)$/, "Buy · $1 card").replace(/^sell:card:(.+)$/, "Sell to dealer · $1 card");
+function intelTab(d, M) {
+  const I = d.intel; if (!I) { $("intel-insights").innerHTML = `<div class="empty">Reading the feed…</div>`; return; }
+  const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
+  const nm = id => id === d.me.id ? "us" : (names[id] || id);
+  const dealerName = id => ((d.dealers?.personas || []).find(p => p.id === id)?.name || id).split(" ")[0];
+  const classes = Object.values(I.classes).filter(c => c.n || c.beginner.length).sort((a, b) => (b.n + b.beginner_deals.length) - (a.n + a.beginner_deals.length));
+  const listFor = c => { const sells = (d.dealers?.personas || []).find(p => p.id === c.dealer)?.menu?.sells || [];
+    const m = c.cls.match(/pack:(.+)$/); if (m) return sells.find(s => s.pack === m[1])?.list_price;
+    const r = c.cls.split(":").pop(); return sells.find(s => s.rarity === r)?.list_price ?? M.cards.find(x => x.rarity === r)?.book; };
+
+  // insights
+  const ins = [];
+  const beg = classes.filter(c => c.beginner.length);
+  if (beg.length) ins.push(["info", `Every team's first deal with ${dealerName(beg[0].dealer)} is a fixed welcome price`,
+    `${beg.map(c => `${CLS_LABEL(c.cls)}: ${c.beginner.join("/")} P`).join(" · ")}. She doesn't move on it, so it is not a negotiated deal and likely scores nothing on the ladder. Our agent spends a new dealer's first deal on the single most valuable item instead of haggling.`]);
+  for (const c of classes.filter(c => c.n)) {
+    const sell = c.cls.startsWith("sell"), best = c.prices.find(p => p[1] === c.best);
+    ins.push([sell ? "good" : "info", `${CLS_LABEL(c.cls)}: teams got ${c.worst === c.best ? c.best : `${sell ? c.worst : c.best}–${sell ? c.best : c.worst}`} P (median ${fmt(c.median)}, ${c.n} deal${c.n > 1 ? "s" : ""})`,
+      `${c.opening ? `Her usual opening: ${fmt(c.opening, 0)} P. ` : ""}Best: ${c.best} P by ${esc(nm(best?.[2]))}.${c.finals.length ? ` Final offers seen: ${c.finals.join(", ")} P.` : ""} ` +
+      (sell ? `We never sell below ${Math.floor(c.median * 0.8)} P and close at once at ${c.best} P.` : `We never pay above ${Math.ceil(c.median)} P and close at once at ${c.best} P or less.`)]);
+  }
+  const gifts = I.gifts || [];
+  if (gifts.length) ins.push(["good", `${gifts.length} free cards given by dealers`, `${[...new Set(gifts.map(g => nm(g.team)))].join(", ")}. They arrive right after a team's first deals; they don't score but they are trade material.`]);
+  const rivals = Object.entries(I.teams).filter(([t]) => t !== d.me.id).sort((a, b) => b[1].negotiated - a[1].negotiated);
+  if (rivals.length) ins.push(["warning", `Most active rivals: ${rivals.slice(0, 3).map(([t, v]) => `${esc(nm(t))} (${v.negotiated} haggled)`).join(", ")}`,
+    `Three haggled deals unlock the next dealer early. We have ${I.teams[d.me.id]?.negotiated ?? 0}.`]);
+  $("intel-insights").innerHTML = ins.map(([st, t, dd]) => { const [col, ic] = STATUS[st];
+    return `<div class="move"><div class="ic" style="color:${col}">${ic}</div><div><div class="t">${t}</div><div class="d">${dd}</div></div></div>`; }).join("");
+
+  // price strip per class
+  const rowH = 44, L = 210, R = 30, W = 1000, H = classes.length * rowH + 24;
+  const maxP = Math.max(10, ...classes.flatMap(c => [...c.prices.map(p => p[1]), ...c.beginner_deals.map(p => p[1]), c.opening || 0, (listFor(c) || 0) * 1.15]));
+  const X = v => L + v / maxP * (W - L - R);
+  let g = "", tips = [];
+  for (let v = 0; v <= maxP; v += maxP > 40 ? 10 : 5) g += `<line x1="${X(v)}" x2="${X(v)}" y1="0" y2="${H - 18}" stroke="var(--grid)"/><text x="${X(v)}" y="${H - 4}" text-anchor="middle">${v} P</text>`;
+  classes.forEach((c, i) => {
+    const y = i * rowH + 22, lst = listFor(c);
+    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" class="ink1">${esc(CLS_LABEL(c.cls))}</text><text x="${L - 12}" y="${y + 18}" text-anchor="end">${esc(dealerName(c.dealer))} · ${c.n} haggled</text>`;
+    if (lst) g += `<line x1="${X(lst)}" x2="${X(lst)}" y1="${y - 14}" y2="${y + 14}" stroke="var(--muted)" stroke-dasharray="3 3"/>`;
+    if (c.opening) g += `<rect x="${X(c.opening) - 1.5}" y="${y - 14}" width="3" height="28" fill="var(--series-2)"/>`;
+    const dots = [...c.beginner_deals.map(p => [...p, true]), ...c.prices.map(p => [...p, false])];
+    const seen = {};
+    for (const [tick, price, team, beginner] of dots) {
+      const k = Math.round(price); seen[k] = (seen[k] || 0) + 1; const dy = ((seen[k] - 1) % 5 - 2) * 5;  // jitter equal prices
+      const us = team === d.me.id, x = X(price), yy = y + dy;
+      tips.push(`<b>${price} P</b> · ${esc(nm(team))}<br>${CLS_LABEL(c.cls)} · tick ${tick}${beginner ? "<br>fixed first-deal price" : ""}`);
+      g += beginner ? `<circle cx="${x}" cy="${yy}" r="5" fill="none" stroke="${us ? "var(--text-primary)" : "var(--muted)"}" stroke-width="2"/>`
+        : `<circle cx="${x}" cy="${yy}" r="5.5" fill="${us ? "var(--text-primary)" : "var(--series-1)"}" stroke="var(--surface-1)" stroke-width="2"/>`;
+      g += `<circle data-tip="${tips.length - 1}" cx="${x}" cy="${yy}" r="10" fill="transparent"/>`;
+    }
+  });
+  $("intel-prices").innerHTML = classes.length ? `<svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg>` : `<div class="empty">No dealer deals yet.</div>`;
+  bindTips($("intel-prices"), i => tips[i]);
+
+  // rivals table
+  $("intel-teams").innerHTML = `<table><thead><tr><th>Team</th><th class="num">Talks</th><th class="num">Deals</th><th class="num">Haggled</th><th class="num">Spent</th><th class="num">Gifts</th><th class="num">Listings</th></tr></thead><tbody>`
+    + Object.entries(I.teams).sort((a, b) => b[1].negotiated - a[1].negotiated || b[1].deals - a[1].deals).map(([t, v]) =>
+      `<tr${t === d.me.id ? ' style="font-weight:700"' : ""}><td>${esc(nm(t) === "us" ? "Team 13 (us)" : nm(t))}</td><td class="num">${v.conversations}</td><td class="num">${v.deals}</td><td class="num">${v.negotiated}</td><td class="num">${v.spent} P</td><td class="num">${v.gifts}</td><td class="num">${v.listings}</td></tr>`).join("") + `</tbody></table>`;
+  const side = x => x ? [...(x.assets || []).map(a => a.ref), ...(x.types || []).map(t => t.split(":").pop()), x.cash ? `${x.cash} P` : ""].filter(Boolean).join(" + ") || "–" : "–";
+  $("intel-listings").innerHTML = (I.listings || []).length ? `<table><thead><tr><th>Tick</th><th>Team</th><th>Gives</th><th>Wants</th></tr></thead><tbody>`
+    + I.listings.slice(-15).reverse().map(l => `<tr><td class="num">${l.tick}</td><td>${esc(nm(l.maker))}</td><td>${esc(side(l.give))}</td><td>${esc(side(l.want))}</td></tr>`).join("") + `</tbody></table>`
+    : `<div class="empty">No listings yet.</div>`;
+}
+
 // ---------- main loop ----------
 function showTab() {
   const id = (location.hash || "#overview").slice(1);
@@ -924,13 +1014,13 @@ async function refresh() {
     if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
     servedAt = d.served_at;
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
-      d.leaderboard, d.levels, d.dealers, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
+      d.leaderboard, d.levels, d.dealers, d.intel?.events, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
     header(d);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
-      () => threads(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M)];
+      () => threads(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable"; }
 }

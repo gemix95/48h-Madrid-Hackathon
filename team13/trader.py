@@ -60,6 +60,33 @@ class Trader:
             return {"gain": None, "why": "cash reserved"}
         return {"gain": gain, "give": they_give, "want": they_want, "cash_in": cash_in, "cash_out": cash_out, "fee": f}
 
+    def cheapest_rival_ask(self, ref: str):
+        """Lowest price another team asks on El Rastro for a single card of the same ref (else same rarity)."""
+        v, mine = self.ctx.values, self.ctx.me["id"]
+        rar = v.cards.get(ref, {}).get("rarity")
+        same, similar = [], []
+        for o in self.ctx.board:
+            give, want = o.get("give") or {}, o.get("want") or {}
+            assets = give.get("assets") or []
+            if o.get("maker") == mine or len(assets) != 1 or not want.get("cash") or give.get("cash"):
+                continue
+            r = assets[0].get("ref") if isinstance(assets[0], dict) else None
+            if r == ref:
+                same.append(want["cash"])
+            elif r and v.cards.get(r, {}).get("rarity") == rar:
+                similar.append(want["cash"])
+        pool = same or similar
+        if not pool and getattr(self.ctx, "intel", None):  # board empty: what teams listed recently (public feed)
+            tick = self.ctx.clock.get("tick", 0)
+            for l in self.ctx.intel.summary().get("listings", []):
+                g, w = l.get("give") or {}, l.get("want") or {}
+                if l.get("maker") != mine and len(g.get("assets") or []) == 1 and w.get("cash") and tick - l["tick"] <= 30:
+                    r = g["assets"][0].get("ref")
+                    (same if r == ref else similar if v.cards.get(r, {}).get("rarity") == rar else []).append(w["cash"])
+            pool = same or similar
+            return sorted(pool)[len(pool) // 2] if pool else None  # median of recent listings, not one outlier
+        return min(pool) if pool else None
+
     def assets_for(self, refs: list) -> list:
         """Which of our copies to hand over: the highest serial first (keep low serials, they are nicer)."""
         out, locked = [], self.ctx.locked_assets()
@@ -200,6 +227,9 @@ class Trader:
             book = v.book(a["ref"])
             floor = math.ceil(loss + MIN_GAIN + fee(book, 1))
             start = max(floor, math.ceil(book * S["trade_ask_start"]))
+            rival = self.cheapest_rival_ask(a["ref"])
+            if S.get("use_intel", 1) and rival is not None and rival - 1 < start:
+                start = max(floor, rival - 1)  # undercut the cheapest competing listing, never below our floor
             L = {"kind": "ask", "ref": a["ref"], "asset": a["id"], "start": start, "floor": floor, "born": tick}
             L["price"] = self._price(L, tick, REPRICE)
             try:

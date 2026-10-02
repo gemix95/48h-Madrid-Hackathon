@@ -26,6 +26,7 @@ from duels import Duels
 from haggler import Haggler
 from trader import Trader
 from values import Values
+from intel import Intel
 import strategy
 
 HERE = Path(__file__).parent
@@ -64,6 +65,7 @@ class Context:
         self.values = None
         self._accepts = {}
         self.S = strategy.load()
+        self.intel = None
 
     # ---------------------------------------------------------------- logging & state
     def log(self, module, action, **detail):
@@ -123,6 +125,11 @@ class Context:
         api = self.raw
         self.S = strategy.load()  # the dashboard's Strategy tab writes strategy.json
         self.me = api.me()
+        if self.intel is None:
+            self.intel = Intel(LOGS / "feed_events.jsonl", url=self.raw.url)
+        if self.clock.get("tick", 0) - self.state.get("intel_tick", -99) >= 2:  # the whole public feed, every 2 ticks
+            self.intel.refresh()
+            self.state["intel_tick"] = self.clock.get("tick", 0)
         self.threads = api.my_threads().get("threads", [])
         self.my_offers = api.my_offers().get("offers", [])
         try:
@@ -135,6 +142,7 @@ class Context:
             self.levels = api.levels().get("levels", [])
         if self.values is None or full:
             self.values = Values(self.catalog, self.me)
+            self.intel.set_catalog(self.catalog)
         else:
             self.values.update(self.me)
         self.state["ladder_deals"] = sum(1 for t in self.threads if t.get("kind") == "persona" and t["status"] == "deal")

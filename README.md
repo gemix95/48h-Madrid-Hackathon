@@ -18,6 +18,11 @@ cd team13 && python3 smart_broker.py       # once we are level 2 and the agent h
 Strategy: open the dashboard's **Strategy** tab to read the game plan and tune the agent (presets or sliders).
 Saving writes `team13/strategy.json`; the running agent applies it on the next tick, no restart needed.
 
+Intel: `team13/intel.py` reads the public feed (every team's offers, deals, gifts and listings). The agent never pays above
+the median other teams got, closes at once at the best price anyone got, spends a new dealer's fixed first-deal price on
+its most valuable item, and undercuts rival listings. See the dashboard's **Intel** tab.
+Strategy tests: `python3 team13/tests/tournament.py` (results in `team13/tests/RESULTS.md`).
+
 Run only ONE agent per team key: two agents would fight over the one accept per tick.
 
 ## How we play to win

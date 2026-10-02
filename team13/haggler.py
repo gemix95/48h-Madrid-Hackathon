@@ -35,6 +35,10 @@ KIND_SELL = [
 ]
 
 
+def S_use_intel(ctx) -> bool:
+    return bool(ctx.S.get("use_intel", 1)) and getattr(ctx, "intel", None) is not None
+
+
 def boulware(lo: float, hi: float, k: int, rounds: int = 12, e: float = 2.2) -> float:  # knobs: haggle_rounds, haggle_curve
     """Concession schedule: move little at first, more as patience runs out."""
     x = min(1.0, k / rounds)
@@ -65,6 +69,23 @@ class Haggler:
         unsupported = set(ctx.state.setdefault("unsupported_topics", []))
         cash = ctx.me["cash"] - ctx.reserve()
         stats = ctx.state.setdefault("dealer_stats", {})
+        S = ctx.S
+        intel = ctx.intel if S_use_intel(ctx) else None
+        first_time = not any(t.get("with") == dealer["id"] and t["status"] == "deal" for t in ctx.threads)
+        if intel and first_time and intel.has_beginner_price(dealer["id"]):
+            # every team's first deal with a dealer goes at a fixed welcome price (~70% of list): spend it on the
+            # single item worth most to us
+            best = None
+            for s in menu.get("sells", []):
+                if s.get("rarity"):
+                    for ref, gain in ctx.values.wishlist(limit=40):
+                        if ctx.values.cards[ref]["rarity"] == s["rarity"] and (best is None or gain > best[2]):
+                            best = (s, ref, gain)
+            if best and best[0].get("list_price", 99) * S["haggle_cap"] <= cash:
+                s, ref, gain = best
+                return {"buy": {"card": ref}}, {"side": "buy", "key": f"{dealer['id']}:buy:{s['rarity']}", "lo": 1,
+                                                "hi": math.floor(s["list_price"] * S["haggle_cap"]), "list": s["list_price"],
+                                                "ref": ref, "beginner": True}
 
         S = ctx.S
         for s in menu.get("sells", []):  # 1) packs: the cleanest price range to capture
@@ -106,6 +127,23 @@ class Haggler:
                                                     "list": s.get("list_price"), "ref": ref}
         return None
 
+    def _intel(self, dealer_id, plan):
+        """Attach what other teams got for this kind of item: a target to close at, a cap never to exceed."""
+        ctx = self.ctx
+        if not S_use_intel(ctx) or plan.get("beginner"):
+            return plan
+        cls = (f"buy:pack:{plan['pack']}" if plan.get("pack") else
+               f"{plan['side']}:card:{ctx.values.cards.get(plan.get('ref', ''), {}).get('rarity', '')}")
+        adv = ctx.intel.advice(dealer_id, cls)
+        if adv:
+            plan["target"] = adv["best"]
+            if plan["side"] == "buy":
+                plan["hi"] = min(plan["hi"], math.ceil(adv["median"]))
+            else:
+                plan["lo"] = max(plan["lo"], math.floor(adv["median"] * 0.8))
+            plan["intel"] = adv
+        return plan
+
     def _opening(self, st, s, side):
         lst = s.get("list_price") or s.get("opening_ask") or 10
         if side == "buy":
@@ -132,6 +170,7 @@ class Haggler:
                 if not choice:
                     continue
                 topic, plan = choice
+                plan = self._intel(d["id"], plan)
                 try:
                     th = ctx.api.open_thread(d["id"], topic=topic)
                 except BazaarError as e:
@@ -187,6 +226,11 @@ class Haggler:
             else:
                 ctx.log("haggle", "final_declined", thread=th["id"], ask=ask, plan=plan)
             return
+        if last and ask is not None and good(ask) and (plan.get("beginner") or (plan.get("target") is not None and (
+                (buy and ask <= plan["target"]) or (not buy and ask >= plan["target"])))):
+            if ctx.take_accept():
+                why = "fixed first-deal price" if plan.get("beginner") else f"matches the best price any team got ({plan['target']})"
+                return self._accept(last, th, plan, reason=why)
         if last and ask is not None and nxt is not None and ((buy and ask <= nxt) or (not buy and ask >= nxt)) and good(ask):
             if ctx.take_accept():
                 return self._accept(last, th, plan, reason="her ask already beats our next step")

@@ -24,6 +24,8 @@ PAGE = HERE / "index.html"
 HISTORY = HERE / "history.json"
 sys.path.insert(0, str(HERE.parent / "team13"))
 import strategy  # noqa: E402  (team13/strategy.py: the knobs the agent reads every tick)
+from intel import Intel  # noqa: E402  (team13/intel.py: what every team does, from the public feed)
+INTEL = Intel(HERE / "feed_events.jsonl", url=URL)
 DECISIONS = HERE.parent / "team13" / "logs" / "decisions.jsonl"
 BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 
@@ -114,8 +116,16 @@ def agent_running():
 
 
 def poll():
+    intel_due = 0.0
     while True:
         now = time.time()
+        if now >= intel_due:  # public feed, no key: our own copy for the Intel tab
+            if isinstance(cache.get("catalog"), dict) and "sets" in cache["catalog"]:
+                INTEL.set_catalog(cache["catalog"])
+            INTEL.refresh()
+            with lock:
+                cache["intel"] = INTEL.summary()
+            intel_due = now + 10
         for name, (path, every, keyed) in ROUTES.items():
             if now < due[name]:
                 continue

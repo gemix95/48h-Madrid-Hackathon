@@ -16,12 +16,15 @@ KNOBS = {
     "enable_trader": (1, 0, 1, 1, "Modules", "Team trading", "Trade with other teams on El Rastro at our private values."),
     "enable_duels": (1, 0, 1, 1, "Modules", "Duels", "Play the duel tournament automatically."),
     "enable_venue": (1, 0, 1, 1, "Modules", "Open our market", "Open our own market as soon as we reach level 2."),
+    "use_intel": (1, 0, 1, 1, "Modules", "Learn from other teams",
+                  "Read every team's deals in the public feed: never pay above what others typically get, close at once "
+                  "when the dealer's ask matches the best price anyone got, spend a new dealer's fixed first-deal price on our best item."),
     # dealers
-    "haggle_open": (0.45, 0.2, 0.9, 0.05, "Dealers", "First offer (share of list price)",
+    "haggle_open": (0.25, 0.15, 0.9, 0.05, "Dealers", "First offer (share of list price)",
                     "Lower = more of the dealer's range captured, but more rounds."),
     "haggle_cap": (1.0, 0.6, 1.2, 0.05, "Dealers", "Most we pay (share of list price)",
                    "We never accept above this, final offers included."),
-    "haggle_rounds": (12, 4, 30, 1, "Dealers", "Rounds to reach our cap",
+    "haggle_rounds": (18, 4, 30, 1, "Dealers", "Rounds to reach our cap",
                       "More rounds = slower concessions. Abuela is patient (85%)."),
     "haggle_curve": (2.2, 1.0, 4.0, 0.1, "Dealers", "Concession curve",
                      "1 = steady steps; higher = tiny steps first, bigger near the cap (Boulware)."),
@@ -41,11 +44,11 @@ KNOBS = {
                         "Starts here, then rises toward what the card is worth to us minus our minimum gain."),
     "trade_reprice_ticks": (8, 2, 40, 1, "Trading", "Ticks between price changes", ""),
     # duels
-    "duel_rounds": (6, 2, 12, 1, "Duels", "Rounds to reach our limit",
+    "duel_rounds": (8, 2, 12, 1, "Duels", "Rounds to reach our limit",
                     "The pie shrinks every round (6-8%): fewer rounds = settle sooner."),
-    "duel_anchor": (0.6, 0.2, 1.5, 0.05, "Duels", "Opening ambition",
+    "duel_anchor": (2.0, 0.2, 3.0, 0.1, "Duels", "Opening ambition",
                     "How far from our limit we open (× limit). Higher = greedier, riskier."),
-    "duel_accept": (0.9, 0.5, 1.0, 0.05, "Duels", "Accept threshold",
+    "duel_accept": (0.6, 0.4, 1.0, 0.05, "Duels", "Accept threshold",
                     "Take the rival's offer when it gives us this share of what our next offer would."),
     # market
     "venue_fee_bps": (100, 0, 1000, 25, "Market", "Our market fee (bps)",
@@ -54,14 +57,17 @@ KNOBS = {
                      "The bond is 250 + 20. Set 0 to spend everything on deals."),
 }
 
+# "Tournament winner" = the defaults: best robust settings in tests/tournament.py (see tests/RESULTS.md)
 PRESETS = {
-    "Balanced": {},
-    "Patient haggler": {"haggle_open": 0.35, "haggle_rounds": 18, "haggle_curve": 2.8, "trade_min_gain": 4,
-                        "trade_ask_start": 1.4, "trade_bid_start": 0.5},
+    "Tournament winner": {},
+    "Previous defaults": {"haggle_open": 0.45, "haggle_rounds": 12, "duel_rounds": 6, "duel_anchor": 0.6, "duel_accept": 0.9},
     "Fast closer": {"haggle_open": 0.6, "haggle_rounds": 7, "haggle_curve": 1.5, "trade_min_gain": 2,
                     "trade_ask_start": 1.1, "trade_bid_start": 0.75, "duel_rounds": 4, "duel_accept": 0.8},
     "Market first": {"reserve_cash": 270, "trade_bid_share": 0.2, "haggle_buy_cards": 0, "venue_fee_bps": 50},
 }
+
+# Simulated scores per preset (tests/tournament.py, see tests/RESULTS.md)
+RESULTS = {'Tournament winner': {'dealers': 0.81, 'dealers_worst': 0.76, 'duels': 0.6, 'duels_worst': 0.54}, 'Previous defaults': {'dealers': 0.72, 'dealers_worst': 0.64, 'duels': 0.45, 'duels_worst': 0.25}, 'Fast closer': {'dealers': 0.57, 'dealers_worst': 0.46, 'duels': 0.53, 'duels_worst': 0.34}, 'Market first': {'dealers': 0.81, 'dealers_worst': 0.76, 'duels': 0.6, 'duels_worst': 0.54}}
 
 _cache = {"mtime": None, "data": {}}
 
@@ -112,4 +118,4 @@ def save(values: dict) -> dict:
 def describe() -> dict:
     return {"knobs": {k: {"default": v[0], "min": v[1], "max": v[2], "step": v[3], "group": v[4], "label": v[5], "help": v[6]}
                       for k, v in KNOBS.items()},
-            "presets": PRESETS, "current": load()}
+            "presets": PRESETS, "results": RESULTS, "current": load()}
