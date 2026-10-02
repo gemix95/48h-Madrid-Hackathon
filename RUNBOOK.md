@@ -156,3 +156,25 @@ contradictions are logged as candidates (`flag_bluffs`, `flag_catalog` switch th
 flagged automatically: Abuela names her gifts. Friday's 912 dealer messages had no provable lie, so expect the
 first real flags from the dealers still to come. Check `logs/decisions.jsonl` for `flag candidate` lines.
 
+## 9. How the rivals scored on Friday (from the public feed at close)
+
+Board at 23:00: t13 30.0, t12 26.8, t08 23.5, t17 21.1, t10 20.5 (market 0 for everyone: no Market Test yet).
+A settlement's `price` is the total for all its items (t08 sold 4 commons to Abuela for 23 in one deal, not 23 each).
+
+| Team | Main source of points |
+|---|---|
+| t12 | Sold its Salamanca rares to collectors (SAL-10 at 80, SAL-09 at 75), bought both Malasaña rares from Chato (MAL-09 at 90, MAL-10 at 89) and completed that page; 0% market |
+| t08 | Sold LAV-10 to t10 at 70, bought MAL-10 from t14 at 53, cheap commons at 6 to 9 |
+| t17 | Salamanca and Malasaña collector: SAL-09 at 75, SAL-06, SAL-08, MAL-07; one page complete |
+| t10 | Most Abuela deals (10, good prices) and the Lavapiés page: LAV-10 at 70, LAV-09 from Chato at 90 |
+
+What it means for Saturday:
+- Every top-5 team completed a page: the page bonus is the big lever in team trades.
+- Everyone gains by selling the sets they value least to the teams that value them most; t12 did it best.
+- **Chato's real rare price is 82 to 90** (MAL-09 90, MAL-10 89, LAV-09 90, LAV-10 82); our 75 cap was below it.
+- **Our Malasaña page (6/10) is contested**: t12 holds both rares, t17 bids 78 and t08 62 for MAL-09. Completing it
+  needs MAL-03 (~10), MAL-07 (~25), MAL-09 and MAL-10 (~85 each at Chato): ~205 P for ~313 of value with the page
+  bonus, about +108. Decide in the morning once the 150 P allowance is in and flips have started.
+- Sell to collectors at their prices: LAV-08 (worth 27.5 to us) to t10 or t04, Salamanca duplicates to t17 or t18.
+- Sell spares to Abuela in one bundle per deal (her limit is 8 deals per team per hour).
+
