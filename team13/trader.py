@@ -86,7 +86,7 @@ class Trader:
             if o.get("maker") == ctx.me["id"] or o.get("status", "open") != "open":
                 continue
             ev = self.evaluate(o)
-            if ev.get("gain") is not None and ev["gain"] >= MIN_GAIN and (best is None or ev["gain"] > best[1]["gain"]):
+            if ev.get("gain") is not None and ev["gain"] >= ctx.S["trade_min_gain"] and (best is None or ev["gain"] > best[1]["gain"]):
                 best = (o, ev)
         if not best:
             return
@@ -94,7 +94,7 @@ class Trader:
         # double-check with the server's own value of what we receive (page bonus included)
         try:
             exact = sum(ctx.api.value(r)["your_value"] for r in ev["give"])
-            if ev["give"] and exact - ev["cash_out"] - ev["fee"] - ctx.values.loss_of_removing(ev["want"]) < MIN_GAIN - 1:
+            if ev["give"] and exact - ev["cash_out"] - ev["fee"] - ctx.values.loss_of_removing(ev["want"]) < ctx.S["trade_min_gain"] - 1:
                 ctx.log("trade", "skip_after_check", offer=o["id"], est=ev["gain"], exact=exact)
                 return
         except BazaarError:
@@ -118,7 +118,7 @@ class Trader:
             if theirs:
                 o = theirs[-1]
                 ev = self.evaluate(o)
-                if ev.get("gain") is not None and ev["gain"] >= MIN_GAIN and ctx.take_accept():
+                if ev.get("gain") is not None and ev["gain"] >= ctx.S["trade_min_gain"] and ctx.take_accept():
                     try:
                         ctx.api.accept(o["id"], assets=self.assets_for(ev["want"]) or None)
                         ctx.log("trade", "accept_team", thread=th["id"], gain=round(ev["gain"], 1), detail=ev)
@@ -137,7 +137,7 @@ class Trader:
 
     def counter(self, ev: dict):
         """A structured counter on the same cards that gains us MIN_GAIN + 2."""
-        v = self.ctx.values
+        v, MIN_GAIN = self.ctx.values, self.ctx.S["trade_min_gain"]
         if ev.get("gain") is None:
             return None
         if ev["want"] and not ev["give"]:  # they want our cards for cash: name our price
@@ -159,6 +159,9 @@ class Trader:
 
     def maintain_listings(self):
         ctx, v = self.ctx, self.ctx.values
+        S = ctx.S
+        MIN_GAIN, MAX_ASKS, MAX_BIDS = S["trade_min_gain"], int(S["trade_max_asks"]), int(S["trade_max_bids"])
+        REPRICE = int(S["trade_reprice_ticks"])
         tick = ctx.clock["tick"]
         listed = ctx.state.setdefault("listings", {})  # offer id -> {"kind", "ref", "price", "tick", "start"}
         mine = {str(o["id"]): o for o in ctx.my_offers if o.get("status", "open") == "open"}
@@ -170,9 +173,9 @@ class Trader:
 
         # reprice stale listings toward their floor
         for oid, L in list(listed.items()):
-            if budget <= 1 or tick - L["tick"] < REPRICE_TICKS:
+            if budget <= 1 or tick - L["tick"] < REPRICE:
                 continue
-            new = self._price(L, tick)
+            new = self._price(L, tick, REPRICE)
             if new == L["price"]:
                 continue
             try:
@@ -196,9 +199,9 @@ class Trader:
             loss = v.loss_of_removing([a["ref"]])
             book = v.book(a["ref"])
             floor = math.ceil(loss + MIN_GAIN + fee(book, 1))
-            start = max(floor, math.ceil(book * 1.25))
+            start = max(floor, math.ceil(book * S["trade_ask_start"]))
             L = {"kind": "ask", "ref": a["ref"], "asset": a["id"], "start": start, "floor": floor, "born": tick}
-            L["price"] = self._price(L, tick)
+            L["price"] = self._price(L, tick, REPRICE)
             try:
                 o = ctx.api.list_offer({"assets": [a["id"]]}, {"cash": L["price"]}, venue="rastro")
                 L["tick"] = tick
@@ -211,7 +214,7 @@ class Trader:
                 ctx.log("trade", "list_refused", ref=a["ref"], error=str(e))
                 break
         # bids: cards worth a lot to us, offered below that value; total committed stays inside free cash
-        free = BID_SHARE * (ctx.me["cash"] - ctx.reserve()) - sum(L["price"] for L in bids)
+        free = S["trade_bid_share"] * (ctx.me["cash"] - ctx.reserve()) - sum(L["price"] for L in bids)
         # best value per prima committed first: cheap cards from our high-multiplier sets and page completers
         wants = sorted(v.wishlist(limit=30), key=lambda x: (-round(x[1] / max(1, v.book(x[0])), 2), v.book(x[0])))
         for ref, gain in wants:
@@ -221,11 +224,11 @@ class Trader:
                 continue
             book = v.book(ref)
             ceiling = math.floor(gain - MIN_GAIN - fee(book, 1))
-            start = min(ceiling, math.floor(book * 0.6))
+            start = min(ceiling, math.floor(book * S["trade_bid_start"]))
             if ceiling < 2 or start < 1:
                 continue
             L = {"kind": "bid", "ref": ref, "start": start, "floor": min(ceiling, math.floor(book * 1.1)), "born": tick}
-            L["price"] = self._price(L, tick)
+            L["price"] = self._price(L, tick, REPRICE)
             if L["price"] > free:
                 continue
             try:
@@ -242,9 +245,9 @@ class Trader:
                 break
 
     @staticmethod
-    def _price(L, tick):
+    def _price(L, tick, every=REPRICE_TICKS):
         """Walk from the start price toward the floor (asks down, bids up) over ~10 reprices."""
-        steps = max(0, (tick - L["born"]) // REPRICE_TICKS)
+        steps = max(0, (tick - L["born"]) // every)
         x = min(1.0, steps / 10)
         p = L["start"] + (L["floor"] - L["start"]) * x
         return int(math.ceil(p) if L["kind"] == "ask" else math.floor(p))

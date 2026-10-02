@@ -8,6 +8,7 @@ never eats into the 5 req/s our agents need. Team routes are spaced out in one b
 import json
 import os
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -21,6 +22,8 @@ PORT = int(os.environ.get("PORT", "8765"))
 HERE = Path(__file__).parent
 PAGE = HERE / "index.html"
 HISTORY = HERE / "history.json"
+sys.path.insert(0, str(HERE.parent / "team13"))
+import strategy  # noqa: E402  (team13/strategy.py: the knobs the agent reads every tick)
 DECISIONS = HERE.parent / "team13" / "logs" / "decisions.jsonl"
 BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 
@@ -139,10 +142,23 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.dumps({**cache, "history": history, "served_at": time.time(),
                                    "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60)}).encode()
             self._send(200, "application/json", body)
+        elif self.path.startswith("/strategy"):
+            self._send(200, "application/json", json.dumps(strategy.describe()).encode())
         elif self.path in ("/", "/index.html"):
             self._send(200, "text/html; charset=utf-8", PAGE.read_bytes())
         else:
             self._send(404, "text/plain", b"not found")
+
+    def do_POST(self):
+        if not self.path.startswith("/strategy"):
+            return self._send(404, "text/plain", b"not found")
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+            values = json.loads(self.rfile.read(min(n, 20000)) or b"{}")
+            saved = strategy.save(values if isinstance(values, dict) else {})
+            self._send(200, "application/json", json.dumps({"ok": True, "current": saved}).encode())
+        except ValueError as e:
+            self._send(400, "application/json", json.dumps({"ok": False, "error": str(e)}).encode())
 
     def _send(self, code, ctype, body):
         self.send_response(code)

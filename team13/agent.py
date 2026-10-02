@@ -26,6 +26,7 @@ from duels import Duels
 from haggler import Haggler
 from trader import Trader
 from values import Values
+import strategy
 
 HERE = Path(__file__).parent
 LOGS = HERE / "logs"
@@ -62,6 +63,7 @@ class Context:
         self.clock, self.me, self.threads, self.my_offers, self.board, self.dealers = {}, {}, [], [], [], []
         self.values = None
         self._accepts = {}
+        self.S = strategy.load()
 
     # ---------------------------------------------------------------- logging & state
     def log(self, module, action, **detail):
@@ -90,7 +92,7 @@ class Context:
 
     def reserve(self):
         """Cash we keep back: the venue bond until our market is open (it is worth up to 30 points)."""
-        return 10 if self.state.get("venue") else VENUE_BOND
+        return 10 if self.state.get("venue") else self.S["reserve_cash"]
 
     def locked_assets(self):
         ids = set()
@@ -119,6 +121,7 @@ class Context:
     # ---------------------------------------------------------------- observe
     def observe(self, full=False):
         api = self.raw
+        self.S = strategy.load()  # the dashboard's Strategy tab writes strategy.json
         self.me = api.me()
         self.threads = api.my_threads().get("threads", [])
         self.my_offers = api.my_offers().get("offers", [])
@@ -146,7 +149,7 @@ class Venue:
 
     def step(self):
         ctx = self.ctx
-        if ctx.state.get("venue") or ctx.me.get("level", 1) < 2:
+        if not ctx.S["enable_venue"] or ctx.state.get("venue") or ctx.me.get("level", 1) < 2:
             return
         if ctx.me["cash"] < VENUE_BOND + 5:
             ctx.log("venue", "waiting_for_cash", cash=ctx.me["cash"])
@@ -156,7 +159,7 @@ class Venue:
             return
         ctx.state["venue_try_tick"] = ctx.clock.get("tick", 0)
         try:
-            res = ctx.api.open_venue("Mercado Trece", fee_bps=100, fee_per_card=0, rules={"mechanism": "board"})
+            res = ctx.api.open_venue("Mercado Trece", fee_bps=int(ctx.S["venue_fee_bps"]), fee_per_card=0, rules={"mechanism": "board"})
             ctx.state["venue"] = res.get("venue") or res.get("id")
             ctx.state["broker_key"] = res.get("broker_key")
             ctx.log("venue", "opened", venue=ctx.state["venue"])
@@ -174,6 +177,7 @@ def main():
     modules = [("duels", Duels(ctx)), ("haggler", Haggler(ctx)), ("venue", Venue(ctx))]
     if not args.no_trade:
         modules.append(("trader", Trader(ctx)))
+    switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue"}
     ctx.log("agent", "start", dry=args.dry_run)
     last_tick, n = None, 0
     while True:
@@ -192,6 +196,8 @@ def main():
             ctx.observe(full=(n % 20 == 0))
             n += 1
             for name, mod in modules:
+                if not ctx.S.get(switch[name], 1):
+                    continue
                 try:
                     mod.step()
                 except BazaarError as e:

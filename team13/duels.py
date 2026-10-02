@@ -90,13 +90,15 @@ class Duels:
             s = (price - limit) if seller else (limit - price)
             return s + (w * days if two_issue and days is not None else 0)
 
+        S = ctx.S
+        ROUNDS = int(S["duel_rounds"])
         k = len(mine)
         # anchor: far from our limit; if the rival has spoken, aim past the midpoint on our side
-        span = max(5.0, abs(limit) * 0.6)
+        span = max(5.0, abs(limit) * S["duel_anchor"])
         if r_price is not None:
             span = max(span, abs(r_price - limit) * 1.4)
         anchor = limit + span if seller else limit - span
-        x = min(1.0, k / self.ROUNDS)
+        x = min(1.0, k / ROUNDS)
         target = anchor + ((limit + (1 if seller else -1) * max(1, 0.08 * span)) - anchor) * (x ** 1.3)
         price = math.ceil(target) if seller else math.floor(target)
         if r_price is not None:  # never concede past the rival's own offer
@@ -117,7 +119,7 @@ class Duels:
         if r_price is not None:
             u_r = util(r_price, r_days if r_days is not None else days)
             u_next = util(price, days) * (1 - decay)
-            if u_r > 0 and (u_r >= 0.9 * u_next or k >= self.ROUNDS):
+            if u_r > 0 and (u_r >= S["duel_accept"] * u_next or k >= ROUNDS):
                 if ctx.take_accept(kind="duel"):
                     ctx.api.duel_accept(d["id"])
                     ctx.log("duel", "accept", duel=d["id"], price=r_price, days=r_days, our_surplus=round(u_r, 1), limit=limit)

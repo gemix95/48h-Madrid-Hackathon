@@ -15,6 +15,9 @@ cd dashboard && python3 server.py          # the war room on http://localhost:87
 cd team13 && python3 smart_broker.py       # once we are level 2 and the agent has opened our venue
 ```
 
+Strategy: open the dashboard's **Strategy** tab to read the game plan and tune the agent (presets or sliders).
+Saving writes `team13/strategy.json`; the running agent applies it on the next tick, no restart needed.
+
 Run only ONE agent per team key: two agents would fight over the one accept per tick.
 
 ## How we play to win

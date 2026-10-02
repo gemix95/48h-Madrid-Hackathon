@@ -13,6 +13,7 @@
   --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --neutral: #c3c2b7;
   --seq-1: #cde2fb; --seq-2: #86b6ef;
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b; --up: #006300;
+  --tip-bg: #ffffff; --tip-ink: #0b0b0b; --tip-muted: #52514e; --tip-border: #c3c2b7;
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) .viz-root {
@@ -22,6 +23,7 @@
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
     --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --neutral: #4a4a46;
     --seq-1: #184f95; --seq-2: #256abf; --up: #0ca30c;
+    --tip-bg: #2c2c2a; --tip-ink: #ffffff; --tip-muted: #c3c2b7; --tip-border: #52514e;
   }
 }
 * { box-sizing: border-box; }
@@ -63,9 +65,11 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
 svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
 svg .ink { fill: var(--text-secondary); } svg .ink1 { fill: var(--text-primary); }
-.tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); max-width: 300px;
-  border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 12px; line-height: 1.45;
-  box-shadow: 0 4px 16px rgba(0,0,0,.25); display: none; z-index: 20; }
+.tip { position: fixed; pointer-events: none; z-index: 50; display: none; max-width: 320px;
+  background: var(--tip-bg); color: var(--tip-ink); border: 1px solid var(--tip-border); border-radius: 8px;
+  padding: 10px 12px; font-size: 13px; line-height: 1.5; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+.tip b { color: var(--tip-ink); font-weight: 650; }
+.tip .muted { color: var(--tip-muted); }
 .err { color: var(--critical); font-size: 12px; }
 
 /* next moves */
@@ -131,6 +135,27 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
 .flash { animation: flash 1.2s ease-out; }
 @keyframes flash { from { background: var(--seq-1); } to { background: transparent; } }
 #activity div, #brain div { font-size: 13px; }
+.btn { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--axis);
+  background: var(--surface-2); color: var(--text-primary); cursor: pointer; }
+.btn:hover { border-color: var(--text-secondary); }
+.btn.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; font-weight: 600; }
+.btn.on { border-color: var(--series-1); color: var(--series-1); font-weight: 600; }
+.knob-group { border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; }
+.knob-group h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
+.knob { display: grid; grid-template-columns: 1fr 130px 56px; gap: 8px; align-items: center; padding: 5px 0; font-size: 13px; }
+.knob small { display: block; color: var(--muted); font-size: 11px; line-height: 1.35; }
+.knob input[type=range] { width: 100%; accent-color: var(--series-1); }
+.knob input[type=number] { width: 56px; font: inherit; font-size: 12px; padding: 2px 4px; background: var(--surface-2);
+  color: var(--text-primary); border: 1px solid var(--axis); border-radius: 4px; }
+.knob.changed > div:first-child::after { content: " •"; color: var(--series-2); font-weight: 700; }
+.area { margin-bottom: 16px; }
+.area-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.area-head b { font-size: 16px; }
+.area .pts { margin-left: auto; font-size: 13px; color: var(--text-secondary); }
+.area ul { margin: 8px 0 0; padding-left: 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.area .stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 10px; }
+.area .stats div { font-size: 12px; color: var(--muted); } .area .stats b { display: block; font-size: 18px; color: var(--text-primary); }
+.status { font-size: 12px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -142,7 +167,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <span class="pill" id="next">next tick –</span>
     <span class="err" id="err"></span>
     <nav id="tabs">
-      <a href="#overview">Overview</a><a href="#deals">Deals</a><a href="#album">Album</a>
+      <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a><a href="#album">Album</a>
       <a href="#market">Market</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a>
     </nav>
   </header>
@@ -177,6 +202,29 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
           <li><b>Rhythm:</b> one accept and one message per conversation per tick; dealers move only when we move; a <i>final</i> offer is take it or leave it.</li>
           <li><b>Each day is a round</b>, averaged; Friday counts half. Ticks: 60 s Fri, 30 s Sat, 15 s Sun.</li>
         </ul></details>
+      </section>
+    </div>
+  </main>
+
+  <main class="tab" id="tab-strategy">
+    <div class="grid">
+      <section class="s7">
+        <div class="card" style="margin-bottom:16px">
+          <h2>Our game plan <span class="hint">100 points: where they come from, how we go after them, how it is going</span></h2>
+          <div id="plan-split"></div>
+        </div>
+        <div id="plan"></div>
+      </section>
+      <section class="card s5" style="align-self:start;position:sticky;top:64px">
+        <h2>Settings <span class="hint">the agent picks changes up on the next tick</span></h2>
+        <div class="legend" style="margin-bottom:10px">Presets:</div>
+        <div id="presets" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div id="knobs"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:14px">
+          <button class="btn primary" id="save">Save strategy</button>
+          <button class="btn" id="reset">Back to defaults</button>
+          <span id="saved" class="muted" style="font-size:12px"></span>
+        </div>
       </section>
     </div>
   </main>
@@ -225,8 +273,8 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
       <section class="card s4"><h2>Scorecard</h2><div id="brain-stats"></div></section>
     </div>
   </main>
-</div>
 <div class="tip" id="tip"></div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -765,6 +813,100 @@ function brain(d) {
   $("brain-stats").innerHTML = `<table><tbody>${rows.map(([a, b, c]) => `<tr><td>${a}<div class="muted" style="font-size:11px">${c}</div></td><td class="num" style="font-size:20px;font-weight:600">${b}</td></tr>`).join("")}</tbody></table>`;
 }
 
+
+// ---------- strategy ----------
+let SD = null, draft = null;   // server description, unsaved edits
+async function loadStrategy() {
+  SD = await (await fetch("/strategy")).json(); draft = { ...SD.current }; strategyForm();
+  if (D) try { strategyPlan(D, model(D)); } catch (e) { console.error(e); }
+}
+function strategyForm() {
+  if (!SD) return;
+  const groups = {};
+  for (const [k, kn] of Object.entries(SD.knobs)) (groups[kn.group] ||= []).push([k, kn]);
+  const active = Object.entries(SD.presets).find(([, ov]) => Object.entries({ ...Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])), ...ov }).every(([k, v]) => draft[k] == v));
+  $("presets").innerHTML = Object.keys(SD.presets).map(n => `<button class="btn ${active && active[0] === n ? "on" : ""}" data-p="${esc(n)}">${esc(n)}</button>`).join("");
+  $("presets").querySelectorAll("[data-p]").forEach(b => b.onclick = () => {
+    draft = { ...Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])), ...SD.presets[b.dataset.p] };
+    $("saved").textContent = `${b.dataset.p} loaded, not saved yet`; strategyForm(); });
+  $("knobs").innerHTML = Object.entries(groups).map(([g, list]) => `<div class="knob-group"><h4>${esc(g)}</h4>${list.map(([k, kn]) => {
+    const v = draft[k], changed = v != kn.default, toggle = kn.min === 0 && kn.max === 1 && kn.step === 1;
+    return `<div class="knob ${changed ? "changed" : ""}" title="default ${kn.default}"><div>${esc(kn.label)}<small>${esc(kn.help)}</small></div>
+      ${toggle ? `<label style="justify-self:end"><input type="checkbox" data-k="${k}" ${v ? "checked" : ""}> ${v ? "on" : "off"}</label><span></span>`
+        : `<input type="range" data-k="${k}" min="${kn.min}" max="${kn.max}" step="${kn.step}" value="${v}"><input type="number" data-n="${k}" min="${kn.min}" max="${kn.max}" step="${kn.step}" value="${v}">`}</div>`; }).join("")}</div>`).join("");
+  $("knobs").querySelectorAll("input").forEach(el => el.oninput = () => {
+    const k = el.dataset.k || el.dataset.n; draft[k] = el.type === "checkbox" ? (el.checked ? 1 : 0) : +el.value;
+    if (el.type === "checkbox") return strategyForm();
+    const twin = $("knobs").querySelector(el.dataset.k ? `[data-n="${k}"]` : `[data-k="${k}"]`); if (twin) twin.value = el.value;
+    el.closest(".knob").classList.toggle("changed", draft[k] != SD.knobs[k].default);
+    $("saved").textContent = "unsaved changes"; if (D) strategyPlan(D, model(D));
+  });
+}
+$("save").onclick = async () => {
+  const r = await (await fetch("/strategy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) })).json();
+  if (r.ok) { SD.current = r.current; draft = { ...r.current }; $("saved").textContent = `✓ saved ${hm(new Date())}: the agent uses it from the next tick`; strategyForm(); if (D) strategyPlan(D, model(D)); }
+  else $("saved").textContent = "⚠ " + (r.error || "not saved");
+};
+$("reset").onclick = () => { draft = Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])); $("saved").textContent = "defaults loaded, not saved yet"; strategyForm(); };
+loadStrategy();
+
+function strategyPlan(d, M) {
+  if (!SD) return;
+  const S = draft || SD.current, me = d.me, sc = me.score || {}, c = d.clock || {};
+  const threads = d.threads?.threads || [], recs = d.decisions || [];
+  const dealsT = threads.filter(t => t.kind === "persona" && t.status === "deal");
+  const paid = dealsT.map(t => { const ours = (t.messages || []).filter(m => m.offer && m.offer.status !== "cancelled"); const last = (t.messages || []).slice(-1)[0]; return last ? msgPrice(last) : null; }).filter(p => p);
+  const lists = dealsT.map(t => { const { entry } = menuFor(d, t); const w = t.topic?.buy || {}; return entry?.list_price ?? (w.card ? (M.byRef[w.card]?.rarity === "uncommon" ? 25 : 10) : null); });
+  const share = paid.length ? paid.reduce((t, p, i) => t + p / (lists[i] || p), 0) / paid.length : null;
+  const ev = a => (d.schedule?.upcoming || []).find(e => e.action === a && e.at_hours >= (c.t_hours || 0));
+  const nd = ev("duels"), nb = ev("bench");
+  const trades = recs.filter(r => r.module === "trade" && /^accept/.test(r.action) && r.gain != null);
+  const rastro = (d.offers?.offers || []).filter(o => o.venue === "rastro");
+  const venue = (d.venues?.venues || []).find(v => v.owner === me.id && v.status === "open");
+  const unlocked = (me.unlocked || []).length;
+  const ok = (good, warnTxt, goodTxt) => good ? `<span class="status" style="color:var(--up)">✓ ${goodTxt}</span>` : `<span class="status" style="color:var(--serious)">▲ ${warnTxt}</span>`;
+  const areas = [
+    { name: "Dealer ladder", pts: "part of Negotiating · 30", st: ok(dealsT.length >= 3, `${dealsT.length}/3 negotiated deals`, `${dealsT.length} deals, ladder unlocked`),
+      why: ["Scores the share of each dealer's price range we capture; only our best 3 deals per level count.", "3 negotiated deals (never at the opening price) unlock the next dealer early, and level 2 lets us open our market."],
+      how: [`Open at <b>${Math.round(S.haggle_open * 100)}%</b> of list, reach our cap of <b>${Math.round(S.haggle_cap * 100)}%</b> over <b>${S.haggle_rounds}</b> rounds (curve ${S.haggle_curve}: small steps first).`,
+        `Kind, varied words for Abuela; a final offer is taken only inside our cap.`,
+        `Buys: ${[S.haggle_buy_packs && "packs", S.haggle_buy_cards && "single cards we value", S.haggle_sell_spares && "and sells spares"].filter(Boolean).join(", ") || "nothing (all off)"}.`],
+      stats: [["deals", dealsT.length], ["avg paid vs list", share != null ? `${Math.round(share * 100)}%` : "–"], ["ladder points", fmt(sc.ladder_points)], ["dealers open", unlocked]] },
+    { name: "Team trades", pts: "part of Negotiating · 30", st: ok(trades.length > 0, "no trades yet", `${trades.length} trades`),
+      why: ["Scores the value we gain at our private values: give what is worth little to us, get what is worth a lot.",
+        `Our multipliers: ${Object.entries(M.aff).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${SET_NAMES[k] || k} ×${v}`).join(", ")}.`],
+      how: [`Take any board offer that gains us ≥ <b>${S.trade_min_gain} P</b> after fees.`,
+        `List up to <b>${S.trade_max_asks}</b> spares from <b>${S.trade_ask_start}×</b> book, dropping every ${S.trade_reprice_ticks} ticks toward a floor that still gains us value.`,
+        `Bid up to <b>${S.trade_max_bids}</b> cards from <b>${S.trade_bid_start}×</b> book with at most <b>${Math.round(S.trade_bid_share * 100)}%</b> of free cash.`],
+      stats: [["trades", trades.length], ["value created", trades.length ? `+${fmt(trades.reduce((t, r) => t + r.gain, 0))} P` : "–"], ["our offers on El Rastro", rastro.length], ["trade points", fmt(sc.neg_points)]] },
+    { name: "Duels", pts: "part of Negotiating · 30", st: nd ? `<span class="status muted">next: ${esc(nd.params?.name || "duels")} ${until(wallFor(nd.at_hours, c, "duels"))}</span>` : "",
+      why: ["One rival, private limits, and the deal shrinks every round of talk. A deal outside our limit loses points; no deal scores zero."],
+      how: [`Open <b>${S.duel_anchor}×</b> our limit away, reach our limit over <b>${S.duel_rounds}</b> rounds; never cross it.`,
+        `Accept when the rival gives us ≥ <b>${Math.round(S.duel_accept * 100)}%</b> of what our next offer would (after decay).`,
+        "Two-issue duels: give the rival the delivery days that cost us little, ask for price instead."],
+      stats: [["duel points", fmt(sc.duel_points)], ["settled", recs.filter(r => r.module === "duel" && r.action === "accept").length]] },
+    { name: "Market-making", pts: "30 points", st: ok(!!venue, me.level < 2 ? "needs level 2 to open our market" : "market not open yet", "our market is open"),
+      why: ["Mostly the Market Test: every 2 game hours each market gets the same traders; our broker scores the share of possible gains it realises.", "The free stall earns half points; full points go to the best brokers."],
+      how: [S.enable_venue ? `Open a <b>board</b> market at <b>${S.venue_fee_bps / 100}%</b> fee as soon as we are level 2, keeping <b>${S.reserve_cash} P</b> aside for the bond.` : "Opening our market is <b>off</b>.",
+        "smart_broker.py estimates hidden limits and matches efficient pairs first; never worse than the stall."],
+      stats: [["market points", fmt(sc.market)], ["next Market Test", nb ? until(wallFor(nb.at_hours, c, "bench")) : "–"], ["level", me.level]] },
+    { name: "Judges", pts: "40 points", st: `<span class="status muted">scored at the end</span>`,
+      why: ["Ideas and craft: the biggest single block of points."],
+      how: ["Show the reasoning: exact private-value model, Boulware haggling, value-only trading, smart broker with simulations, and this war room with every decision logged."],
+      stats: [] },
+  ];
+  const split = [["Negotiating", 30, sc.negotiating || 0, "var(--series-1)"], ["Market-making", 30, sc.market || 0, "var(--series-2)"], ["Judges", 40, null, "var(--neutral)"]];
+  $("plan-split").innerHTML = `<svg viewBox="0 0 600 46" width="100%">${(() => { let x = 0, g = ""; for (const [n, w, v, col] of split) { const W = w * 6;
+      g += `<rect x="${x}" y="0" width="${W - 2}" height="22" rx="4" fill="${col}" opacity=".25"/>`;
+      if (v) g += `<rect x="${x}" y="0" width="${Math.max(2, v / w * (W - 2))}" height="22" rx="4" fill="${col}"/>`;
+      g += `<text x="${x + 6}" y="38" class="ink">${n} · ${v == null ? "?" : fmt(v)} / ${w}</text>`; x += W; } return g; })()}</svg>`;
+  $("plan").innerHTML = areas.map(a => `<div class="card area"><div class="area-head"><b>${a.name}</b>${a.st}<span class="pts">${a.pts}</span></div>
+    <ul>${a.why.map(x => `<li>${x}</li>`).join("")}</ul>
+    <div class="sec" style="font-size:12px;margin-top:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em">How we play it</div>
+    <ul>${a.how.map(x => `<li>${x}</li>`).join("")}</ul>
+    ${a.stats.length ? `<div class="stats">${a.stats.map(([l, v]) => `<div><b>${v}</b>${l}</div>`).join("")}</div>` : ""}</div>`).join("");
+}
+
 // ---------- main loop ----------
 function showTab() {
   const id = (location.hash || "#overview").slice(1);
@@ -788,7 +930,7 @@ async function refresh() {
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
-      () => threads(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d)];
+      () => threads(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable"; }
 }

@@ -35,7 +35,7 @@ KIND_SELL = [
 ]
 
 
-def boulware(lo: float, hi: float, k: int, rounds: int = 12, e: float = 2.2) -> float:
+def boulware(lo: float, hi: float, k: int, rounds: int = 12, e: float = 2.2) -> float:  # knobs: haggle_rounds, haggle_curve
     """Concession schedule: move little at first, more as patience runs out."""
     x = min(1.0, k / rounds)
     return lo + (hi - lo) * (x ** e)
@@ -66,17 +66,18 @@ class Haggler:
         cash = ctx.me["cash"] - ctx.reserve()
         stats = ctx.state.setdefault("dealer_stats", {})
 
+        S = ctx.S
         for s in menu.get("sells", []):  # 1) packs: the cleanest price range to capture
-            if "pack" in s and counts["packs"] < s.get("per_team_per_hour", 3):
+            if S["haggle_buy_packs"] and "pack" in s and counts["packs"] < s.get("per_team_per_hour", 3):
                 key = f"{dealer['id']}:buy:{s['pack']}"
-                hi = min(s.get("list_price") or s.get("opening_ask", 30), cash)
+                hi = min(math.floor((s.get("list_price") or s.get("opening_ask", 30)) * S["haggle_cap"]), cash)
                 if hi < 5 or key in unsupported:
                     continue
                 lo = self._opening(stats.get(key), s, side="buy")
                 return {"buy": {"pack": s["pack"]}}, {"side": "buy", "key": key, "lo": lo, "hi": hi, "pack": s["pack"],
                                                        "list": s.get("list_price"), "opening": s.get("opening_ask")}
         buys = {b.get("rarity") for b in menu.get("buys", [])}
-        for a in ctx.values.spares():  # 2) sell a spare the dealer takes, never below what it is worth to us
+        for a in ctx.values.spares() if S["haggle_sell_spares"] else []:  # 2) sell a spare, never below its value to us
             if a.get("rarity") not in buys or a["id"] in ctx.locked_assets():
                 continue
             key = f"{dealer['id']}:sell:{a['rarity']}"
@@ -90,14 +91,14 @@ class Haggler:
             return {"sell": {"asset": a["id"]}}, {"side": "sell", "key": key, "lo": floor, "hi": hi_ask,
                                                    "list": book, "asset": a["id"], "ref": a["ref"]}
         for s in menu.get("sells", []):  # 3) buy single cards we want, cheaply
-            if s.get("rarity") and cash > 15:
+            if S["haggle_buy_cards"] and s.get("rarity") and cash > 15:
                 for ref, gain in ctx.values.wishlist():
                     if ctx.values.cards[ref]["rarity"] != s["rarity"]:
                         continue
                     key = f"{dealer['id']}:buy:{s['rarity']}"
                     if key in unsupported:
                         break
-                    hi = min(s.get("list_price", 10), cash, math.floor(gain))
+                    hi = min(math.floor(s.get("list_price", 10) * S["haggle_cap"]), cash, math.floor(gain))
                     if hi < 3:
                         break
                     lo = self._opening(stats.get(key), s, side="buy")
@@ -108,11 +109,11 @@ class Haggler:
     def _opening(self, st, s, side):
         lst = s.get("list_price") or s.get("opening_ask") or 10
         if side == "buy":
-            lo = 0.45 * lst
+            lo = self.ctx.S["haggle_open"] * lst
             if st and st.get("deals"):
                 lo = min(lo, 0.85 * min(st["deals"]))  # she went that low before: start below it
             return max(1, math.floor(lo))
-        hi = 1.5 * lst
+        hi = (2 - self.ctx.S["haggle_open"]) * 1.1 * lst  # mirror of the buy opening, for selling
         if st and st.get("deals"):
             hi = max(hi, 1.15 * max(st["deals"]))
         return math.ceil(hi)
@@ -206,14 +207,16 @@ class Haggler:
         lo, hi, k, offers = plan["lo"], plan["hi"], plan["k"], plan["offers"]
         buy = plan["side"] == "buy"
         if buy:
-            p = math.floor(boulware(lo, hi, k))
+            S = self.ctx.S
+            p = math.floor(boulware(lo, hi, k, int(S["haggle_rounds"]), S["haggle_curve"]))
             if offers:
                 p = max(p, offers[-1] + 1)  # always a new price
             asks = plan.get("asks") or []
             if asks and asks[-1] is not None:
                 p = min(p, asks[-1])  # never offer more than she asks
             return p if p <= hi and (not offers or p > offers[-1]) else None
-        p = math.ceil(hi - (hi - lo) * min(1.0, k / 12) ** 2.2)
+        S = self.ctx.S
+        p = math.ceil(hi - (hi - lo) * min(1.0, k / S["haggle_rounds"]) ** S["haggle_curve"])
         if offers:
             p = min(p, offers[-1] - 1)
         asks = plan.get("asks") or []
