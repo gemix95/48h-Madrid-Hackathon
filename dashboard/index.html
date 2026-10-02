@@ -433,42 +433,67 @@ setInterval(() => {
 }, 500);
 
 // ---------- timeline ----------
+// kinds: 0 duels (the main event), 1 market test, 2 releases/grants and 3 doors (kept in the data, not drawn)
 const EV_KIND = a => a === "duels" ? 0 : a === "bench" ? 1 : (a === "set_release" || a === "grant_all") ? 2 : 3;
 const EV_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--muted)"];
-const EV_NAMES = ["Duels", "Market Test", "Releases & grants", "Rounds & doors"];
+// plain-language tooltip for an event
+function eventTip(e) {
+  const p = e.params || {}, when = `${dayName(e.wall)} ${hm(e.wall)} (${until(e.wall)})`;
+  if (e.kind === 0) {
+    const two = (p.issues || []).includes("days");
+    return `<b>${esc(p.name || "Duels")}</b><br>${when}<br>`
+      + (p.practice ? `<b>Practice: does not score.</b> Use it to learn how duels work.<br>` : `<b>Scores points</b> (part of the 30 for negotiating).<br>`)
+      + `Our agent negotiates 1-on-1 with another team's agent, once as buyer and once as seller, against every team.<br>`
+      + `We negotiate ${two ? "price <b>and delivery day</b>: give up the day we care less about to win on price" : "price only"}.<br>`
+      + `<span class="muted">Max ${p.duel_ticks ?? "?"} rounds. Every round the deal loses ${Math.round((p.decay ?? 0) * 100)}% of its value, so close fast. No deal = 0.</span>`;
+  }
+  if (e.kind === 1) {
+    return `<b>${esc(p.name || "Market Test")}</b><br>${when}<br>`
+      + `The game gives <b>every market</b> the same fake list of ${p.traders ?? "?"} buyers and sellers. Whoever matches the most pairs wins more of the 30 market points.<br>`
+      + `<span class="muted">Needs our own market (level 2). Without it the free stall plays and earns half. Lasts ${p.ticks ?? "?"} ticks.${/hard/i.test(e.note || "") ? " This one has firmer, more impatient traders." : ""}</span>`;
+  }
+  return `<b>${esc(e.note)}</b><br>${when}`;
+}
 function timeline(d) {
   const c = d.clock || {}, sch = d.schedule || {}, ev = (sch.upcoming || []);
   const days = dayStarts(c), total = days.length ? days[days.length - 1].start + days[days.length - 1].dur : 24;
-  const W = 1200, L = 130, R = 16, laneH = 26, top = 30, H = top + laneH * 4 + 26;
+  const W = 1200, L = 120, R = 24, top = 40, duelH = 58, mktH = 30, H = top + duelH + mktH + 30;
   const X = h => L + h / total * (W - L - R);
+  const nowH = c.t_hours || 0;
   let g = "";
   days.forEach((day, i) => {
-    const w = (day.dur / total) * (W - L - R);
-    g += `<rect x="${X(day.start)}" y="0" width="${w - 2}" height="${H - 18}" rx="6" fill="var(--surface-2)" opacity="${i % 2 ? 0.55 : 1}"/>`;
-    const o = new Date(day.opens), cl = new Date(day.closes);
-    g += `<text x="${X(day.start) + 8}" y="16" class="ink1" style="font-weight:600">${esc(day.name)}</text>`;
-    g += `<text x="${X(day.start) + 8 + day.name.length * 7 + 8}" y="16">${hm(o)}–${hm(cl)} · tick ${day.tick_seconds}s${day.day === "fri" ? " · counts ½" : ""}</text>`;
+    const w = (day.dur / total) * (W - L - R), x0 = X(day.start);
+    g += `<rect x="${x0}" y="0" width="${w - 2}" height="${H - 20}" rx="6" fill="var(--surface-2)" opacity="${i % 2 ? 0.55 : 1}"/>`;
+    g += `<text x="${x0 + 8}" y="17" class="ink1" style="font-weight:700;font-size:13px">${esc(day.name)}${day.day === "fri" ? ` <tspan style="font-weight:500;font-size:10px">counts ½</tspan>` : ""}</text>`;
+    g += `<text x="${x0 + 8}" y="32" style="font-size:11px">⏱ tick every <tspan class="ink1" style="font-weight:700">${day.tick_seconds}s</tspan></text>`;
   });
-  EV_NAMES.forEach((n, i) => g += `<text x="${L - 10}" y="${top + i * laneH + laneH / 2 + 4}" text-anchor="end" class="ink">${n}</text>`);
-  for (let h = 0; h <= total; h += 2) g += `<text x="${X(h)}" y="${H - 4}" text-anchor="middle">${h}h</text>`;
+  g += `<text x="${L - 10}" y="${top + duelH / 2 + 4}" text-anchor="end" class="ink1" style="font-weight:700">Duels</text><text x="${L - 10}" y="${top + duelH / 2 + 17}" text-anchor="end" style="font-size:10px">vs other teams</text>`;
+  g += `<text x="${L - 10}" y="${top + duelH + mktH / 2 + 4}" text-anchor="end" class="ink">Market test</text>`;
+  for (let h = 0; h <= total; h += 2) g += `<text x="${X(h)}" y="${H - 4}" text-anchor="middle" style="font-size:10px">${h}h</text>`;
   const items = ev.map((e, i) => ({ ...e, i, kind: EV_KIND(e.action), wall: wallFor(e.at_hours, c, e.action) }));
-  const nextIdx = items.findIndex(e => e.at_hours > (c.t_hours || 0) && e.kind < 3);
-  items.forEach(e => {
-    const x = X(e.at_hours), y = top + e.kind * laneH + laneH / 2, col = EV_COLORS[e.kind];
-    const past = e.at_hours < (c.t_hours || 0);
-    const shape = e.kind === 0 ? `<path d="M${x},${y - 7} L${x + 7},${y} L${x},${y + 7} L${x - 7},${y} Z"` : e.kind === 1 ? `<rect x="${x - 6}" y="${y - 6}" width="12" height="12" rx="2"` : e.kind === 2 ? `<circle cx="${x}" cy="${y}" r="6"` : `<rect x="${x - 1}" y="${y - 7}" width="2" height="14"`;
-    g += `${shape} fill="${col}" stroke="var(--surface-1)" stroke-width="2" opacity="${past ? 0.35 : 1}"/>`;
-    if (e.i === nextIdx) g += `<circle cx="${x}" cy="${y}" r="11" fill="none" stroke="${col}" stroke-width="2"/>`;
-    g += `<rect data-tip="${e.i}" x="${x - 10}" y="${y - 12}" width="20" height="24" fill="transparent"/>`;
+  const shown = items.filter(e => e.kind < 2);
+  const nextIdx = (shown.find(e => e.at_hours > nowH) || {}).i;
+  shown.forEach(e => {
+    const x = X(e.at_hours), past = e.at_hours < nowH, col = EV_COLORS[e.kind], op = past ? 0.35 : 1;
+    if (e.kind === 0) {
+      const y = top + 20, r = 11, practice = e.params?.practice;
+      g += `<path d="M${x},${y - r} L${x + r},${y} L${x},${y + r} L${x - r},${y} Z" fill="${practice ? "var(--surface-1)" : col}" stroke="${col}" stroke-width="2.5" opacity="${op}"/>`;
+      if (e.i === nextIdx) g += `<circle cx="${x}" cy="${y}" r="17" fill="none" stroke="${col}" stroke-width="2"/>`;
+      const label = (e.params?.name || "Duels").replace("Practice duels", "Practice") + (practice ? " (no score)" : ""), end = x > W - 90;
+      g += `<text x="${x}" y="${y + 29}" text-anchor="${end ? "end" : "middle"}" class="ink1" style="font-size:11px;font-weight:600;opacity:${op}">${esc(label)}</text>`;
+      g += `<rect data-tip="${e.i}" x="${x - 18}" y="${y - 18}" width="36" height="36" fill="transparent"/>`;
+    } else {
+      const y = top + duelH + mktH / 2;
+      g += `<rect x="${x - 5}" y="${y - 5}" width="10" height="10" rx="2" fill="${col}" stroke="var(--surface-1)" stroke-width="2" opacity="${op}"/>`;
+      g += `<rect data-tip="${e.i}" x="${x - 10}" y="${y - 12}" width="20" height="24" fill="transparent"/>`;
+    }
   });
-  // direct labels for duels only (the events teams prepare for)
-  items.filter(e => e.kind === 0).forEach(e => g += `<text x="${X(e.at_hours) + 10}" y="${top + laneH / 2 + 4}" class="ink">${esc((e.params?.name || "Duels").replace("Practice duels", "Practice"))}</text>`);
-  const nx = X(c.t_hours || 0);
-  g += `<line x1="${nx}" x2="${nx}" y1="22" y2="${H - 18}" stroke="var(--text-primary)" stroke-width="2"/><text x="${nx + 4}" y="${H - 20}" class="ink1" style="font-weight:600">now</text>`;
-  const upcoming = items.filter(e => e.at_hours >= (c.t_hours || 0) && e.kind < 3).slice(0, 4);
+  const nx = X(nowH);
+  g += `<line x1="${nx}" x2="${nx}" y1="42" y2="${H - 20}" stroke="var(--text-primary)" stroke-width="2"/><text x="${nx + 4}" y="${H - 22}" class="ink1" style="font-weight:700;font-size:11px">now</text>`;
+  const upcoming = shown.filter(e => e.at_hours >= nowH).slice(0, 3);
   $("timeline").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Weekend schedule">${g}</svg>
-    <div class="legend" style="margin-top:8px">${upcoming.map(e => `<span><i class="swatch" style="background:${EV_COLORS[e.kind]}"></i><b style="color:var(--text-primary)">${until(e.wall)}</b> ${esc(e.note)}</span>`).join("")}</div>`;
-  bindTips($("timeline"), i => { const e = items[i]; return `<b>${esc(e.note)}</b><br>game hour ${e.at_hours} · ≈ ${dayName(e.wall)} ${hm(e.wall)} (${until(e.wall)})${e.params && Object.keys(e.params).length ? `<br><span class="muted">${esc(JSON.stringify(e.params)).slice(0, 220)}</span>` : ""}`; });
+    <div class="legend" style="margin-top:6px;font-size:11px;gap:12px;color:var(--muted)">${upcoming.map(e => `<span><i class="swatch" style="width:8px;height:8px;background:${EV_COLORS[e.kind]}"></i><b style="color:var(--text-primary)">${until(e.wall)}</b> ${e.kind === 0 ? esc(e.params?.name || "Duels") : "Market test"}</span>`).join("")}</div>`;
+  bindTips($("timeline"), i => eventTip(items[i]));
   return items;
 }
 
