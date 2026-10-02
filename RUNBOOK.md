@@ -34,6 +34,11 @@ cd ../dashboard && DASHBOARD_PASSWORD=... python3 server.py     # new terminal
 cloudflared tunnel --url http://localhost:8765                  # new terminal; send the link to Anton
 ```
 
+**Stopping or restarting the agent:** `kill $(cat team13/logs/agent.lock)` (the pid of the one running agent).
+Never `pkill -f "python -u agent.py"`: it matches the launching shell, not the Python process (on macOS it is `Python`),
+and on Friday it left three stale agents with old code running for 15 minutes. The agent now holds a lock: a second
+copy exits at once with "Another agent is already running".
+
 Before 09:00: `pgrep -fl agent.py` shows exactly one agent; the dashboard shows tick, cash and our open offers.
 
 ## 2b. Two pairs of eyes (from when Anton arrives)

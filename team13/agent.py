@@ -260,11 +260,31 @@ class Context:
         self._accepts = {"team": self.limit("accepts_per_team_per_tick", 1), "duel": 3}
 
 
+def single_instance():
+    """Exactly one agent may write with our key. A second copy on this machine exits at once (Friday: stale copies
+    kept running with old code after a restart). The lock is released automatically when the process dies."""
+    import fcntl
+    LOGS.mkdir(exist_ok=True)
+    f = open(LOGS / "agent.lock", "a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        f.seek(0)
+        raise SystemExit(f"Another agent is already running (pid {f.read().strip() or '?'}). Stop it first: "
+                         f"kill $(cat team13/logs/agent.lock)")
+    f.seek(0)
+    f.truncate()
+    f.write(str(os.getpid()))
+    f.flush()
+    return f  # keep the file object alive for the life of the process
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-trade", action="store_true", help="skip team trading")
     args = ap.parse_args()
+    _lock = None if args.dry_run else single_instance()  # noqa: F841 (held until exit)
     api = Bazaar(os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai"), os.environ["BAZAAR_KEY"], wait_on_tick=False)
     ctx = Context(api, dry=args.dry_run)
     modules = [("duels", Duels(ctx)), ("haggler", Haggler(ctx)), ("venue", Market(ctx))]
