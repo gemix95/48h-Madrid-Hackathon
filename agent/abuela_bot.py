@@ -88,6 +88,10 @@ def wait_for_her(tid: int, n_before: int) -> dict:
 def haggle(ref: str, rarity: str, set_name: str, value: float) -> str:
     cap = min(int(value * CAP_SHARE), LIST_PRICE[rarity])
     cap = max(cap, 1)
+    # One open conversation per dealer, and a teammate's agent may hold it: wait, never close a thread we did not open.
+    while any(t.get("with") == DEALER for t in b.my_threads("open").get("threads", [])):
+        log("dealer_busy", ref=ref)
+        time.sleep(30)
     t = b.open_thread(DEALER, topic={"buy": {"card": ref}})
     tid = t["id"]
     log("open", ref=ref, thread=tid, value=value, cap=cap)
@@ -121,7 +125,7 @@ def haggle(ref: str, rarity: str, set_name: str, value: float) -> str:
         take = ask <= cap and (
             offer.get("final")
             or ask <= price + STEP[rarity]                      # she is within one of our steps
-            or (her_step is not None and her_step <= 1 and len(asks) >= 3)   # her steps have shrunk to the floor
+            or (len(asks) >= 4 and asks[-3] - asks[-2] <= 1 and asks[-2] - asks[-1] <= 1)  # two tiny steps: at her floor
             or (len(asks) >= 3 and asks[-1] == asks[-2] == asks[-3])         # fixed price regime, she will not move
         )
         if take:
@@ -131,7 +135,11 @@ def haggle(ref: str, rarity: str, set_name: str, value: float) -> str:
                 return "skipped"
             r = b.accept(offer["id"])
             log("accept", ref=ref, thread=tid, price=ask, r=r)
-            return "deal"
+            for _ in range(int(150 / POLL)):  # the thread stays open until the deal settles on the next tick
+                if b.thread(tid)["status"] != "open":
+                    break
+                time.sleep(POLL)
+            return b.thread(tid)["status"]
         if offer.get("final"):
             log("walk_final_above_cap", ref=ref, ask=ask, cap=cap)
             b.close_thread(tid)
