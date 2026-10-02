@@ -11,3 +11,4 @@ logs/
 feed_events.jsonl
 dashboard/.password
 .venv/
+broker.env
