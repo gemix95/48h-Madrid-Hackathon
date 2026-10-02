@@ -32,8 +32,12 @@ class Intel:
         self.list_price = {"common": 10, "uncommon": 25}
         if catalog:
             self.set_catalog(catalog)
-        if self.store.exists():
-            for line in self.store.read_text().splitlines():
+        # data/feed.jsonl: the team's snapshot from tick 0 (the server only serves the latest 500 events)
+        seed = Path(__file__).resolve().parent.parent / "data" / "feed.jsonl"
+        for path in (seed, self.store):
+            if not path.exists():
+                continue
+            for line in path.read_text().splitlines():
                 try:
                     e = json.loads(line)
                     self.events[e["id"]] = e

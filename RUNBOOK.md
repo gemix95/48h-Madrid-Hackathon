@@ -4,22 +4,25 @@ One page for the team: who runs what, the rules the bots follow on their own, an
 
 ## 1. Who runs what
 
-**Exactly one process writes with our team key: `team13/agent.py`.** Two writers fight over the one accept per tick,
-repeat each other's prices to dealers and sell the same card twice (it happened on Friday).
+**Everything runs on Emmanuele's laptop. Exactly one process writes with our team key: `team13/agent.py`.**
+Two writers fight over the one accept per tick, repeat each other's prices to dealers and sell the same card twice
+(it happened on Friday). Nobody runs bots, collectors or watchers from another laptop.
 
-| Role | Who | Machine | Runs | Writes with the key? |
-|---|---|---|---|---|
-| Host | Emmanuele | his laptop, plugged in, sleep off | `team13/agent.py` + `dashboard/server.py` (+ tunnel) | **yes, the only writer** |
-| Operator | Anton (with Claude) | Anton's laptop | `agent/watch.py` (alerts), analysis, code changes via git | only by hand (`agent/hand.py`) for agreed one-off moves, never in a thread the agent runs |
-| Intel | third teammate | own laptop | `agent/collect.py` (public feed), `agent/team_intel.py`, `agent/abuela_stats.py` | no (reads only) |
+| Process | Command (from the repo root, after `source bazaar.env`) | Writes with the key? |
+|---|---|---|
+| Agent: duels, dealers, our market + broker, team trades, guard | `cd team13 && ../.venv/bin/python agent.py` | **yes, the only writer** |
+| Dashboard (war room, Strategy tab) | `cd dashboard && DASHBOARD_PASSWORD=... python3 server.py` | only through `strategy.json` |
+| Tunnel for the second pair of eyes | `cloudflared tunnel --url http://localhost:8765` | no |
+| Watcher, optional (alerts in a terminal) | `python3 agent/watch.py 30` | no |
 
-Everything else is retired: `agent/abuela_bot.py` (the haggler does this), `agent/close_sal09.py` (one-off),
-`agent/guard.py` (now the `guard` module inside the agent; keep it only as a fallback if the agent is down).
+The agent also keeps the public feed (`team13/logs/feed_events.jsonl`, every 2 ticks) and loads the tick-0 snapshot
+in `data/feed.jsonl`, so `agent/collect.py` is not needed. Retired: `agent/abuela_bot.py` (the haggler does this),
+`agent/close_sal09.py` (one-off), `agent/guard.py` (now the `guard` module; a fallback only if the agent is down).
 
-Code changes: commit and push, then tell the Host. The Host runs `git pull` and restarts the agent (state survives in
+Code changes: commit and push from anywhere, then the Host runs `git pull` and restarts the agent (state survives in
 `team13/state.json`). Strategy changes need no restart: the Strategy tab writes `team13/strategy.json`, read every tick.
 
-## 2. Start of day (Host, 08:45)
+## 2. Start of day (Emmanuele, 08:45)
 
 ```bash
 cd ~/.../48h-Madrid-Hackathon && git pull
@@ -27,11 +30,25 @@ source bazaar.env
 cd team13 && ../.venv/bin/python tests/check_guard_live.py     # must print OK
 ../.venv/bin/python agent.py --dry-run                          # one or two ticks, read the log, then Ctrl-C
 ../.venv/bin/python agent.py                                    # live, all day
-cd ../dashboard && DASHBOARD_PASSWORD=... python3 server.py
+cd ../dashboard && DASHBOARD_PASSWORD=... python3 server.py     # new terminal
+cloudflared tunnel --url http://localhost:8765                  # new terminal; send the link to Anton
 ```
 
-Operator: `source bazaar.env && python3 agent/watch.py 30` and keep it in view. Intel: `python3 agent/collect.py 10`.
-Check before 09:00: only one `agent.py` running anywhere (`pgrep -fl agent.py` on each laptop).
+Before 09:00: `pgrep -fl agent.py` shows exactly one agent; the dashboard shows tick, cash and our open offers.
+
+## 2b. Two pairs of eyes (from when Anton arrives)
+
+Emmanuele drives, Anton reviews. Both watch the same dashboard (Anton through the tunnel link, with the password).
+
+| | Emmanuele (driver) | Anton (reviewer, with Claude) |
+|---|---|---|
+| Watches | agent log, Market panel during Market Tests, duels as they run | score and rank, every deal against our values, rivals, levels |
+| Changes | Strategy tab knobs, restarts after `git pull` | code via git (pushes, then asks for a restart), `agent/caps.json` via git |
+| Never | trades by hand in a thread the agent runs | runs any process with the team key |
+
+Rules for the pair: say a change out loud before making it; one person changes one knob at a time; after any change,
+both look at the next two ticks of the log. If the two disagree on a trade, the rules (caps, min gain) win until
+they agree on a new rule.
 
 ## 3. Rules the bots follow without asking
 
