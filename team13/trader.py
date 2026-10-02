@@ -7,7 +7,9 @@
 """
 from __future__ import annotations
 
+import json
 import math
+import os
 
 from bazaar_sdk import BazaarError
 
@@ -37,6 +39,18 @@ def refs_of(side: dict, ctx) -> list:
             own = next((x for x in ctx.values.assets if x["id"] == a), None)
             out.append(own["ref"] if own else f"#{a}")
     return out
+
+
+CAPS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agent", "caps.json")
+
+
+def team_caps() -> dict:
+    """Per-card price caps the team agreed on (agent/caps.json, also enforced by agent/guard.py)."""
+    try:
+        with open(CAPS) as f:
+            return {k: int(v) for k, v in json.load(f).items()}
+    except (OSError, ValueError):
+        return {}
 
 
 class Trader:
@@ -77,6 +91,9 @@ class Trader:
             keep = min(keep, ctx.S.get("seek_keep_cash", 100))  # a page completer may use the bond reserve, not below this
         if cash_out + f > ctx.me["cash"] - keep:
             return {"gain": None, "why": "cash reserved"}
+        caps = team_caps()
+        if len(they_give) == 1 and they_give[0] in caps and cash_out > caps[they_give[0]]:
+            return {"gain": None, "why": f"above the team cap of {caps[they_give[0]]} P"}
         return {"gain": gain, "give": they_give, "want": they_want, "cash_in": cash_in, "cash_out": cash_out, "fee": f}
 
     def cheapest_rival_ask(self, ref: str):
@@ -256,6 +273,7 @@ class Trader:
                 p_max = math.floor((value - S["trade_min_gain"] - per) / (1 + bps / 10000))
                 free = ctx.me["cash"] - ctx.reserve() - sum(L["price"] for L in ctx.state.get("listings", {}).values() if L["kind"] == "bid")
                 p_max = min(p_max, math.floor(free / (1 + bps / 10000)) - per)  # never promise cash we keep back
+                p_max = min(p_max, team_caps().get(ref, 10 ** 9))                # the team's agreed cap for this card
                 if 1 <= p_max < ask and p_max >= 0.5 * ask:
                     cands.append((value - ask, "buy", venue, maker, ref, ask, p_max, o))
             elif len(w_refs) == 1 and give.get("cash") and not g_refs and v.held[w_refs[0]] > 0 and not self.protected(w_refs[0]):  # they buy one card
@@ -328,7 +346,8 @@ class Trader:
                 continue
             keep = S.get("seek_keep_cash", 100) if completer else ctx.reserve()
             cash_ok = ctx.me["cash"] - keep
-            limit = math.floor(min(gain * (0.6 if completer else 0.75), gain - 2 * S["trade_min_gain"], cash_ok))
+            limit = math.floor(min(gain * (0.6 if completer else 0.75), gain - 2 * S["trade_min_gain"], cash_ok,
+                                   team_caps().get(ref, 10 ** 9)))
             for team, (seen, paid) in sorted(holders.get(ref, {}).items(), key=lambda x: -x[1][0]):
                 if team == ctx.me["id"] or (team, ref) in busy or tried.get(f"{team}:{ref}", -999) > tick - 120 or tick - seen > 240:
                     continue
@@ -496,7 +515,7 @@ class Trader:
                 continue
             book = v.book(ref)
             venue = markets[len(bids) % min(2, len(markets))]
-            ceiling = math.floor(gain - MIN_GAIN - self.fee_at(venue, book, 1))
+            ceiling = min(math.floor(gain - MIN_GAIN - self.fee_at(venue, book, 1)), team_caps().get(ref, 10 ** 9))
             start = min(ceiling, math.floor(book * S["trade_bid_start"]))
             base = book * v.m(ref)
             if gain > base * 1.2:  # this card completes a page: its bonus makes it worth fighting for
