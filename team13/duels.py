@@ -112,7 +112,8 @@ class Duels:
         span = max(5.0, limit * amb if seller else limit - limit / (1 + amb))
         if r_price is not None:
             span = max(span, abs(r_price - limit) * 1.4)
-        anchor = min(limit + span, limit * 2.2) if seller else max(limit - span, limit * 0.3, 1)
+        # seller cap (Strategy tab): 2.2x scored best in the simulator; practice long duels were mostly small pies
+        anchor = min(limit + span, limit * S.get("duel_seller_cap", 2.2)) if seller else max(limit - span, limit * 0.3, 1)
         span = abs(anchor - limit)
         x = min(1.0, k / ROUNDS)
         target = anchor + ((limit + (1 if seller else -1) * max(1, 0.08 * span)) - anchor) * (x ** 1.3)

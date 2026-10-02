@@ -77,6 +77,8 @@ KNOBS = {
                     "The pie shrinks every round (6-8%): fewer rounds = settle sooner."),
     "duel_anchor": (5.0, 0.2, 6.0, 0.1, "Duels", "Opening ambition",
                     "How far from our limit we open (× limit). Higher = greedier, riskier."),
+    "duel_seller_cap": (2.2, 1.1, 3.0, 0.1, "Duels", "Seller's highest opening (x cost)",
+                        "Lower closes sooner but captures less: simulator mean 0.528 at 2.2x vs 0.478 at 1.6x. Revisit with Duels I data."),
     "duel_accept": (0.5, 0.4, 1.0, 0.05, "Duels", "Accept threshold",
                     "Take the rival's offer when it gives us this share of what our next offer would."),
     # market

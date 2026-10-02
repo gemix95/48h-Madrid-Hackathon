@@ -163,6 +163,13 @@ venue fee, so post our price and let them accept.
   with 3+ ticks left. Simulator: better against conceders, tough rivals and clones; worse against step-matchers
   (tit-for-tat 0.43 -> 0.37). Merge if Duels I rivals look like Friday's practice rivals.
 
+- Full practice review (30 duels: 21 deals, 3 no deal, 6 unfinished; results sum 468): every deal closed at the
+  rival's price. Lost two deals with the rival inside our limit (127: rival 102 vs our cost 68; 67: rival 88 vs our
+  value 102) because the bot ignored `deadline_tick`: **fixed**, it now takes any offer inside our limit in the last
+  2 ticks. Long duels (7-8 rounds) scored 8-12 and short ones (1-3) 26-42, but the long ones were mostly small pies
+  (surplus 12-20), so that is not proof our opening is too greedy. Seller opening cap is now the Strategy knob
+  `duel_seller_cap`, default 2.2 (simulator: 2.2 -> mean 0.528, 1.6 -> 0.478). Revisit both after Duels I.
+
 ## 8. Flags (a correct flag scores, a wrong one costs)
 
 `team13/flags.py` runs every tick on dealer messages sent to us. It flags only what the dealer's own structured
