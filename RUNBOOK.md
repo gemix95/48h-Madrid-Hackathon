@@ -43,7 +43,7 @@ SAL t18, t16, t03. `agent/team_intel.py` refreshes this.
 
 **Everything runs on Emmanuele's laptop. Exactly one process writes with our team key: `team13/agent.py`.**
 Two writers fight over the one accept per tick, repeat each other's prices to dealers and sell the same card twice
-(it happened on Friday). Nobody runs bots, collectors or watchers from another laptop.
+(it happened on Friday). Nobody runs bots, collectors or watchers with the key from another laptop (the rival tracker uses no key).
 
 | Process | Command (from the repo root, after `source bazaar.env`) | Writes with the key? |
 |---|---|---|
@@ -51,6 +51,7 @@ Two writers fight over the one accept per tick, repeat each other's prices to de
 | Dashboard (war room, Strategy tab) | `cd dashboard && DASHBOARD_PASSWORD=... python3 server.py` | only through `strategy.json` |
 | Tunnel for the second pair of eyes | `cloudflared tunnel --url http://localhost:8765` | no |
 | Watcher, optional (alerts in a terminal) | `python3 agent/watch.py 30` | no |
+| Rival tracker (public data, no key: may run on any laptop) | `python3 agent/rivals.py live --every 60 --min 0.8` | no |
 
 The agent also keeps the public feed (`team13/logs/feed_events.jsonl`, every 2 ticks) and loads the tick-0 snapshot
 in `data/feed.jsonl`, so `agent/collect.py` is not needed. Retired: `agent/abuela_bot.py` (the haggler does this),
@@ -200,4 +201,13 @@ What it means for Saturday:
   bonus, about +108. Decide in the morning once the 150 P allowance is in and flips have started.
 - Sell to collectors at their prices: LAV-08 (worth 27.5 to us) to t10 or t04, Salamanca duplicates to t17 or t18.
 - Sell spares to Abuela in one bundle per deal (her limit is 8 deals per team per hour).
+
+## 10. Covering the boats behind (rival tracker)
+
+`agent/rivals.py live` prints every team whose score moves by 0.8+ between leaderboard snapshots, split into
+negotiating and market, with the public events behind it (dealer deals, team trades, venue openings, unlocks).
+`agent/rivals.py replay logs/watch.jsonl logs/feed.jsonl` re-reads a past session. Friday's replay: the biggest
+jumps were each team's first good team trade (t10 +20.8 buying LAV-02, t08 +17.1 selling LAV-10 at 70, us +15.1
+selling LAT-09, t14 +14.8 buying it); Abuela deals moved +2 to +7; a leader's gain pushed everyone else down
+(t06 -5.9 with no trade of its own). When a rival jumps on something new (a market, a dealer, a set), copy it fast.
 
