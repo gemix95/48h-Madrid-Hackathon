@@ -1072,6 +1072,192 @@ function brain(d) {
     return `<div class="ev ${cat === "deal" ? "win" : ""}"><div class="tm">${hm(new Date(r.ts * 1000))}</div><div class="ic">${CAT[cat][0]}</div><div>${txt}${why ? `<div class="why">${why}</div>` : ""}</div></div>`; }).join("")
     || `<div class="empty">Nothing yet.</div>`;
 }
+// ---------- strategy ----------
+let SD = null, draft = null;   // server description, unsaved edits
+async function loadStrategy() {
+  SD = await (await fetch("/strategy")).json(); draft = { ...SD.current }; strategyForm();
+  if (D) try { strategyPlan(D, model(D)); } catch (e) { console.error(e); }
+}
+function strategyForm() {
+  if (!SD) return;
+  const groups = {};
+  for (const [k, kn] of Object.entries(SD.knobs)) (groups[kn.group] ||= []).push([k, kn]);
+  const active = Object.entries(SD.presets).find(([, ov]) => Object.entries({ ...Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])), ...ov }).every(([k, v]) => draft[k] == v));
+  const R = SD.results || {};
+  $("presets").innerHTML = Object.keys(SD.presets).map(n => `<button class="btn ${active && active[0] === n ? "on" : ""}" data-p="${esc(n)}">${esc(n)}${R[n] ? `<span class="muted" style="display:block;font-size:11px;font-weight:400">dealers ${Math.round(R[n].dealers * 100)}% · duels ${Math.round(R[n].duels * 100)}%</span>` : ""}</button>`).join("")
+    + `<div class="muted" style="font-size:11px;width:100%;margin-top:4px">Simulated share captured (dealer price range · duel pie). Trading settings are not simulated.</div>`;
+  $("presets").querySelectorAll("[data-p]").forEach(b => b.onclick = () => {
+    draft = { ...Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])), ...SD.presets[b.dataset.p] };
+    $("saved").textContent = `${b.dataset.p} loaded, not saved yet`; strategyForm(); });
+  $("knobs").innerHTML = Object.entries(groups).map(([g, list]) => `<div class="knob-group"><h4>${esc(g)}</h4>${list.map(([k, kn]) => {
+    const v = draft[k], changed = v != kn.default, toggle = kn.min === 0 && kn.max === 1 && kn.step === 1;
+    return `<div class="knob ${changed ? "changed" : ""}" title="default ${kn.default}"><div>${esc(kn.label)}<small>${esc(kn.help)}</small></div>
+      ${toggle ? `<label style="justify-self:end"><input type="checkbox" data-k="${k}" ${v ? "checked" : ""}> ${v ? "on" : "off"}</label><span></span>`
+        : `<input type="range" data-k="${k}" min="${kn.min}" max="${kn.max}" step="${kn.step}" value="${v}"><input type="number" data-n="${k}" min="${kn.min}" max="${kn.max}" step="${kn.step}" value="${v}">`}</div>`; }).join("")}</div>`).join("");
+  $("knobs").querySelectorAll("input").forEach(el => el.oninput = () => {
+    const k = el.dataset.k || el.dataset.n; draft[k] = el.type === "checkbox" ? (el.checked ? 1 : 0) : +el.value;
+    if (el.type === "checkbox") return strategyForm();
+    const twin = $("knobs").querySelector(el.dataset.k ? `[data-n="${k}"]` : `[data-k="${k}"]`); if (twin) twin.value = el.value;
+    el.closest(".knob").classList.toggle("changed", draft[k] != SD.knobs[k].default);
+    $("saved").textContent = "unsaved changes";
+  });
+}
+$("save").onclick = async () => {
+  const r = await (await fetch("/strategy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) })).json();
+  if (r.ok) { SD.current = r.current; draft = { ...r.current }; $("saved").textContent = `✓ saved ${hm(new Date())}: the agent uses it from the next tick`; strategyForm(); if (D) strategyPlan(D, model(D)); }
+  else $("saved").textContent = "⚠ " + (r.error || "not saved");
+};
+$("reset").onclick = () => { draft = Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])); $("saved").textContent = "defaults loaded, not saved yet"; strategyForm(); };
+loadStrategy();
+
+function strategyPlan(d, M) {
+  if (!SD) return;
+  const S = SD.current, me = d.me, sc = me.score || {}, c = d.clock || {}, recs = d.decisions || [];
+  const threads = d.threads?.threads || [];
+  const deals = threads.filter(t => t.kind === "persona" && t.status === "deal").length;
+  const trades = recs.filter(r => r.module === "trade" && /^accept/.test(r.action) && r.gain != null);
+  const venue = (d.venues?.venues || []).find(v => v.owner === me.id && v.status === "open");
+  const ev = a => (d.schedule?.upcoming || []).find(e => e.action === a && e.at_hours >= (c.t_hours || 0));
+  const nd = ev("duels"), nb = ev("bench");
+  const row = (ok, area, plan, status) => `<tr><td style="width:22px;color:${ok ? "var(--up)" : "var(--serious)"};font-weight:700">${ok ? "✓" : "▲"}</td>
+    <td style="width:120px"><b>${area}</b></td><td class="sec">${plan}</td><td class="num" style="white-space:normal;max-width:220px">${status}</td></tr>`;
+  $("plan").innerHTML = `<table><tbody>
+    ${row(deals >= 3, "Dealers", `Open at <b>${Math.round(S.haggle_open * 100)}%</b> of list, concede slowly over <b>${S.haggle_rounds}</b> rounds; never above what other teams typically pay; take her ask at once if it matches the best price anyone got.`, `${deals} deals · ${deals >= 3 ? "next dealer unlocked early" : `${3 - deals} more to unlock`}`)}
+    ${row(trades.length > 0, "Trades", `Only trades that gain us <b>≥ ${S.trade_min_gain} P</b> at our values; list spares just under rival prices; bid low for Salamanca and Malasaña cards.`, trades.length ? `${trades.length} trades, +${fmt(trades.reduce((t, r) => t + r.gain, 0))} P` : "none yet")}
+    ${row(true, "Duels", `Open far from our limit, settle within <b>${S.duel_rounds}</b> rounds, accept at <b>${Math.round(S.duel_accept * 100)}%</b> of our next offer; never cross our limit.`, nd ? `next ${until(wallFor(nd.at_hours, c, "duels"))}` : "–")}
+    ${row(!!venue, "Market", `Open <b>Mercado Trece</b> at <b>${S.venue_fee_bps / 100}%</b> fee (El Rastro: 5% + 1 P/card) as soon as we are level 2, run the smart broker, invite every team.`, venue ? "open" : me.level < 2 ? "needs level 2" : "opening…")}
+  </tbody></table>`;
+  const split = [["Negotiating", 30, sc.negotiating || 0, "var(--series-1)"], ["Market-making", 30, sc.market || 0, "var(--series-2)"], ["Judges", 40, null, "var(--neutral)"]];
+  $("plan-split").innerHTML = `<svg viewBox="0 0 600 40" width="100%">${(() => { let x = 0, g = ""; for (const [n, w, v, col] of split) { const W = w * 6;
+      g += `<rect x="${x}" y="0" width="${W - 2}" height="16" rx="4" fill="${col}" opacity=".25"/>`;
+      if (v) g += `<rect x="${x}" y="0" width="${Math.max(2, v / w * (W - 2))}" height="16" rx="4" fill="${col}"/>`;
+      g += `<text x="${x + 4}" y="32" class="ink">${n} ${v == null ? "?" : fmt(v)} / ${w}</text>`; x += W; } return g; })()}</svg>`;
+
+  // advisor
+  const P = d.proposal;
+  let html;
+  if (!P) html = `<div class="empty">First check running…</div>`;
+  else if (P.status === "insufficient_data") html = `<div class="empty">Waiting for data: ${P.deals_used} of ${P.min_deals} haggled deals seen so far.</div>`;
+  else if (P.status === "error") html = `<div class="err">Advisor error: ${esc(P.error)}</div>`;
+  else {
+    const ev2 = P.evidence || {};
+    const evid = `Based on <b>${P.deals_used}</b> real haggled deals by all teams: dealers accept about ${Math.round((ev2.median_floor_vs_opening || 0) * 100)}% of their opening ask after ~${ev2.median_rounds} rounds. Checked ${hm(new Date(P.at * 1000))}.`;
+    if (P.status === "proposal") {
+      const knobs = SD.knobs;
+      html = `<div class="move" style="border-left:3px solid var(--good)"><div class="ic" style="color:var(--good)">✓</div><div>
+        <div class="t">Better strategy found: dealer capture ${Math.round(P.current_score * 100)}% → ${Math.round(P.best_score * 100)}%</div>
+        <div class="d">${Object.entries(P.changes).map(([k, v]) => `${esc(knobs[k]?.label || k)}: <b>${S[k]}</b> → <b>${v}</b>`).join(" · ")}</div>
+        <div class="d">${evid}</div>
+        <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="apply-prop">Apply</button><button class="btn" id="dismiss-prop">Dismiss</button></div></div></div>`;
+    } else {
+      html = `<div class="move"><div class="ic" style="color:var(--up)">✓</div><div><div class="t">${P.status === "dismissed" ? "Proposal dismissed" : "Our current strategy is still the best"}</div>
+        <div class="d">Simulated dealer capture ${Math.round(P.current_score * 100)}%; the best alternative scored ${Math.round((P.best_score || P.current_score) * 100)}% (we only switch for +1.5 points or more).</div><div class="d">${evid}</div></div></div>`;
+    }
+    html += `<button class="btn" id="recheck" style="margin-top:10px">Re-check now</button>`;
+  }
+  $("proposal").innerHTML = html;
+  const post = (u, body) => fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  if ($("apply-prop")) $("apply-prop").onclick = async () => { await post("/strategy", { ...SD.current, ...P.changes }); await loadStrategy(); await post("/strategy/recheck"); $("proposal").innerHTML = `<div class="empty">Applied: the agent uses it from the next tick. Re-checking…</div>`; };
+  if ($("dismiss-prop")) $("dismiss-prop").onclick = async () => { await post("/strategy/dismiss"); $("proposal").innerHTML = `<div class="empty">Dismissed.</div>`; };
+  if ($("recheck")) $("recheck").onclick = async () => { await post("/strategy/recheck"); $("recheck").textContent = "Checking… (a few seconds)"; };
+
+  // AI negotiator
+  const llm = recs.filter(r => r.module === "llm");
+  const msgs = llm.filter(r => r.action === "message"), fails = llm.filter(r => r.action === "fallback_to_rules");
+  const on = !!S.llm_negotiator, last = msgs[msgs.length - 1];
+  $("llm").innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><b style="font-size:16px">Claude Opus 5.5</b>
+      <label style="margin-left:auto"><input type="checkbox" id="llm-toggle" ${on ? "checked" : ""}> ${on ? "on" : "off"}</label></div>
+    <div class="sec" style="font-size:13px;line-height:1.5">Writes every message and picks the price inside the safe band our tested rules allow. Accept/decline stays with the rules. Falls back to templates if the API is slow.</div>
+    <div class="stats" style="display:flex;gap:18px;margin-top:10px;font-size:12px;color:var(--muted)">
+      <div><b style="display:block;font-size:18px;color:var(--text-primary)">${msgs.length}</b>messages</div>
+      <div><b style="display:block;font-size:18px;color:var(--text-primary)">${msgs.length ? (msgs.reduce((t, r) => t + r.ms, 0) / msgs.length / 1000).toFixed(1) + " s" : "–"}</b>avg time</div>
+      <div><b style="display:block;font-size:18px;color:var(--text-primary)">${fails.length}</b>fallbacks</div></div>
+    ${last ? `<div class="msg" style="margin-top:10px;max-width:none"><div class="who">last · ${hm(new Date(last.ts * 1000))} · ${last.price} P</div>${esc(last.reason || "")}</div>` : ""}
+    ${d.agent_running ? "" : `<div class="muted" style="font-size:12px;margin-top:8px">Agent is stopped. Run it with <code>.venv/bin/python team13/agent.py</code> (the AI needs the .venv).</div>`}`;
+  $("llm-toggle").onchange = async e => { await post("/strategy", { ...SD.current, llm_negotiator: e.target.checked ? 1 : 0 }); await loadStrategy(); };
+
+  // market
+  const mk = recs.filter(r => r.module === "market");
+  const invites = mk.filter(r => r.action === "invited").length, ann = mk.filter(r => r.action === "announced").length;
+  const rivalsMk = (d.venues?.venues || []).filter(v => !v.house && v.owner !== me.id && v.status === "open");
+  $("market-status").innerHTML = `<table><tbody>
+    <tr><td>Status</td><td class="num">${venue ? `<span style="color:var(--up)">● open</span> ${esc(venue.name)}` : me.level < 2 ? "waiting for level 2" : "opening when allowed"}</td></tr>
+    <tr><td>Fee</td><td class="num">${S.venue_fee_bps / 100}% <span class="muted">(El Rastro 5% + 1 P)</span></td></tr>
+    <tr><td>Next Market Test</td><td class="num">${nb ? until(wallFor(nb.at_hours, c, "bench")) : "–"}</td></tr>
+    <tr><td>Invitations sent</td><td class="num">${invites}</td></tr>
+    <tr><td>Announcements</td><td class="num">${ann}</td></tr>
+    <tr><td>Trades on our market</td><td class="num">${venue ? `${venue.trades} · ${fmt(venue.volume, 0)} P` : "–"}</td></tr>
+    <tr><td>Rival markets</td><td class="num">${rivalsMk.length ? rivalsMk.map(v => `${esc(v.name)} ${fmt(v.fee_bps / 100)}%`).join(", ") : "none yet"}</td></tr>
+  </tbody></table>`;
+}
+
+// ---------- intel ----------
+const CLS_LABEL = c => c.replace("buy:pack:sobre_barrio", "Buy · Neighbourhood pack").replace(/^buy:pack:(.+)$/, "Buy · pack $1")
+  .replace(/^buy:card:(.+)$/, "Buy · $1 card").replace(/^sell:card:(.+)$/, "Sell to dealer · $1 card");
+function intelTab(d, M) {
+  const I = d.intel; if (!I) { $("intel-insights").innerHTML = `<div class="empty">Reading the feed…</div>`; return; }
+  const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
+  const nm = id => id === d.me.id ? "us" : (names[id] || id);
+  const dealerName = id => ((d.dealers?.personas || []).find(p => p.id === id)?.name || id).split(" ")[0];
+  const classes = Object.values(I.classes).filter(c => c.n || c.beginner.length).sort((a, b) => (b.n + b.beginner_deals.length) - (a.n + a.beginner_deals.length));
+  const listFor = c => { const sells = (d.dealers?.personas || []).find(p => p.id === c.dealer)?.menu?.sells || [];
+    const m = c.cls.match(/pack:(.+)$/); if (m) return sells.find(s => s.pack === m[1])?.list_price;
+    const r = c.cls.split(":").pop(); return sells.find(s => s.rarity === r)?.list_price ?? M.cards.find(x => x.rarity === r)?.book; };
+
+  // insights
+  const ins = [];
+  const beg = classes.filter(c => c.beginner.length);
+  if (beg.length) ins.push(["info", `Every team's first deal with ${dealerName(beg[0].dealer)} is a fixed welcome price`,
+    `${beg.map(c => `${CLS_LABEL(c.cls)}: ${c.beginner.join("/")} P`).join(" · ")}. She doesn't move on it, so it is not a negotiated deal and likely scores nothing on the ladder. Our agent spends a new dealer's first deal on the single most valuable item instead of haggling.`]);
+  for (const c of classes.filter(c => c.n)) {
+    const sell = c.cls.startsWith("sell"), best = c.prices.find(p => p[1] === c.best);
+    ins.push([sell ? "good" : "info", `${CLS_LABEL(c.cls)}: teams got ${c.worst === c.best ? c.best : `${sell ? c.worst : c.best}–${sell ? c.best : c.worst}`} P (median ${fmt(c.median)}, ${c.n} deal${c.n > 1 ? "s" : ""})`,
+      `${c.opening ? `Her usual opening: ${fmt(c.opening, 0)} P. ` : ""}Best: ${c.best} P by ${esc(nm(best?.[2]))}.${c.finals.length ? ` Final offers seen: ${c.finals.join(", ")} P.` : ""} ` +
+      (sell ? `We never sell below ${Math.floor(c.median * 0.8)} P and close at once at ${c.best} P.` : `We never pay above ${Math.ceil(c.median)} P and close at once at ${c.best} P or less.`)]);
+  }
+  const gifts = I.gifts || [];
+  if (gifts.length) ins.push(["good", `${gifts.length} free cards given by dealers`, `${[...new Set(gifts.map(g => nm(g.team)))].join(", ")}. They arrive right after a team's first deals; they don't score but they are trade material.`]);
+  const rivals = Object.entries(I.teams).filter(([t]) => t !== d.me.id).sort((a, b) => b[1].negotiated - a[1].negotiated);
+  if (rivals.length) ins.push(["warning", `Most active rivals: ${rivals.slice(0, 3).map(([t, v]) => `${esc(nm(t))} (${v.negotiated} haggled)`).join(", ")}`,
+    `Three haggled deals unlock the next dealer early. We have ${I.teams[d.me.id]?.negotiated ?? 0}.`]);
+  $("intel-insights").innerHTML = ins.map(([st, t, dd]) => { const [col, ic] = STATUS[st];
+    return `<div class="move"><div class="ic" style="color:${col}">${ic}</div><div><div class="t">${t}</div><div class="d">${dd}</div></div></div>`; }).join("");
+
+  // price strip per class
+  const rowH = 44, L = 210, R = 30, W = 1000, H = classes.length * rowH + 24;
+  const maxP = Math.max(10, ...classes.flatMap(c => [...c.prices.map(p => p[1]), ...c.beginner_deals.map(p => p[1]), c.opening || 0, (listFor(c) || 0) * 1.15]));
+  const X = v => L + v / maxP * (W - L - R);
+  let g = "", tips = [];
+  for (let v = 0; v <= maxP; v += maxP > 40 ? 10 : 5) g += `<line x1="${X(v)}" x2="${X(v)}" y1="0" y2="${H - 18}" stroke="var(--grid)"/><text x="${X(v)}" y="${H - 4}" text-anchor="middle">${v} P</text>`;
+  classes.forEach((c, i) => {
+    const y = i * rowH + 22, lst = listFor(c);
+    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" class="ink1">${esc(CLS_LABEL(c.cls))}</text><text x="${L - 12}" y="${y + 18}" text-anchor="end">${esc(dealerName(c.dealer))} · ${c.n} haggled</text>`;
+    if (lst) g += `<line x1="${X(lst)}" x2="${X(lst)}" y1="${y - 14}" y2="${y + 14}" stroke="var(--muted)" stroke-dasharray="3 3"/>`;
+    if (c.opening) g += `<rect x="${X(c.opening) - 1.5}" y="${y - 14}" width="3" height="28" fill="var(--series-2)"/>`;
+    const dots = [...c.beginner_deals.map(p => [...p, true]), ...c.prices.map(p => [...p, false])];
+    const seen = {};
+    for (const [tick, price, team, beginner] of dots) {
+      const k = Math.round(price); seen[k] = (seen[k] || 0) + 1; const dy = ((seen[k] - 1) % 5 - 2) * 5;  // jitter equal prices
+      const us = team === d.me.id, x = X(price), yy = y + dy;
+      tips.push(`<b>${price} P</b> · ${esc(nm(team))}<br>${CLS_LABEL(c.cls)} · tick ${tick}${beginner ? "<br>fixed first-deal price" : ""}`);
+      g += beginner ? `<circle cx="${x}" cy="${yy}" r="5" fill="none" stroke="${us ? "var(--text-primary)" : "var(--muted)"}" stroke-width="2"/>`
+        : `<circle cx="${x}" cy="${yy}" r="5.5" fill="${us ? "var(--text-primary)" : "var(--series-1)"}" stroke="var(--surface-1)" stroke-width="2"/>`;
+      g += `<circle data-tip="${tips.length - 1}" cx="${x}" cy="${yy}" r="10" fill="transparent"/>`;
+    }
+  });
+  $("intel-prices").innerHTML = classes.length ? `<svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg>` : `<div class="empty">No dealer deals yet.</div>`;
+  bindTips($("intel-prices"), i => tips[i]);
+
+  // rivals table
+  $("intel-teams").innerHTML = `<table><thead><tr><th>Team</th><th class="num">Talks</th><th class="num">Deals</th><th class="num">Haggled</th><th class="num">Spent</th><th class="num">Gifts</th><th class="num">Listings</th></tr></thead><tbody>`
+    + Object.entries(I.teams).sort((a, b) => b[1].negotiated - a[1].negotiated || b[1].deals - a[1].deals).map(([t, v]) =>
+      `<tr${t === d.me.id ? ' style="font-weight:700"' : ""}><td>${esc(nm(t) === "us" ? "Team 13 (us)" : nm(t))}</td><td class="num">${v.conversations}</td><td class="num">${v.deals}</td><td class="num">${v.negotiated}</td><td class="num">${v.spent} P</td><td class="num">${v.gifts}</td><td class="num">${v.listings}</td></tr>`).join("") + `</tbody></table>`;
+  const side = x => x ? [...(x.assets || []).map(a => a.ref), ...(x.types || []).map(t => t.split(":").pop()), x.cash ? `${x.cash} P` : ""].filter(Boolean).join(" + ") || "–" : "–";
+  $("intel-listings").innerHTML = (I.listings || []).length ? `<table><thead><tr><th>Tick</th><th>Team</th><th>Gives</th><th>Wants</th></tr></thead><tbody>`
+    + I.listings.slice(-15).reverse().map(l => `<tr><td class="num">${l.tick}</td><td>${esc(nm(l.maker))}</td><td>${esc(side(l.give))}</td><td>${esc(side(l.want))}</td></tr>`).join("") + `</tbody></table>`
+    : `<div class="empty">No listings yet.</div>`;
+}
+
 // ---------- main loop ----------
 function showTab() {
   const id = (location.hash || "#overview").slice(1);
