@@ -741,8 +741,8 @@ function heat(th, myId) {
   if (th.status !== "open") return { s: -2, label: "closed", col: "var(--muted)" };
   if (last?.final) return { s: 100, label: `FINAL ${last.price} P`, col: "var(--critical)" };
   if (last && us.length) { const gap = Math.max(0, last.price - us[us.length - 1].price);
-    return { s: 50 + 45 * (1 - Math.min(1, gap / (last.price || 1))), label: `gap ${gap} P`, col: "var(--serious)" }; }
-  if (last) return { s: 45, label: `ask ${last.price} P`, col: "var(--series-2)" };
+    return { s: 50 + 45 * (1 - Math.min(1, gap / (last.price || 1))), label: `gap ${gap} P`, col: "var(--serious)", us: us[us.length - 1].price, them: last.price }; }
+  if (last) return { s: 45, label: `ask ${last.price} P`, col: "var(--series-2)", them: last.price };
   return { s: us.length ? 10 : 5, label: us.length ? "no reply yet" : "waiting", col: "var(--muted)" };
 }
 function threads(d, M) {
@@ -751,7 +751,7 @@ function threads(d, M) {
   const rows = list.map(th => ({ th, h: heat(th, me.id) })).sort((a, b) => b.h.s - a.h.s || b.th.id - a.th.id).slice(0, 14);
   if (!rows.some(r => r.th.id === THR.sel)) THR.sel = rows[0].th.id;
   const tabs = `<div class="thr-tabs">${rows.map(r => { const t0 = r.th.topic ? Object.values(Object.values(r.th.topic)[0] || {})[0] : "";
-    return `<button class="thr-tab ${r.th.id === THR.sel ? "on" : ""}" style="--hc:${r.h.col}" onclick="THR.sel=${r.th.id};threads(D,model(D))"><b>${esc(r.th.with)}</b><span>${esc(String(t0 || "").replace("sobre_barrio", "pack"))}</span><em>${esc(r.h.label)}</em></button>`; }).join("")}</div>`;
+    return `<button class="thr-tab ${r.th.id === THR.sel ? "on" : ""}" style="--hc:${r.h.col}" onclick="THR.sel=${r.th.id};threads(D,model(D))"><b>${esc(r.th.with)}</b><span>${esc(String(t0 || "").replace("sobre_barrio", "pack"))}</span>${r.h.them != null ? `<span><b style="color:var(--series-2)">${r.h.them} P</b>${r.h.us != null ? ` · <b style="color:var(--series-1)">${r.h.us} P</b>` : ""}</span>` : ""}<em>${esc(r.h.label)}</em></button>`; }).join("")}</div>`;
   const shownList = rows.filter(r => r.th.id === THR.sel).map(r => r.th);
   $("threads").innerHTML = tabs + shownList.map(th => {
     const mv = moves(th, me.id), { entry, want } = menuFor(d, th);
@@ -762,7 +762,7 @@ function threads(d, M) {
     const spread = us.length && them.length ? them[them.length - 1].price - us[us.length - 1].price : null;
     const topic = th.topic ? Object.entries(th.topic).map(([k, v]) => `${k} ${Object.values(v).join(" ")}`).join(", ") : "";
     const msgs = (th.messages || []).map(m => { const u = isUs(m, me.id), p = msgPrice(m);
-      return `<div class="msg ${u ? "us" : ""}"><div class="who"><i class="swatch" style="background:${u ? "var(--series-1)" : "var(--series-2)"}"></i>${u ? "Team 13" : esc(th.with)} · tick ${m.tick ?? "?"}${p != null ? ` · <span class="price">${p} P</span>` : ""}${m.final || m.offer?.final ? " · FINAL" : ""}</div>${esc(m.text)}</div>`; }).join("");
+      return `<div class="msg ${u ? "us" : ""}"><div class="who"><i class="swatch" style="background:${u ? "var(--series-1)" : "var(--series-2)"}"></i>${u ? "Team 13" : esc(th.with)} · tick ${m.tick ?? "?"}${p != null ? ` · <span class="price" style="color:${u ? "var(--series-1)" : "var(--series-2)"}">${p} P</span>` : ""}${m.final || m.offer?.final ? " · FINAL" : ""}</div>${esc(m.text)}</div>`; }).join("");
     return `<div class="thread" data-th="${th.id}"><div class="thread-head"><b style="font-size:15px">${esc(th.with)}</b><span class="sec">${esc(topic)}</span><span style="color:${st[0]}">${esc(st[1])}</span>
       ${spread != null ? `<span class="pill">gap ${spread} P</span>` : ""}<span class="muted" style="font-size:12px">#${th.id} · since tick ${th.created_tick}</span></div>
       <div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Our offer</span><span><i class="swatch" style="background:var(--series-2)"></i>${esc(th.with)}'s ask</span><span><i class="swatch" style="border-top:2px dashed var(--muted);height:0"></i>Reference prices</span></div>
