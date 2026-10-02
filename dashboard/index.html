@@ -144,7 +144,7 @@ tr.good td { background: color-mix(in srgb, var(--good) 11%, transparent); }
 .trait .bar div { height: 100%; background: var(--series-1); border-radius: 0 3px 3px 0; }
 .feed { font-size: 12px; max-height: 380px; overflow: auto; }
 .feed div { padding: 5px 0; border-bottom: 1px solid var(--grid); color: var(--text-secondary); }
-.feed .t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.feed .t { display: inline-block; min-width: 54px; color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; font-size: 11px; }
 details { font-size: 13px; color: var(--text-secondary); }
 details summary { cursor: pointer; color: var(--text-primary); font-weight: 600; }
 details li { margin: 4px 0; line-height: 1.45; }
@@ -912,16 +912,37 @@ function leaderboard(d) {
 }
 function feed(d) {
   const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
-  const nm = id => id === d.me.id ? "We" : (names[id] || id);
-  const say = e => { const p = e.payload || {};
+  const me = d.me.id, nm = id => id === me ? "We" : (names[id] || id);
+  const c = d.clock || {}, ts = c.tick_seconds || 60;
+  const ago = e => { const s = Math.max(0, (c.tick ?? e.tick) - e.tick) * ts; return s === 0 ? "now" : s < 90 ? `${Math.round(s)}s ago` : `${Math.round(s / 60)} min ago`; };
+  // counterparts we are talking to right now, with the latest prices (theirs orange, ours blue)
+  const active = {};
+  for (const th of (d.threads?.threads || []).filter(t => t.status === "open")) { const hh = heat(th, me); if (!active[th.with] || hh.s > active[th.with].h.s) active[th.with] = { th, h: hh }; }
+  const badge = ids => { const id = ids.find(x => /^t\d+$/.test(x || "") && x !== me && active[x]); if (!id) return "";
+    const h = active[id].h, pr = h.them != null ? ` <b style="color:var(--series-2)">${h.them} P</b>${h.us != null ? ` · <b style="color:var(--series-1)">${h.us} P</b>` : ""}` : ` <span class="muted">no prices yet</span>`;
+    return ` <span class="chip" style="background:color-mix(in srgb,var(--series-1) 16%,transparent);color:var(--series-1)">● conversation active</span>${pr}`; };
+  const cardOf = side => (side?.types || []).map(t => String(t).replace(/^card:/, "")).join(", ") || (side?.assets?.length ? `${side.assets.length} card(s)` : "");
+  const quote = t => t ? ` <span class="muted">“${esc(String(t).slice(0, 90))}”</span>` : "";
+  const row = e => { const p = e.payload || {}, o = p.offer || {}; let who = [], html = "";
     switch (e.type) {
-      case "thread.opened": return `${nm(p.team)} opened talks with ${p.with}${p.topic ? ` (${Object.entries(p.topic).map(([k, v]) => `${k} ${Object.values(v).join(" ")}`).join(", ")})` : ""}`;
-      case "team.joined": return `${nm(p.team || e.actor)} joined`;
-      case "announcement": return `📣 ${p.text || ""}`;
-      default: return `${e.type} ${[p.team && nm(p.team), p.with, p.price != null ? p.price + " P" : "", p.text ? `“${String(p.text).slice(0, 90)}”` : ""].filter(Boolean).join(" · ")}`;
-    } };
-  const ev = (d.feed?.events || []).slice().reverse();
-  $("feed").innerHTML = ev.map(e => `<div${(e.payload?.team === d.me.id) ? ' style="color:var(--text-primary);font-weight:600"' : ""}><span class="t">t${e.tick}</span>${esc(say(e))}</div>`).join("") || `<div class="empty">Quiet.</div>`;
+      case "thread.message": { const from = p.sender, to = from === p.team ? p.with : p.team, price = o.give?.cash || o.want?.cash; who = [p.team, p.with];
+        html = `<b>${esc(nm(from))}</b> → ${esc(nm(to))}${price ? ` <b>${price} P</b>${o.final ? " <span class='chip'>FINAL</span>" : ""}` : ""}${quote(p.text)}`; break; }
+      case "thread.opened": who = [p.team, p.with];
+        html = `<b>${esc(nm(p.team))}</b> started talking to ${esc(nm(p.with))}${p.topic ? ` (${p.topic.sell ? "to sell" : "to buy"} ${esc(Object.values(Object.values(p.topic)[0] || {})[0] ?? "")})` : ""}`; break;
+      case "offer.listed": { who = [e.actor]; const give = o.give?.cash ? `${o.give.cash} P` : cardOf(o.give), want = o.want?.cash ? `${o.want.cash} P` : cardOf(o.want);
+        html = `<b>${esc(nm(e.actor))}</b> listed an offer: gives ${esc(give || "–")}, wants ${esc(want || "–")}`; break; }
+      case "offer.cancelled": who = [e.actor]; html = e.actor ? `<b>${esc(nm(e.actor))}</b> withdrew an offer` : `An offer was withdrawn`; break;
+      case "settlement": { who = p.parties || []; const items = (p.items || []).map(i => i.name || i.ref).join(", ");
+        html = `<b>Deal</b> ${esc((p.parties || []).map(nm).join(" ⇄ "))}: ${esc(items || "cards")}${p.price ? ` for <b>${p.price} P</b>` : ""}`; break; }
+      case "gift.given": who = [p.team]; html = `<b>${esc(nm(e.actor))}</b> gave ${esc(nm(p.team))} a present${p.cards?.length ? ` (${esc(p.cards.join(", "))})` : ""}`; break;
+      case "venue.opened": html = `New market opened${p.name ? `: ${esc(p.name)}` : ""}`; break;
+      case "team.joined": html = `${esc(nm(p.team || e.actor))} joined`; break;
+      case "announcement": html = `📣 ${esc(p.text || "")}`; break;
+      default: html = `${esc(e.type)}`;
+    }
+    const mine = p.team === me || e.actor === me || (p.parties || []).includes(me);
+    return `<div${mine ? ' style="color:var(--text-primary)"' : ""}><span class="t" title="tick ${e.tick}">${ago(e)}</span>${html}${badge(who)}</div>`; };
+  $("feed").innerHTML = (d.feed?.events || []).slice().reverse().map(row).join("") || `<div class="empty">Quiet.</div>`;
 }
 
 
