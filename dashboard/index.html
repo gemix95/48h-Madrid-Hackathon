@@ -102,6 +102,19 @@ svg .ink { fill: var(--text-secondary); } svg .ink1 { fill: var(--text-primary);
 .set .meta { border-left: 4px solid var(--sc, var(--axis)); padding-left: 10px; }
 .tilekey { display: inline-flex; align-items: center; gap: 5px; }
 .tilekey svg { width: 14px; height: 14px; }
+/* market: a card shown as a coloured tag (rarity colour + emblem, neighbourhood stripe) */
+.ctag { --rc: #9aa4b8; --sc: var(--axis); display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 6px; margin: 1px 4px 1px 0; border-radius: 6px;
+  font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--text-primary); background: color-mix(in srgb, var(--rc) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rc) 55%, transparent); border-left: 4px solid var(--sc); }
+.ctag svg { width: 13px; height: 13px; color: var(--rc); flex: none; }
+.ctag small { font-weight: 500; color: var(--muted); font-size: 10px; }
+.side { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
+.side.sell { background: color-mix(in srgb, var(--series-1) 18%, transparent); color: var(--series-1); }
+.side.buy { background: color-mix(in srgb, var(--series-2) 18%, transparent); color: var(--series-2); }
+.side.swap { background: var(--surface-2); color: var(--text-secondary); }
+tr.good td { background: color-mix(in srgb, var(--good) 11%, transparent); }
+.btn-s { font: inherit; font-size: 12px; padding: 2px 10px; border-radius: 6px; border: 1px solid var(--axis); background: var(--surface-2); color: var(--text-primary); cursor: pointer; }
+.btn-s.on { background: var(--series-1); border-color: var(--series-1); color: #fff; }
 .cell .x { position: absolute; top: -7px; right: -6px; background: var(--series-2); color: #fff; border-radius: 999px; font-size: 10px;
   font-weight: 700; padding: 1px 5px; border: 2px solid var(--surface-1); }
 .set.locked { opacity: .45; }
@@ -271,7 +284,9 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
   <main class="tab" id="tab-market">
     <div class="grid">
       <section class="card s12"><h2>Markets <span class="hint">every place we can trade: our agent scans all of them, lists on the best three, and haggles with sellers</span></h2><div id="markets"></div></section>
-      <section class="card s8"><h2>Every market's offers <span class="hint">best for us first, after each market's fee</span></h2><div id="board"></div></section>
+      <section class="card s8"><h2>Every market's offers <span class="hint">best for us first, after each market's fee</span></h2>
+        <div class="empty" style="margin:0 0 8px">Offers posted by other teams. <b>Gives</b> = what they hand over, <b>Wants</b> = what they ask. <b>For us</b> = what we would gain by accepting now (card's value to us − price − fee). Green = worth taking.</div>
+        <div id="boardbar" style="display:flex;gap:10px;align-items:center;margin-bottom:8px"></div><div id="board"></div></section>
       <section class="card s4"><h2>Our offers &amp; haggles</h2><div id="mine"></div></section>
     </div>
   </main>
@@ -714,6 +729,14 @@ function refsOf(side, d) {
   for (const a of side.items || []) out.push(a.ref || a.card || a);
   return out;
 }
+const MKT = { good: false };   // market board filter
+function cardTag(ref, d, M) {
+  const id = String(ref).replace(/^card:/, ""), c = M.byRef[id];
+  if (!c) return `<span class="ctag">${esc(id)}</span>`;
+  const col = d.catalog?.rarities?.[c.rarity]?.color || RARITY_COLOR[c.rarity];
+  const sc = d.catalog?.sets?.find(s => s.id === c.set)?.color || "var(--axis)";
+  return `<span class="ctag" style="--rc:${col};--sc:${sc}" title="${esc(c.name)} · ${esc(c.rarity)} · ${esc(c.setName)} · book ${c.book} P · worth ${fmt(M.nextVal(c))} P to us">${emblem(c.rarity)}${esc(c.name)} <small>${esc(id)}</small></span>`;
+}
 function venueFee(d, v) { const x = (d.venues?.venues || []).find(y => y.venue === v); return x ? [x.fee_bps || 0, x.fee_per_card || 0] : [500, 1]; }
 function boardRows(d, M) {
   const boards = d.boards || { rastro: d.board?.offers || [] };
@@ -741,6 +764,9 @@ function market(d, M) {
   const vname = id => (venues.find(v => v.venue === id)?.name) || id;
   const rows = boardRows(d, M).sort((a, b) => (b.gain ?? -1e9) - (a.gain ?? -1e9));
   const side = (s2, refs) => [refs.join(", "), s2?.cash ? `${s2.cash} P` : ""].filter(Boolean).join(" + ") || "–";
+  // a side as coloured card tags plus the cash in bold
+  const sideHtml = (s2, refs) => refs.map(r => cardTag(r, d, M)).join("") + (Number(s2?.cash) > 0 ? `<b>${s2.cash} P</b>` : "") || "–";
+  const kind = r => r.give.length && r.want.length ? ["swap", "swap"] : r.give.length ? ["sell", "sells card"] : r.want.length ? ["buy", "wants card"] : ["swap", "–"];
   const offers = d.offers?.offers || [];
   // markets table
   const recs = d.decisions || [];
@@ -755,10 +781,17 @@ function market(d, M) {
     + `</tbody></table><div class="empty" style="margin-top:6px">Team markets open at game hour 3, when every team without its own market also gets a free starter stall. Ours (0% fee) opens as soon as we reach level 2.</div>`
     : `<div class="empty">No markets yet.</div>`;
   // combined board
-  $("board").innerHTML = rows.length ? `<table><thead><tr><th>Market</th><th>Team</th><th>Gives</th><th>Wants</th><th class="num">For us</th></tr></thead><tbody>`
-    + rows.slice(0, 50).map(r => `<tr><td class="sec">${esc(vname(r.venue))}</td><td>${esc(nm(r.maker))}${r.mine ? " <span class='chip'>us</span>" : ""}</td><td>${esc(side(r.o.give, r.give))}</td><td>${esc(side(r.o.want, r.want))}</td>
-      <td class="num">${r.gain == null ? `<span class="muted">–</span>` : r.gain > 0 ? `<span style="color:var(--up);font-weight:600">✓ +${fmt(r.gain)}</span>` : `<span class="muted">${fmt(r.gain)}</span>`}</td></tr>`).join("") + `</tbody></table>`
-    : `<div class="empty">No offers on any market yet.</div>`;
+  // identical offers (same team, market, cards and price) are grouped into one row with ×N
+  const groups = new Map();
+  for (const r of rows) { const k = [r.venue, r.maker, side(r.o.give, r.give), side(r.o.want, r.want)].join("|"); const g = groups.get(k); if (g) g.n++; else groups.set(k, { ...r, n: 1 }); }
+  const all = [...groups.values()], good = all.filter(r => r.gain > 0), shown = MKT.good ? good : all;
+  $("boardbar").innerHTML = `<button class="btn-s ${MKT.good ? "on" : ""}" onclick="MKT.good=!MKT.good;market(D,model(D))">${MKT.good ? "Showing only worth-taking" : "Show only worth-taking"}</button>
+    <span class="muted" style="font-size:12px"><b style="color:var(--up)">${good.length}</b> worth taking · ${all.length} distinct offers (${rows.length} listed)</span>`;
+  $("board").innerHTML = shown.length ? `<table><thead><tr><th>Market</th><th>Team</th><th>Gives</th><th>Wants</th><th class="num">For us</th></tr></thead><tbody>`
+    + shown.slice(0, 60).map(r => { const [kc, kl] = kind(r);
+      return `<tr class="${r.gain > 0 ? "good" : ""}"><td class="sec">${esc(vname(r.venue))}</td><td>${esc(nm(r.maker))}${r.mine ? " <span class='chip'>us</span>" : ""}${r.n > 1 ? ` <span class="chip">×${r.n}</span>` : ""}<div><span class="side ${kc}">${kl}</span></div></td><td>${sideHtml(r.o.give, r.give)}</td><td>${sideHtml(r.o.want, r.want)}</td>
+      <td class="num">${r.gain == null ? `<span class="muted">–</span>` : r.gain > 0 ? `<span style="color:var(--up);font-weight:600">✓ +${fmt(r.gain)}</span>` : `<span class="muted">${fmt(r.gain)}</span>`}</td></tr>`; }).join("") + `</tbody></table>`
+    : `<div class="empty">${MKT.good ? "Nothing worth taking right now." : "No offers on any market yet."}</div>`;
   // our offers grouped by market + live haggles
   const byVenue = {}; for (const o of offers.filter(o => o.venue)) (byVenue[o.venue] ||= []).push(o);
   const haggles = recs.filter(r => r.module === "trade" && r.action.startsWith("haggle")).slice(-8).reverse();
