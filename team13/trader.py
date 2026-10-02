@@ -511,7 +511,10 @@ class Trader:
                 open_total += 1
                 ctx.log("trade", "list_ask", ref=a["ref"], price=L["price"], floor=floor, our_value=round(loss, 1), venue=venue)
             except BazaarError as e:
-                ctx.log("trade", "list_refused", ref=a["ref"], error=str(e))
+                ctx.log("trade", "list_refused", ref=a["ref"], venue=venue, error=str(e)[:160])
+                if e.code == "venue_not_live":
+                    ctx.state.setdefault("venue_blocked", {})[venue] = tick + 10
+                    continue
                 break
         # bids: cards worth a lot to us, offered below that value; total committed stays inside free cash
         free = S["trade_bid_share"] * (ctx.budget_left() if hasattr(ctx, "budget_left") else ctx.me["cash"] - ctx.reserve()) - sum(L["price"] for L in bids)
@@ -545,7 +548,10 @@ class Trader:
                 open_total += 1
                 ctx.log("trade", "list_bid", ref=ref, price=L["price"], our_value=round(gain, 1), venue=venue)
             except BazaarError as e:
-                ctx.log("trade", "bid_refused", ref=ref, error=str(e))
+                ctx.log("trade", "bid_refused", ref=ref, venue=venue, error=str(e)[:160])
+                if e.code == "venue_not_live":
+                    ctx.state.setdefault("venue_blocked", {})[venue] = tick + 10
+                    continue
                 break
 
     def listing_markets(self):
@@ -560,6 +566,8 @@ class Trader:
                 continue
             if (v.get("rules") or {}).get("min_level", 0) > ctx.me.get("level", 1):
                 continue
+            if ctx.state.get("venue_blocked", {}).get(v["venue"], -1) > ctx.clock.get("tick", 0):
+                continue  # not trading yet (team markets open at game hour 3)
             activity = 1 + (v.get("trades") or 0) + (v.get("traders") or 0) + 0.5 * len(ctx.boards.get(v["venue"], []))
             net = 1 - (v.get("fee_bps") or 0) / 10000
             scored.append((activity * net, v["venue"]))

@@ -40,6 +40,8 @@ class Market:
             return self.try_open()
         self.ensure_broker()
         tick = ctx.clock.get("tick", 0)
+        self.fee_safety()
+        self.sync_fee(tick)
         if tick - st.get("announce_tick", -99) >= 20:
             self.announce(tick)
         self.invite(tick)
@@ -63,9 +65,52 @@ class Market:
                                      rules={"mechanism": "board"}, description=DESCRIPTION.format(fee=ft))
             st["venue"] = res.get("venue") or res.get("id")
             st["broker_key"] = res.get("broker_key")
+            st["fee_set"] = int(S["venue_fee_bps"])
             ctx.log("market", "opened", venue=st["venue"], fee_bps=int(S["venue_fee_bps"]))
         except BazaarError as e:
             ctx.log("market", "open_refused", code=e.code, error=str(e)[:200])  # venue_not_live: team markets open at +3h
+
+    # ------------------------------------------------------------------ fee: follow the Strategy tab, with a safety
+    def sync_fee(self, tick):
+        """Apply the Strategy tab's fee to our open market (fee changes take effect after a public notice)."""
+        ctx, st = self.ctx, self.ctx.state
+        want = int(ctx.S["venue_fee_bps"])
+        if st.get("fee_set") == want or tick - st.get("fee_try_tick", -99) < 10:
+            return
+        st["fee_try_tick"] = tick
+        try:
+            ctx.api.set_fee(st["venue"], want, 0)
+            st["fee_set"] = want
+            ctx.log("market", "fee_changed", fee_bps=want)
+        except BazaarError as e:
+            ctx.log("market", "fee_change_refused", fee_bps=want, error=str(e)[:200])
+
+    def fee_safety(self):
+        """If the Market Test ever had a match refused because of our fee, drop the fee to 0% (it is worth 30 points)."""
+        import json as _json
+        from pathlib import Path
+        ctx, st = self.ctx, self.ctx.state
+        if not ctx.S["venue_fee_bps"]:
+            return
+        log = Path(__file__).parent / "logs" / "broker.jsonl"
+        if not log.exists():
+            return
+        seen = st.get("fee_safety_lines", 0)
+        lines = log.read_text().splitlines()
+        st["fee_safety_lines"] = len(lines)
+        for line in lines[seen:]:
+            try:
+                r = _json.loads(line)
+            except ValueError:
+                continue
+            if r.get("event") == "match_refused" and str(r.get("sell", "")).startswith("b") and "fee" in str(r.get("error", "")).lower():
+                import strategy
+                cur = strategy.load()
+                cur["venue_fee_bps"] = 0
+                strategy.save({k: v for k, v in cur.items() if v != strategy.defaults().get(k)} | {"venue_fee_bps": 0})
+                ctx.S["venue_fee_bps"] = 0
+                ctx.log("market", "fee_dropped_for_market_test", error=str(r.get("error"))[:160])
+                return
 
     # ------------------------------------------------------------------ broker (Market Test + real offers)
     def ensure_broker(self):
