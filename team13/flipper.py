@@ -76,7 +76,8 @@ class Flipper:
                 if cost > budget or ask > caps.get(ref, 10 ** 9):
                     continue
                 for bid, bv, bo, bt in sorted(side["bids"], key=lambda x: -x[0])[:3]:
-                    if bt == at:
+                    sol = getattr(ctx, "solvency", None)
+                    if bt == at or (sol and sol.cannot_pay(bt, bid)):
                         continue  # never route a team's card back to the same team
                     profit = bid - self._fee(bv, bid) - cost
                     keep = ctx.values.gain_of_adding([ref])  # if we value it above the bid, keeping beats flipping
@@ -120,6 +121,9 @@ class Flipper:
         floor = max(cost + 1, ctx.values.loss_of_removing([ref]))  # never sell below what the card is worth to us
         bids = sorted((book.get(ref) or {}).get("bids", []), key=lambda x: -x[0])
         for bid, bv, bo, bt in bids:
+            sol = getattr(ctx, "solvency", None)
+            if sol and sol.cannot_pay(bt, bid):
+                continue  # the bidder cannot have that cash: the sale would fail at settlement
             if bid - self._fee(bv, bid) >= floor and bt != F["seller"]:
                 if not ctx.take_accept():
                     return

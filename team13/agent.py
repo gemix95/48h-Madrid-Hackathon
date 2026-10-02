@@ -31,6 +31,7 @@ from trader import Trader
 from guard import Guard
 from flipper import Flipper
 from flags import FlagHunter
+from solvency import Solvency
 from values import Values
 from intel import Intel
 from learner import Learner
@@ -343,6 +344,7 @@ def main():
     modules.append(("guard", Guard(ctx)))  # last: undo anything this tick left open that loses value
     switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue",
               "guard": "enable_guard", "flipper": "enable_flipper"}
+    ctx.solvency = Solvency(ctx)  # public-feed cash bounds: skip offers whose maker cannot pay
     flagger = FlagHunter(ctx)  # proven bad faith in dealer messages to us: a correct flag scores
     ctx.log("agent", "start", dry=args.dry_run)
     last_tick, n = None, 0

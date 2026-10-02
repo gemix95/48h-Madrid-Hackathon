@@ -72,6 +72,20 @@ class Trader:
                 if o.get("maker") != self.ctx.me["id"] and o.get("status", "open") == "open":
                     yield venue, o
 
+    def _cannot_pay(self, o: dict, team: str | None = None) -> bool:
+        """The maker offers cash it cannot have (public-feed cash bounds, solvency.py): accepting would fail at
+        settlement and waste our one accept of the tick."""
+        sol, cash = getattr(self.ctx, "solvency", None), (o.get("give") or {}).get("cash")
+        if not sol or not cash:
+            return False
+        if team is None:
+            intel = getattr(self.ctx, "intel", None)
+            team = (intel.summary().get("offer_maker", {}).get(o.get("id")) if intel else None) or o.get("maker")
+        if sol.cannot_pay(team, cash):
+            self.ctx.log("trade", "skip_insolvent", offer=o.get("id"), team=team, cash=cash, bounds=sol.bounds(team))
+            return True
+        return False
+
     def evaluate(self, offer: dict) -> dict:
         """What accepting `offer` would gain us, at our values, after that market's fees."""
         ctx, v = self.ctx, self.ctx.values
@@ -150,6 +164,8 @@ class Trader:
             return
         best = None
         for venue, o in self.all_offers():
+            if self._cannot_pay(o):
+                continue
             ev = self.evaluate(o)
             if ev.get("gain") is not None and ev["gain"] >= ctx.S["trade_min_gain"] and (best is None or ev["gain"] > best[1]["gain"]):
                 best = (o, ev)
@@ -191,7 +207,7 @@ class Trader:
                 o = theirs[-1]
                 ev = self.evaluate(o)
                 need = ctx.S["trade_min_gain"] * (2 if hasattr(ctx, "is_untrusted") and ctx.is_untrusted(th.get("with")) else 1)
-                if ev.get("gain") is not None and ev["gain"] >= need and ctx.take_accept():
+                if ev.get("gain") is not None and ev["gain"] >= need and not self._cannot_pay(o, th.get("with")) and ctx.take_accept():
                     try:
                         ctx.api.accept(o["id"], assets=self.assets_for(ev["want"]) or None)
                         ctx.log("trade", "accept_team", thread=th["id"], gain=round(ev["gain"], 1), detail=ev)
