@@ -60,6 +60,13 @@ def poll() -> None:
         out("LEVELS: " + "; ".join(f"{x.get('id') or x.get('name')}={x.get('status')}: {str(x.get('line') or x.get('how') or '')[:120]}"
                                    for x in lv))
         state["levels"] = sig
+    for d in b.duels().get("duels", []):  # a live duel: say so once, with its raw shape, so a human can step in
+        key = f"duel:{d.get('id')}:{d.get('status')}"
+        if key not in state["cheap_seen"]:
+            state["cheap_seen"].add(key)
+            log("duel", d)
+            out(f"DUEL {d.get('id')} status={d.get('status')} role={d.get('role')} limit={d.get('your_limit')} "
+                f"rival_offer={d.get('rival_offer')} keys={sorted(d)}")
     feed = b.feed(150).get("events", [])
     for e in feed:
         if e["id"] <= state["feed_id"]:

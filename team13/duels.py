@@ -77,6 +77,10 @@ class Duels:
                 m["days"] = o.get("days")
         theirs = [m for m in msgs if m not in mine and first(m, "price", default=None) is not None]
         standing = first(d, "standing_offer", "rival_offer", "their_offer", "offer", default=None)
+        if isinstance(standing, (int, float)):  # the rival's offer may come as a bare price
+            standing = {"price": standing}
+        elif isinstance(standing, dict) and standing.get("price") is None and isinstance(standing.get("offer"), dict):
+            standing = {**standing, **standing["offer"]}  # {"offer": {"price", "days"}} as duel_say sends it
         rival = None
         if standing and first(standing, "by", "from", "maker", default=None) not in (me, "you"):
             rival = standing
