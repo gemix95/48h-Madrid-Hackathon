@@ -114,6 +114,11 @@ svg .ink { fill: var(--text-secondary); } svg .ink1 { fill: var(--text-primary);
 .side.swap { background: var(--surface-2); color: var(--text-secondary); }
 tr.good td { background: color-mix(in srgb, var(--good) 11%, transparent); }
 .btn-s { font: inherit; font-size: 12px; padding: 2px 10px; border-radius: 6px; border: 1px solid var(--axis); background: var(--surface-2); color: var(--text-primary); cursor: pointer; }
+.thr-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px; }
+.thr-tab { --hc: var(--muted); flex: none; min-width: 104px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; font: inherit; font-size: 13px;
+  padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); border-top: 3px solid var(--hc); background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
+.thr-tab span { font-size: 11px; color: var(--muted); } .thr-tab em { font-style: normal; font-size: 11px; font-weight: 700; color: var(--hc); }
+.thr-tab.on { background: var(--surface-2); outline: 2px solid var(--hc); }
 .btn-s.on { background: var(--series-1); border-color: var(--series-1); color: #fff; }
 .cell .x { position: absolute; top: -7px; right: -6px; background: var(--series-2); color: #fff; border-radius: 999px; font-size: 10px;
   font-weight: 700; padding: 1px 5px; border: 2px solid var(--surface-1); }
@@ -291,7 +296,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
 
   <main class="tab" id="tab-deals">
     <div class="grid">
-      <section class="card s7"><h2>Negotiations <span class="hint">our offers (blue) vs the dealer's asks (orange)</span></h2><div id="threads"></div></section>
+      <section class="card s7"><h2>Negotiations <span class="hint">our offers (blue) vs the dealer's asks (orange) · tabs: hottest on the left (FINAL offer, small gap, haggling, no reply)</span></h2><div id="threads"></div></section>
       <section class="card s5"><h2>Dealers</h2><div id="dealers"></div><div id="levels"></div></section>
       <section class="card s12"><h2>Duels <span class="hint">we only see our own limit; the deal shrinks every round</span></h2><div id="duels"></div></section>
     </div>
@@ -728,10 +733,27 @@ function priceChart(mv, refs) {
   mv.forEach((m, i) => g += `<circle data-tip="${i}" cx="${X(m.tick)}" cy="${Y(m.price)}" r="12" fill="transparent"/>`);
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Prices over ticks">${g}</svg>`;
 }
+const THR = { sel: null };   // selected conversation tab
+// how "hot" a conversation is: FINAL offer > small gap > haggling > no reply > closed
+function heat(th, myId) {
+  const mv = moves(th, myId), us = mv.filter(m => m.who === "us"), them = mv.filter(m => m.who === "them"), last = them[them.length - 1];
+  if (th.status === "deal") return { s: -1, label: "✓ deal", col: "var(--good)" };
+  if (th.status !== "open") return { s: -2, label: "closed", col: "var(--muted)" };
+  if (last?.final) return { s: 100, label: `FINAL ${last.price} P`, col: "var(--critical)" };
+  if (last && us.length) { const gap = Math.max(0, last.price - us[us.length - 1].price);
+    return { s: 50 + 45 * (1 - Math.min(1, gap / (last.price || 1))), label: `gap ${gap} P`, col: "var(--serious)" }; }
+  if (last) return { s: 45, label: `ask ${last.price} P`, col: "var(--series-2)" };
+  return { s: us.length ? 10 : 5, label: us.length ? "no reply yet" : "waiting", col: "var(--muted)" };
+}
 function threads(d, M) {
   const me = d.me, list = (d.threads?.threads || []).filter(t => t.status === "open" || (t.messages || []).length).slice().sort((a, b) => (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1) || b.id - a.id);
   if (!list.length) { $("threads").innerHTML = `<div class="empty">No conversations yet.</div>`; return; }
-  $("threads").innerHTML = list.slice(0, 5).map(th => {
+  const rows = list.map(th => ({ th, h: heat(th, me.id) })).sort((a, b) => b.h.s - a.h.s || b.th.id - a.th.id).slice(0, 14);
+  if (!rows.some(r => r.th.id === THR.sel)) THR.sel = rows[0].th.id;
+  const tabs = `<div class="thr-tabs">${rows.map(r => { const t0 = r.th.topic ? Object.values(Object.values(r.th.topic)[0] || {})[0] : "";
+    return `<button class="thr-tab ${r.th.id === THR.sel ? "on" : ""}" style="--hc:${r.h.col}" onclick="THR.sel=${r.th.id};threads(D,model(D))"><b>${esc(r.th.with)}</b><span>${esc(String(t0 || "").replace("sobre_barrio", "pack"))}</span><em>${esc(r.h.label)}</em></button>`; }).join("")}</div>`;
+  const shownList = rows.filter(r => r.th.id === THR.sel).map(r => r.th);
+  $("threads").innerHTML = tabs + shownList.map(th => {
     const mv = moves(th, me.id), { entry, want } = menuFor(d, th);
     const ev = want?.pack && d.catalog ? M.packEV(d.catalog.packs.find(p => p.id === want.pack) || { slots: [] }) : null;
     const refs = [entry?.opening_ask && { v: entry.opening_ask, label: "opening ask" }, entry?.list_price && { v: entry.list_price, label: "list price" }, ev && { v: ev, label: "worth to us" }].filter(Boolean);
