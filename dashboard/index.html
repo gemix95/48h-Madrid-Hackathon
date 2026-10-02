@@ -1307,15 +1307,25 @@ function strategyPlan(d, M) {
   const mk = recs.filter(r => r.module === "market");
   const invites = mk.filter(r => r.action === "invited").length, ann = mk.filter(r => r.action === "announced").length;
   const rivalsMk = (d.venues?.venues || []).filter(v => !v.house && v.owner !== me.id && v.status === "open");
-  $("market-status").innerHTML = `<table><tbody>
-    <tr><td>Status</td><td class="num">${venue ? `<span style="color:var(--up)">● open</span> ${esc(venue.name)}` : me.level < 2 ? "waiting for level 2" : "opening when allowed"}</td></tr>
-    <tr><td>Fee</td><td class="num">${S.venue_fee_bps / 100}% <span class="muted">(El Rastro 5% + 1 P)</span></td></tr>
-    <tr><td>Next Market Test</td><td class="num">${nb ? until(wallFor(nb.at_hours, c, "bench")) : "–"}</td></tr>
-    <tr><td>Invitations sent</td><td class="num">${invites}</td></tr>
-    <tr><td>Announcements</td><td class="num">${ann}</td></tr>
-    <tr><td>Trades on our market</td><td class="num">${venue ? `${venue.trades} · ${fmt(venue.volume, 0)} P` : "–"}</td></tr>
-    <tr><td>Rival markets</td><td class="num">${rivalsMk.length ? rivalsMk.map(v => `${esc(v.name)} ${fmt(v.fee_bps / 100)}%`).join(", ") : "none yet"}</td></tr>
-  </tbody></table>`;
+  // key/value rows that wrap inside the card; rival markets as their own short list (the old table overflowed)
+  const kv = (k, v) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--grid);font-size:13px">
+    <span class="sec" style="flex:none">${k}</span><span style="text-align:right;min-width:0;overflow-wrap:anywhere">${v}</span></div>`;
+  const ourFee = (venue ? venue.fee_bps : S.venue_fee_bps) / 100;
+  const status = venue ? `<span style="color:var(--up);font-weight:600">● open</span>` : me.level < 2 ? `<span class="muted">waiting for level 2</span>` : `<span class="muted">opening when allowed</span>`;
+  const rivalRows = rivalsMk.slice().sort((a, b) => (a.fee_bps || 0) - (b.fee_bps || 0)).map(v => {
+    const cheaper = (v.fee_bps || 0) < (venue ? venue.fee_bps : S.venue_fee_bps);
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:12px;border-bottom:1px dashed var(--grid)">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v.name)}">${esc(v.name)}</span>
+      <span style="flex:none" class="num"><b style="color:${cheaper ? "var(--serious)" : "var(--text-primary)"}">${fmt((v.fee_bps || 0) / 100)}%</b>${v.fee_per_card ? ` + ${v.fee_per_card} P` : ""}
+        <span class="muted"> · ${v.trades || 0} trades</span></span></div>`; }).join("");
+  $("market-status").innerHTML = `
+    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px"><b style="font-size:16px">${esc(venue ? venue.name : "Mercado Trece")}</b>${status}</div>
+    ${kv("Our fee", `<b>${fmt(ourFee)}%</b> <span class="muted">· El Rastro 5% + 1 P</span>`)}
+    ${kv("Trades on our market", venue ? `<b>${venue.trades || 0}</b> <span class="muted">· ${fmt(venue.volume || 0, 0)} P volume</span>` : "–")}
+    ${kv("Next Market Test", nb ? until(wallFor(nb.at_hours, c, "bench")) : "–")}
+    ${kv("Invitations · announcements", `${invites} · ${ann}`)}
+    <div class="sec" style="font-size:12px;font-weight:600;margin:12px 0 2px">Rival markets <span class="muted" style="font-weight:400">(${rivalsMk.length}, cheapest first; orange = cheaper than ours)</span></div>
+    ${rivalRows || `<div class="empty">none yet</div>`}`;
 }
 
 // ---------- intel ----------

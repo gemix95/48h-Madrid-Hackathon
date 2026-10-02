@@ -141,8 +141,14 @@ class Context:
         Claude only gets the time left in this tick's budget (ticks shrink to 15 s on Sunday): a late call is
         a missed tick and an expired offer, so past the budget the rules write the message."""
         left = getattr(self, "tick_deadline", time.time() + 8) - time.time()
+        who = self.counterparty_id(situation)
+        if who and self.is_untrusted(who):
+            return fallback[0], fallback[1], "rules-untrusted"  # they tried to manipulate us today: templates only
         if self.S.get("llm_negotiator", 1) and self.llm.ready() and left >= 2.5:
-            return self.llm.propose(situation, band, fallback, effort=effort, timeout=min(8.0, left - 1.0))
+            msg, price, src = self.llm.propose(situation, band, fallback, effort=effort, timeout=min(8.0, left - 1.0))
+            if src == "rules-injection" and who:
+                self.mark_untrusted(who)
+            return msg, price, src
         if left < 2.5:
             self.log("llm", "skipped_tick_budget", left_s=round(left, 1))
         return fallback[0], fallback[1], "rules"
@@ -212,6 +218,47 @@ class Context:
                 self.log("flag", "flagged", **s)
             except BazaarError as e:
                 self.log("flag", "flag_refused", error=str(e)[:160], **s)
+
+    # ---------------------------------------------------------------- manipulation defence
+    def counterparty_id(self, situation):
+        import re as _re
+        txt = str(situation.get("counterparty", ""))
+        m = _re.search(r"\b(t\d+)\b", txt)
+        if m:
+            return m.group(1)
+        for d in self.dealers:
+            if d.get("name") and d["name"] in txt:
+                return d["id"]
+        return None
+
+    def scan_manipulation(self):
+        """Every tick: read what others wrote in our open conversations; mark anyone attempting manipulation."""
+        import security
+        seen = self.state.setdefault("scanned_msgs", [])
+        for th in self.threads:
+            if th.get("status") != "open":
+                continue
+            for m in th.get("messages", []):
+                mid = m.get("id")
+                if mid in seen or m.get("sender") == self.me.get("id"):
+                    continue
+                seen.append(mid)
+                hits = security.detect(m.get("text") or "")
+                if hits:
+                    who = m.get("sender") or th.get("with")
+                    self.log("security", "injection_detected", patterns=hits, who=who, thread=th["id"], text=(m.get("text") or "")[:160])
+                    if who and (str(who)[:1] == "t" and str(who)[1:].isdigit()):
+                        self.mark_untrusted(who)
+        del seen[:-3000]
+
+    def is_untrusted(self, who):
+        return (self.state.get("untrusted", {}).get(who) or {}).get("day") == self.day_key()
+
+    def mark_untrusted(self, who):
+        u = self.state.setdefault("untrusted", {})
+        if (u.get(who) or {}).get("day") != self.day_key():
+            u[who] = {"day": self.day_key(), "tick": self.clock.get("tick")}
+            self.log("security", "untrusted", who=who, rule="templates only and double minimum gain for the rest of the day")
 
     def open_new_packs(self):
         try:
@@ -314,7 +361,7 @@ def main():
             ctx.tick_deadline = time.time() + 0.7 * float(ctx.clock.get("next_tick_in") or ctx.clock.get("tick_seconds") or 30)
             ctx.observe(full=(n % 20 == 0))
             n += 1
-            for extra in (ctx.watch_levels, ctx.maybe_flag):
+            for extra in (ctx.watch_levels, ctx.maybe_flag, ctx.scan_manipulation):
                 try:
                     extra()
                 except Exception as e:

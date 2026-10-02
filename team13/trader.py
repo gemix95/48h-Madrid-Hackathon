@@ -190,7 +190,8 @@ class Trader:
             if theirs:
                 o = theirs[-1]
                 ev = self.evaluate(o)
-                if ev.get("gain") is not None and ev["gain"] >= ctx.S["trade_min_gain"] and ctx.take_accept():
+                need = ctx.S["trade_min_gain"] * (2 if hasattr(ctx, "is_untrusted") and ctx.is_untrusted(th.get("with")) else 1)
+                if ev.get("gain") is not None and ev["gain"] >= need and ctx.take_accept():
                     try:
                         ctx.api.accept(o["id"], assets=self.assets_for(ev["want"]) or None)
                         ctx.log("trade", "accept_team", thread=th["id"], gain=round(ev["gain"], 1), detail=ev)
