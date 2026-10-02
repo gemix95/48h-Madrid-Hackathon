@@ -211,3 +211,34 @@ jumps were each team's first good team trade (t10 +20.8 buying LAV-02, t08 +17.1
 selling LAT-09, t14 +14.8 buying it); Abuela deals moved +2 to +7; a leader's gain pushed everyone else down
 (t06 -5.9 with no trade of its own). When a rival jumps on something new (a market, a dealer, a set), copy it fast.
 
+## 11. Expect the unexpected (what the organisers may change, and how we react)
+
+Near certain (announced or hinted in RULES and `/api/schedule`):
+- 09:00 El Retiro (a 0.7 set for us: sell RET to collectors), a pack and 150 P each; 30 s ticks (15 s Sunday).
+- More dealers: RULES speak of five, we have seen two. Expect a vault ("one legendary per team per hour"; caps
+  SAL-11 200, SAL-12 500 are set), dealers that lie (flags ready), that cool us off for tricks, that call repeated
+  words spam, that stop talking after prompt injection (we never inject).
+- Duels II and III: price + delivery days, decay 8 to 10%. The hard Market Test (~20:00): firmer, more impatient.
+
+Likely, unannounced:
+- **Limits moved mid-game** ("one conversation at a time" is the RULES' own example), tick speed between 5 and
+  60 s. The agent reads limits from `/api/clock` each tick (`ctx.limit`).
+- **New ways to trade as levels** ("a route a level brings is one `b.call(...)` away"): read `how` in `/api/levels`.
+- Rival teams' text traps for our Claude negotiator (injections, fake organiser notes): words never move numbers,
+  and `scan_manipulation` marks the sender untrusted.
+- Server restarts (Friday: ~1 min of 502, state kept); rarities running out (packs then give the next rarity down,
+  so epics and rares get dearer).
+
+Protocol (5 minutes from any surprise):
+1. The watcher prints `level.activated` with its `how`, announcements and limit changes; `agent/rivals.py` shows
+   who jumps on something new.
+2. Read `how` and `/api/levels`, then decide: nothing / a Strategy knob / code. For code: one writes, the other
+   reviews, push, the Host restarts.
+3. If a rival gains on something new, copy it within half an hour.
+
+Code check (Friday night): limits come from `ctx.limit(...)` with today's values only as fallbacks; unknown duel
+payloads are logged as `unknown_shape` instead of crashing. Fixed: the broker's Market Test length was a constant
+16 (now read from `/api/schedule` `params.ticks`); `solvency.py` assumed 150 P allowances (now self-calibrates: any
+cash of ours the feed does not explain is added to every team's high bound). Left as is: 3 duel accepts per tick
+(the server publishes no duel limit), `FLIP_PATIENCE` 40 ticks.
+

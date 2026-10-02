@@ -52,6 +52,15 @@ class Solvency:
     def __init__(self, ctx):
         self.ctx, self._tick, self._cache = ctx, None, {}
 
+    def unexplained(self) -> float:
+        """Cash we really have minus what the feed explains for us. Grants reach every team alike, so a positive gap
+        (an allowance under another event type, a changed amount) is added to every team's high bound."""
+        me = getattr(self.ctx, "me", None) or {}
+        intel = getattr(self.ctx, "intel", None)
+        if not intel or "cash" not in me or not me.get("id"):
+            return 0.0
+        return max(0.0, me["cash"] - cash_bounds(intel.events.values(), me["id"])[1])
+
     def bounds(self, team: str):
         intel = getattr(self.ctx, "intel", None)
         if not intel or not team or not (team[:1] == "t" and team[1:].isdigit()):
@@ -60,7 +69,10 @@ class Solvency:
         if tick != self._tick:
             self._tick, self._cache = tick, {}
         if team not in self._cache:
-            self._cache[team] = cash_bounds(intel.events.values(), team)
+            if "_gap" not in self._cache:
+                self._cache["_gap"] = self.unexplained()
+            lo, hi = cash_bounds(intel.events.values(), team)
+            self._cache[team] = (lo, hi + self._cache["_gap"])
         return self._cache[team]
 
     SLACK = 10  # unseen cash events (a grant under another event type) must not block a good deal

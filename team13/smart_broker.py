@@ -27,7 +27,7 @@ import starter_plans
 
 HERE = Path(__file__).parent
 LOG = HERE / "logs" / "broker.jsonl"
-SESSION_TICKS = 16      # Market Test length from /api/schedule ("ticks": 16)
+SESSION_TICKS = 16      # Market Test length; refreshed from /api/schedule ("ticks") by refresh_session_ticks()
 LATE = 0.6              # after this share of the session, cross greedily like the stall
 DEFAULT_SHADE = 0.12
 
@@ -158,12 +158,36 @@ def main():
     run(url, key)
 
 
+_ticks_checked = 0.0
+
+
+def refresh_session_ticks(url):
+    """Read the next Market Test's length from /api/schedule (organisers may change it, e.g. the hard test).
+    The nearest upcoming bench sets SESSION_TICKS; once it starts it leaves the list and the value stays."""
+    global SESSION_TICKS, _ticks_checked
+    if time.time() - _ticks_checked < 60:
+        return
+    _ticks_checked = time.time()
+    try:
+        import urllib.request
+        with urllib.request.urlopen(url + "/api/schedule", timeout=10) as r:
+            up = [u for u in json.load(r).get("upcoming", []) if u.get("action") == "bench"]
+        if up:
+            n = int((up[0].get("params") or {}).get("ticks") or SESSION_TICKS)
+            if n != SESSION_TICKS:
+                log(event="session_ticks", old=SESSION_TICKS, new=n)
+                SESSION_TICKS = max(1, n)
+    except Exception as e:  # keep the last known length
+        log(event="session_ticks_failed", error=repr(e)[:120])
+
+
 def run(url, key):
     """The broker loop. The agent starts it in a thread as soon as our venue is open (market.py)."""
     broker, tracker, seen = Broker(url, key), Tracker(), None
     log(event="start")
     while True:
         try:
+            refresh_session_ticks(url)
             tick, book = broker.clock()["tick"], broker.book()
             bench = book.get("bench_offers") or []
             tracker.update(tick, bench)
