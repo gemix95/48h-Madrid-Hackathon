@@ -45,11 +45,13 @@ while True:
                 caps = {}
             over_cap = (not out_refs and len(in_refs) == 1 and in_refs[0] in caps
                         and (g.get("cash") or 0) > caps[in_refs[0]])
-            if not out_refs and not over_cap:
-                continue  # pure bids are handled by the trader's own stale-bid check
+            stale_bid = (not out_refs and in_refs and not over_cap
+                         and v.gain_of_adding(in_refs) < (g.get("cash") or 0))  # e.g. a second SAL-10 bid once we own one
+            if not out_refs and not over_cap and not stale_bid:
+                continue
             loss = v.loss_of_removing(out_refs) + (g.get("cash") or 0)
             gain = v.gain_of_adding(in_refs) + (w.get("cash") or 0)
-            if loss > gain or over_cap:
+            if loss > gain or over_cap or stale_bid:
                 rec = {"ts": time.time(), "ev": "guard_cancel", "offer": o["id"], "thread": o.get("thread"),
                        "give": out_refs, "want": in_refs or w.get("cash"), "loss": round(loss, 1), "gain": round(gain, 1), "over_cap": over_cap}
                 try:
