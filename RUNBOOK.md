@@ -151,25 +151,65 @@ venue fee, so post our price and let them accept.
   Walk away politely when the midpoint is above the cap ("That is our limit for tonight"): he remembers.
 - Friday: MAL-09 thread 195, we opened 58, he 97; walked at 74 vs 86 (midpoint 80 above our cap 75).
 
-## 7. Duels: what the practice round showed (Fri 22:20, 12 of our duels)
+## 7. Duels: requirements and how the practice round went
 
-- Payload: the id is `duel` (not `id`), rival messages are signed with an alias in `from`, ours with `"you"`,
-  our standing offer is `your_offer`, and `result` is our surplus x (1 - decay)^rounds (duel 15: 46 x 0.94^2 = 40.6).
-- Real rivals open near a fair price and **concede steadily, 3 to 8% of the price per round**, whatever we do
-  (a buyer went 78, 84, 87, 90, 93, 96, 99, 102, 105 while we came down from 181). Some rivals never speak.
-- Decay is 6% per round, so while our surplus is small, waiting beats accepting: one more round wins the rival's
-  step x 0.94 and costs 6% of our surplus. We accepted 54 at once in duel 16 (surplus 20) against a rival moving
-  about 5 P a round.
-- Branch `duels-wait-rule`: keep talking while the rival's recent step beats decay / (1 - decay) x our surplus,
-  with 3+ ticks left. Simulator: better against conceders, tough rivals and clones; worse against step-matchers
-  (tit-for-tat 0.43 -> 0.37). Merge if Duels I rivals look like Friday's practice rivals.
+### What duels ask of us (RULES + `/api/schedule`)
 
-- Full practice review (30 duels: 21 deals, 3 no deal, 6 unfinished; results sum 468): every deal closed at the
-  rival's price. Lost two deals with the rival inside our limit (127: rival 102 vs our cost 68; 67: rival 88 vs our
-  value 102) because the bot ignored `deadline_tick`: **fixed**, it now takes any offer inside our limit in the last
-  2 ticks. Long duels (7-8 rounds) scored 8-12 and short ones (1-3) 26-42, but the long ones were mostly small pies
-  (surplus 12-20), so that is not proof our opening is too greedy. Seller opening cap is now the Strategy knob
-  `duel_seller_cap`, default 2.2 (simulator: 2.2 -> mean 0.528, 1.6 -> 0.478). Revisit both after Duels I.
+- Every team meets every other team twice on the same scenario, once as seller and once as buyer; the rival hides
+  behind an alias that changes with every duel. We see only our own limit (a seller's cost, a buyer's value).
+- Moves: a message `{text, price}` (with days: `{text, price, days}`, or the server refuses with `missing_days`),
+  or accept the rival's standing offer; it settles next tick.
+- Score: the **share of each deal's pie** we capture (pie = buyer value - seller cost). A deal past our limit loses
+  points, no deal scores 0, and every round of talk shrinks the deal's value (decay).
+
+| Session | When | Issues | Length | Decay / round | Round-robins |
+|---|---|---|---|---|---|
+| Practice (not scored) | Fri ~22:20 | price | 12 ticks | 6% | 1 |
+| Duels I | Sat ~11:30 | price | 16 ticks | 6% | 1 (~34 duels) |
+| Duels II | Sat ~18:00 | price + days | 16 ticks | 8% | 2 (~68 duels) |
+| Duels III | Sun | price + days | 12 ticks | 10% | 2 |
+| Grand Final | Sun, big screen | price + days | 12 ticks | 10% | 1 |
+
+Two issues: delivery day 0 to 10, each side has a private `your_days_weight`; the pie grows when the side that
+cares less about time gives the days away for price.
+
+### Payload (as served, not as the SDK docstring says)
+
+The id is `duel` (not `id`), the deadline is `deadline_tick`, rival messages are signed with an alias in `from` and
+ours with `"you"`, our standing offer is `your_offer`, and `result` is our surplus x (1 - decay)^rounds
+(duel 15: 46 x 0.94^2 = 40.6).
+
+### How the practice round went (our 30 duels)
+
+| | |
+|---|---|
+| Deals | **21**; no deal 4; unfinished at close 5 |
+| Our surplus before decay | 585 P |
+| After decay (`result`) | **468 P**: decay took **20%** |
+| Rounds to a deal | median **4**, 0 to 8 |
+| Deals past our limit | **0** |
+| Closed at the rival's price | **18 of 21** |
+| Mean `result` | buyer 23.1, seller 21.5 |
+| Rival never spoke | 7 duels (68, 111, 112, 133, 134, 231, 232): teams without a duel bot |
+
+Real rivals open near a fair price and concede steadily, 3 to 8% of the price per round, whatever we do.
+
+**Share of the pie is still unknown**: rival limits are hidden. Pairing mirrored duels does not recover it (205/206
+gave a "negative pie" from our two limits, yet both closed in our favour), so a rival's limits differ between the
+two duels of a pair. The real shares will show in `duel_points` (`/api/me` score) after Duels I.
+
+Fixed during practice: the bot never moved (`id` vs `duel`); absurd openings (a buyer at -154); two deals lost at the
+deadline with the rival inside our limit (127: rival 102 vs our cost 68; 67: rival 88 vs our value 102), now any
+offer inside our limit is taken in the last 2 ticks; one tick with two writers in the same duels (a manual run from
+Anton's laptop next to the agent: never again).
+
+### Watch in Duels I
+
+- Decay is the big reserve (-20%). If rivals again concede on their own, merge branch `duels-wait-rule`; if long
+  talks cost us, lower `duel_seller_cap` (default 2.2; simulator: 2.2 -> mean 0.528, 1.6 -> 0.478).
+- Read the first scored shares (`duel_points`) and compare with the leaderboard.
+- Duels II (days): watch the first 2 or 3 live; every priced message must carry `days`, and the bot should give
+  days away only where they are cheap for us.
 
 ## 8. Flags (a correct flag scores, a wrong one costs)
 
