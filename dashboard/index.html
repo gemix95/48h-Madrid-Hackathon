@@ -2,297 +2,797 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Team 13 · The Bazaar</title>
+<title>Team 13 · War room · The Bazaar</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 .viz-root {
   color-scheme: light;
-  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --page: #f9f9f7; --surface-1: #fcfcfb; --surface-2: #f0efec;
   --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
   --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
-  --series-1: #2a78d6; --series-2: #eb6834; --neutral: #c3c2b7;
-  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --up: #006300;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --neutral: #c3c2b7;
+  --seq-1: #cde2fb; --seq-2: #86b6ef;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b; --up: #006300;
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) .viz-root {
     color-scheme: dark;
-    --page: #0d0d0d; --surface-1: #1a1a19;
+    --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #232321;
     --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
-    --series-1: #3987e5; --series-2: #d95926; --neutral: #4a4a46; --up: #0ca30c;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --neutral: #4a4a46;
+    --seq-1: #184f95; --seq-2: #256abf; --up: #0ca30c;
   }
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
 .viz-root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page);
-  color: var(--text-primary); min-height: 100vh; padding: 20px 24px 40px; }
-h1 { font-size: 20px; margin: 0; }
-h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--text-secondary); margin: 0 0 12px; }
-header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
-.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 3px 10px;
+  color: var(--text-primary); min-height: 100vh; padding: 0 24px 48px; font-size: 14px; }
+a { color: inherit; }
+h1 { font-size: 18px; margin: 0; white-space: nowrap; }
+h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); margin: 0 0 12px; }
+h2 .hint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); margin-left: 6px; }
+
+header { position: sticky; top: 0; z-index: 5; background: var(--page); display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--border); }
+nav { display: flex; gap: 4px; margin-left: auto; }
+nav a { text-decoration: none; font-size: 13px; padding: 4px 10px; border-radius: 6px; color: var(--text-secondary); }
+nav a:hover { background: var(--surface-2); color: var(--text-primary); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; white-space: nowrap;
   border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); }
-.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
 .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
-.span-12 { grid-column: span 12; } .span-8 { grid-column: span 8; } .span-6 { grid-column: span 6; }
-.span-4 { grid-column: span 4; }
-@media (max-width: 1000px) { .span-8, .span-6, .span-4 { grid-column: span 12; } }
-.tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
-@media (max-width: 800px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
-.tile .label { font-size: 13px; color: var(--text-secondary); }
-.tile .value { font-size: 30px; font-weight: 600; margin-top: 4px; }
+.s12 { grid-column: span 12; } .s8 { grid-column: span 8; } .s7 { grid-column: span 7; } .s6 { grid-column: span 6; }
+.s5 { grid-column: span 5; } .s4 { grid-column: span 4; }
+@media (max-width: 1100px) { .s8, .s7, .s6, .s5, .s4 { grid-column: span 12; } }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.tile .label { font-size: 12px; color: var(--text-secondary); }
+.tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; }
 .tile .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .delta-up { color: var(--up); } .delta-down { color: var(--critical); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--axis); }
-td { padding: 6px 8px; border-bottom: 1px solid var(--grid); }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-.scroll { max-height: 360px; overflow: auto; }
+th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
+td { padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.empty { color: var(--muted); font-size: 13px; }
+.muted { color: var(--muted); } .sec { color: var(--text-secondary); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
+svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+svg .ink { fill: var(--text-secondary); } svg .ink1 { fill: var(--text-primary); }
+.tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); max-width: 300px;
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 12px; line-height: 1.45;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25); display: none; z-index: 20; }
+.err { color: var(--critical); font-size: 12px; }
+
+/* next moves */
+.moves { display: flex; flex-direction: column; gap: 8px; }
+.move { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); }
+.move .ic { font-size: 14px; line-height: 20px; text-align: center; font-weight: 700; }
+.move .t { font-weight: 600; line-height: 20px; }
+.move .d { color: var(--text-secondary); font-size: 13px; margin-top: 2px; line-height: 1.45; }
+.tag { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; border: 1px solid currentColor; }
+
+/* score bullets */
+.bullet { display: grid; grid-template-columns: 150px 1fr 64px; gap: 10px; align-items: center; margin-bottom: 12px; font-size: 13px; }
+.bullet .name small { display: block; color: var(--muted); font-size: 11px; }
+
+/* album */
+.set { display: grid; grid-template-columns: 170px 1fr; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--grid); }
+.set:first-of-type { border-top: 0; }
+.set .meta b { font-size: 14px; } .set .meta div { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.cells { display: grid; grid-template-columns: repeat(5, 1fr) 6px repeat(3, 1fr) 6px repeat(2, 1fr) 10px repeat(2, 1fr); gap: 4px; }
+.cell { position: relative; border-radius: 6px; padding: 5px 4px; min-height: 46px; text-align: center; font-size: 11px; line-height: 1.25;
+  border: 1.5px dashed var(--axis); color: var(--muted); cursor: default; }
+.cell.have { border: 1.5px solid transparent; background: var(--seq-2); color: #fff; }
+.cell.extra { opacity: .85; border-style: dotted; }
+.cell .r { font-weight: 700; font-size: 10px; letter-spacing: .04em; }
+.cell .v { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600; }
+.cell .x { position: absolute; top: -7px; right: -6px; background: var(--series-2); color: #fff; border-radius: 999px; font-size: 10px;
+  font-weight: 700; padding: 1px 5px; border: 2px solid var(--surface-1); }
+.set.locked { opacity: .45; }
+.chip { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-secondary); }
+
+/* negotiations */
 .thread { border-top: 1px solid var(--grid); padding-top: 12px; margin-top: 12px; }
 .thread:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
-.thread-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
-.thread-head strong { font-size: 15px; }
-.msgs { max-height: 220px; overflow: auto; font-size: 13px; display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.msg { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); max-width: 85%; }
+.thread-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+.msgs { max-height: 200px; overflow: auto; font-size: 13px; display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.msg { padding: 6px 10px; border-radius: 8px; background: var(--surface-2); max-width: 85%; }
 .msg.us { align-self: flex-end; }
 .msg .who { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
-.msg .price { font-weight: 600; font-variant-numeric: tabular-nums; }
-.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
-.legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
-.meter-row { display: grid; grid-template-columns: 110px 1fr 70px; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 10px; }
-.meter { height: 10px; background: var(--grid); border-radius: 4px; overflow: hidden; }
-.meter > div { height: 100%; background: var(--series-1); border-radius: 0 4px 4px 0; }
-.empty { color: var(--muted); font-size: 13px; }
-.feed { font-size: 12px; max-height: 360px; overflow: auto; }
-.feed div { padding: 4px 0; border-bottom: 1px solid var(--grid); color: var(--text-secondary); }
+.price { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+
+/* dealers */
+.dealer { display: grid; grid-template-columns: 44px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--grid); }
+.dealer:first-of-type { border-top: 0; padding-top: 0; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; background: var(--surface-2); }
+.traits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 14px; margin: 8px 0; font-size: 11px; color: var(--text-secondary); }
+.trait .bar { height: 6px; background: var(--grid); border-radius: 3px; margin-top: 2px; overflow: hidden; }
+.trait .bar div { height: 100%; background: var(--series-1); border-radius: 0 3px 3px 0; }
+.feed { font-size: 12px; max-height: 380px; overflow: auto; }
+.feed div { padding: 5px 0; border-bottom: 1px solid var(--grid); color: var(--text-secondary); }
 .feed .t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
-svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
-.tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
-  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 10; }
-.err { color: var(--critical); font-size: 12px; }
+details { font-size: 13px; color: var(--text-secondary); }
+details summary { cursor: pointer; color: var(--text-primary); font-weight: 600; }
+details li { margin: 4px 0; line-height: 1.45; }
+.s3 { grid-column: span 3; } @media (max-width: 1100px) { .s3 { grid-column: span 6; } }
+.tab { display: none; padding-top: 16px; } .tab.on { display: block; }
+nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight: 600; }
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+@media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+.kpi { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.kpi .label { font-size: 12px; color: var(--text-secondary); }
+.kpi .value { font-size: 30px; font-weight: 650; margin-top: 4px; line-height: 1.1; }
+.kpi .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { from { background: var(--seq-1); } to { background: transparent; } }
+#activity div, #brain div { font-size: 13px; }
 </style>
 </head>
 <body>
 <div class="viz-root">
   <header>
-    <h1 id="title">Team 13 · The Bazaar</h1>
-    <span class="pill" id="doors"><span class="dot"></span><span>…</span></span>
-    <span class="pill" id="tick">tick –</span>
+    <h1>Team 13 · War room</h1>
+    <span class="pill" id="live"><span class="dot"></span>connecting…</span>
+    <span class="pill" id="doors"><span class="dot"></span>…</span>
     <span class="pill" id="next">next tick –</span>
-    <span class="pill" id="updated">–</span>
     <span class="err" id="err"></span>
+    <nav id="tabs">
+      <a href="#overview">Overview</a><a href="#deals">Deals</a><a href="#album">Album</a>
+      <a href="#market">Market</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a>
+    </nav>
   </header>
 
-  <div class="tiles" id="tiles"></div>
+  <main class="tab" id="tab-overview">
+    <div class="kpis" id="kpis"></div>
+    <div class="grid">
+      <section class="card s6">
+        <h2>Do now</h2>
+        <div class="moves" id="moves"></div>
+      </section>
+      <section class="card s6">
+        <h2>Live activity <a class="hint" href="#agent">see all →</a></h2>
+        <div class="feed" id="activity" style="max-height:none"></div>
+      </section>
+      <section class="card s12">
+        <h2>Weekend timeline <span class="hint">hover a marker</span></h2>
+        <div id="timeline"></div>
+      </section>
+      <section class="card s12">
+        <h2>How we score <span class="hint">board score is out of 60, the judges add 40 at the end</span></h2>
+        <div class="grid" style="gap:24px">
+          <div class="s6"><div id="bullets"></div></div>
+          <div class="s3" id="hist-score"></div>
+          <div class="s3" id="hist-worth"></div>
+        </div>
+        <details style="margin-top:12px"><summary>How the game works, in 60 seconds</summary><ul>
+          <li><b>Only value created scores</b>, never activity or pack luck: 30 negotiating, 30 market-making, 40 judges.</li>
+          <li><b>Negotiating:</b> dealer deals (how far below the dealer's range we buy, best 3 per level), duels, and value we gain in trades with teams at <i>our</i> values.</li>
+          <li><b>Market-making:</b> every 2 game hours the Market Test sends every market the same traders; our broker scores the share of gains it realises.</li>
+          <li><b>Card values</b> are private: book × our set multiplier × copy factor (1st ×1, 2nd ×0.25, 3rd ×0.1), plus a bonus for full pages.</li>
+          <li><b>Rhythm:</b> one accept and one message per conversation per tick; dealers move only when we move; a <i>final</i> offer is take it or leave it.</li>
+          <li><b>Each day is a round</b>, averaged; Friday counts half. Ticks: 60 s Fri, 30 s Sat, 15 s Sun.</li>
+        </ul></details>
+      </section>
+    </div>
+  </main>
 
-  <div class="grid" style="margin-top:16px">
-    <section class="card span-8"><h2>Negotiations</h2><div id="threads"></div></section>
-    <section class="card span-4"><h2>Leaderboard · score</h2><div id="board"></div></section>
+  <main class="tab" id="tab-deals">
+    <div class="grid">
+      <section class="card s7"><h2>Negotiations <span class="hint">our offers (blue) vs the dealer's asks (orange)</span></h2><div id="threads"></div></section>
+      <section class="card s5"><h2>Dealers</h2><div id="dealers"></div><div id="levels"></div></section>
+      <section class="card s12"><h2>Duels <span class="hint">we only see our own limit; the deal shrinks every round</span></h2><div id="duels"></div></section>
+    </div>
+  </main>
 
-    <section class="card span-6"><h2>Album pages</h2><div id="album"></div></section>
-    <section class="card span-6"><h2>Your set multipliers (private)</h2><div id="affinity"></div></section>
+  <main class="tab" id="tab-album">
+    <div class="grid">
+      <section class="card s8">
+        <h2>Album <span class="hint">the number is what the card is worth to us</span></h2>
+        <div class="legend"><span><i class="swatch" style="background:var(--seq-2)"></i>We have it</span>
+          <span><i class="swatch" style="border:1.5px dashed var(--axis)"></i>Missing</span>
+          <span><i class="swatch" style="background:var(--series-2)"></i>×N spare copies</span></div>
+        <div id="sets"></div>
+      </section>
+      <section class="card s4">
+        <h2>Packs <span class="hint">what each is worth to us</span></h2><div id="packs"></div>
+        <h2 style="margin-top:20px">Cards to trade away</h2><div id="bait"></div>
+      </section>
+    </div>
+  </main>
 
-    <section class="card span-8"><h2>Your cards</h2><div class="scroll" id="cards"></div></section>
-    <section class="card span-4"><h2>Live feed</h2><div class="feed" id="feed"></div></section>
-  </div>
+  <main class="tab" id="tab-market">
+    <div class="grid">
+      <section class="card s8"><h2>El Rastro <span class="hint">offers from all teams, best for us first (fees 5% + 1 P per card)</span></h2><div id="board"></div></section>
+      <section class="card s4"><h2>Our offers &amp; markets</h2><div id="mine"></div></section>
+    </div>
+  </main>
+
+  <main class="tab" id="tab-rivals">
+    <div class="grid">
+      <section class="card s7"><h2>Leaderboard</h2><div id="leaderboard"></div></section>
+      <section class="card s5"><h2>Game feed</h2><div class="feed" id="feed"></div></section>
+    </div>
+  </main>
+
+  <main class="tab" id="tab-agent">
+    <div class="grid">
+      <section class="card s8"><h2>Every decision <span class="hint">newest first</span></h2><div class="legend" id="brain-filter"></div><div class="feed" id="brain" style="max-height:640px"></div></section>
+      <section class="card s4"><h2>Scorecard</h2><div id="brain-stats"></div></section>
+    </div>
+  </main>
 </div>
 <div class="tip" id="tip"></div>
 
 <script>
 const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const fmt = n => n == null ? "–" : (Math.round(n * 10) / 10).toLocaleString();
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (n, d = 1) => n == null || isNaN(n) ? "–" : (Math.round(n * 10 ** d) / 10 ** d).toLocaleString();
+const P = n => `${fmt(n)} P`;
 const tip = $("tip");
 function showTip(e, html) { tip.innerHTML = html; tip.style.display = "block";
-  tip.style.left = Math.min(e.clientX + 12, innerWidth - 220) + "px"; tip.style.top = (e.clientY + 12) + "px"; }
+  const x = Math.min(e.clientX + 14, innerWidth - 320), y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 8);
+  tip.style.left = x + "px"; tip.style.top = y + "px"; }
 function hideTip() { tip.style.display = "none"; }
+function bindTips(root, getHtml) {
+  root.querySelectorAll("[data-tip]").forEach(el => {
+    el.addEventListener("mousemove", e => showTip(e, getHtml(el.dataset.tip))); el.addEventListener("mouseleave", hideTip); });
+}
+const ok = v => v && !v._error;
+const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
+const STATUS = { good: ["var(--good)", "✓"], warning: ["var(--warning)", "!"], serious: ["var(--serious)", "▲"], critical: ["var(--critical)", "●"], info: ["var(--series-1)", "i"] };
 
-let last = null, first = null, nextTickAt = null;
-const SET_NAMES = { LAV: "Lavapiés", MAL: "Malasaña", LAT: "La Latina", SAL: "Salamanca", RET: "El Retiro", CHA: "Chamberí" };
+let D = null, first = null, nextTickAt = null;
 
-function tiles(me) {
-  if (!first) first = me;
-  const d = (v, v0) => { const x = v - v0; if (!x) return "";
-    return `<span class="${x > 0 ? "delta-up" : "delta-down"}">${x > 0 ? "▲" : "▼"} ${fmt(Math.abs(x))}</span> since open`; };
-  const s = me.score || {};
-  const items = [
-    ["Cash", `${fmt(me.cash)} P`, d(me.cash, first.cash)],
-    ["Collection value", `${fmt(me.collection_value)} P`, d(me.collection_value, first.collection_value)],
-    ["Score", fmt(s.score), `negotiating ${fmt(s.negotiating)} · market ${fmt(s.market)}`],
-    ["Rank", s.rank ? `#${s.rank}` : "–", `${s.deals ?? 0} deals · level ${me.level}`],
-    ["Album", `${me.album?.filled ?? 0}/${me.album?.slots ?? 40}`, `${s.pages_complete ?? 0} pages complete`],
-  ];
-  $("tiles").innerHTML = items.map(([l, v, sub]) =>
-    `<div class="card tile"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${sub || "&nbsp;"}</div></div>`).join("");
+// ---------- the value model (mirrors /api/me your_value) ----------
+function model(d) {
+  const me = d.me, cat = d.catalog;
+  const aff = me.affinity || {}, marg = cat?.values?.copy_marginals || [1, 0.25, 0.1];
+  const held = {}; for (const a of me.assets) if (a.kind === "card") (held[a.ref] ||= []).push(a);
+  const cards = (cat?.sets || []).flatMap(s => s.cards.map(c => ({ ...c, set: s.id, setName: s.name, released: s.released })));
+  const byRef = Object.fromEntries(cards.map(c => [c.id, c]));
+  const nextVal = c => c.book * (aff[c.set] ?? 1) * marg[Math.min((held[c.id] || []).length, marg.length - 1)];
+  const pageBonus = s => (cat?.values?.page_bonus ?? 0.25) * s.cards.filter(c => c.page).reduce((t, c) => t + c.book * (aff[s.id] ?? 1), 0);
+  function packEV(pack) {
+    const pool = r => cards.filter(c => c.released && !c.hidden && c.rarity === r);
+    return pack.slots.reduce((t, slot) => t + Object.entries(slot).reduce((u, [r, p]) => {
+      const cs = pool(r); return u + (cs.length ? p * cs.reduce((v, c) => v + nextVal(c), 0) / cs.length : 0); }, 0), 0);
+  }
+  return { aff, marg, held, cards, byRef, nextVal, pageBonus, packEV };
 }
 
-// Pull every priced move out of a thread, in order: [{tick, who: "us"|"them", price, text}]
+// ---------- time ----------
+function dayStarts(clock) {
+  let h = 0; return (clock.days || []).map(d => { const dur = (new Date(d.closes) - new Date(d.opens)) / 36e5; const r = { ...d, start: h, dur }; h += dur; return r; });
+}
+function wallFor(h, clock, action) {
+  const days = dayStarts(clock); if (!days.length) return null;
+  const hh = action === "day_closes" ? h - 1e-6 : h;
+  const d = [...days].reverse().find(x => x.start <= hh) || days[0];
+  if (d.day === clock.today && clock.doors === "open") return new Date(Date.now() + (h - (clock.t_hours || 0)) * 36e5);
+  return new Date(new Date(d.opens).getTime() + (h - d.start) * 36e5);
+}
+const hm = date => date ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "–";
+const dayName = date => date ? date.toLocaleDateString([], { weekday: "short" }) : "";
+function until(date) {
+  if (!date) return "–"; const m = Math.round((date - Date.now()) / 6e4);
+  if (m <= 0) return "now"; if (m < 60) return `in ${m} min`; const h = Math.floor(m / 60);
+  return h < 24 ? `in ${h}h ${m % 60}m` : `${dayName(date)} ${hm(date)}`;
+}
+
+// ---------- header ----------
+function header(d) {
+  const c = d.clock || {};
+  const [color, label] = c.paused ? ["var(--warning)", "⏸ Paused by organisers"] : c.doors === "open" ? ["var(--good)", "Game running"] : ["var(--muted)", `Closed · opens ${c.next_name || ""} ${hm(new Date(c.next_opens))}`];
+  $("doors").innerHTML = `<span class="dot" style="background:${color}"></span>${label} · tick ${c.tick ?? "–"}${c.closes && c.doors === "open" ? ` · closes ${hm(new Date(c.closes))}` : ""}`;
+  nextTickAt = c.paused ? null : c.next_tick_in != null ? Date.now() + c.next_tick_in * 1000 : null;
+}
+let servedAt = null;
+setInterval(() => {
+  $("next").textContent = nextTickAt != null ? `next tick in ${Math.max(0, Math.round((nextTickAt - Date.now()) / 1000))} s` : "clock stopped";
+  const age = servedAt ? Math.round(Date.now() / 1000 - servedAt) : null;
+  const fresh = age != null && age < 10;
+  $("live").innerHTML = `<span class="dot" style="background:${fresh ? "var(--good)" : "var(--critical)"}"></span>${age == null ? "connecting…" : fresh ? `live · updated ${age}s ago` : `stale · ${age}s ago`}`;
+}, 500);
+
+// ---------- timeline ----------
+const EV_KIND = a => a === "duels" ? 0 : a === "bench" ? 1 : (a === "set_release" || a === "grant_all") ? 2 : 3;
+const EV_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--muted)"];
+const EV_NAMES = ["Duels", "Market Test", "Releases & grants", "Rounds & doors"];
+function timeline(d) {
+  const c = d.clock || {}, sch = d.schedule || {}, ev = (sch.upcoming || []);
+  const days = dayStarts(c), total = days.length ? days[days.length - 1].start + days[days.length - 1].dur : 24;
+  const W = 1200, L = 130, R = 16, laneH = 26, top = 30, H = top + laneH * 4 + 26;
+  const X = h => L + h / total * (W - L - R);
+  let g = "";
+  days.forEach((day, i) => {
+    const w = (day.dur / total) * (W - L - R);
+    g += `<rect x="${X(day.start)}" y="0" width="${w - 2}" height="${H - 18}" rx="6" fill="var(--surface-2)" opacity="${i % 2 ? 0.55 : 1}"/>`;
+    const o = new Date(day.opens), cl = new Date(day.closes);
+    g += `<text x="${X(day.start) + 8}" y="16" class="ink1" style="font-weight:600">${esc(day.name)}</text>`;
+    g += `<text x="${X(day.start) + 8 + day.name.length * 7 + 8}" y="16">${hm(o)}–${hm(cl)} · tick ${day.tick_seconds}s${day.day === "fri" ? " · counts ½" : ""}</text>`;
+  });
+  EV_NAMES.forEach((n, i) => g += `<text x="${L - 10}" y="${top + i * laneH + laneH / 2 + 4}" text-anchor="end" class="ink">${n}</text>`);
+  for (let h = 0; h <= total; h += 2) g += `<text x="${X(h)}" y="${H - 4}" text-anchor="middle">${h}h</text>`;
+  const items = ev.map((e, i) => ({ ...e, i, kind: EV_KIND(e.action), wall: wallFor(e.at_hours, c, e.action) }));
+  const nextIdx = items.findIndex(e => e.at_hours > (c.t_hours || 0) && e.kind < 3);
+  items.forEach(e => {
+    const x = X(e.at_hours), y = top + e.kind * laneH + laneH / 2, col = EV_COLORS[e.kind];
+    const past = e.at_hours < (c.t_hours || 0);
+    const shape = e.kind === 0 ? `<path d="M${x},${y - 7} L${x + 7},${y} L${x},${y + 7} L${x - 7},${y} Z"` : e.kind === 1 ? `<rect x="${x - 6}" y="${y - 6}" width="12" height="12" rx="2"` : e.kind === 2 ? `<circle cx="${x}" cy="${y}" r="6"` : `<rect x="${x - 1}" y="${y - 7}" width="2" height="14"`;
+    g += `${shape} fill="${col}" stroke="var(--surface-1)" stroke-width="2" opacity="${past ? 0.35 : 1}"/>`;
+    if (e.i === nextIdx) g += `<circle cx="${x}" cy="${y}" r="11" fill="none" stroke="${col}" stroke-width="2"/>`;
+    g += `<rect data-tip="${e.i}" x="${x - 10}" y="${y - 12}" width="20" height="24" fill="transparent"/>`;
+  });
+  // direct labels for duels only (the events teams prepare for)
+  items.filter(e => e.kind === 0).forEach(e => g += `<text x="${X(e.at_hours) + 10}" y="${top + laneH / 2 + 4}" class="ink">${esc((e.params?.name || "Duels").replace("Practice duels", "Practice"))}</text>`);
+  const nx = X(c.t_hours || 0);
+  g += `<line x1="${nx}" x2="${nx}" y1="22" y2="${H - 18}" stroke="var(--text-primary)" stroke-width="2"/><text x="${nx + 4}" y="${H - 20}" class="ink1" style="font-weight:600">now</text>`;
+  const upcoming = items.filter(e => e.at_hours >= (c.t_hours || 0) && e.kind < 3).slice(0, 4);
+  $("timeline").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Weekend schedule">${g}</svg>
+    <div class="legend" style="margin-top:8px">${upcoming.map(e => `<span><i class="swatch" style="background:${EV_COLORS[e.kind]}"></i><b style="color:var(--text-primary)">${until(e.wall)}</b> ${esc(e.note)}</span>`).join("")}</div>`;
+  bindTips($("timeline"), i => { const e = items[i]; return `<b>${esc(e.note)}</b><br>game hour ${e.at_hours} · ≈ ${dayName(e.wall)} ${hm(e.wall)} (${until(e.wall)})${e.params && Object.keys(e.params).length ? `<br><span class="muted">${esc(JSON.stringify(e.params)).slice(0, 220)}</span>` : ""}`; });
+  return items;
+}
+
+// ---------- negotiation parsing ----------
+// a message carries its structured offer: the price is whichever cash side is not zero
+const msgPrice = m => m.price ?? (m.offer ? (m.offer.give?.cash || m.offer.want?.cash || null) : null);
+const isUs = (m, myId) => [m.sender, m.from, m.author, m.maker, m.side, m.by, m.offer?.maker].some(v => v === myId || v === "team" || v === "us");
 function moves(th, myId) {
   const out = [];
-  const mine = m => [m.from, m.author, m.sender, m.maker, m.side, m.team].some(v => v === myId || v === "team" || v === "us");
   for (const m of th.messages || []) {
-    const p = m.price ?? m.offer?.price ?? m.offer?.want?.cash ?? m.offer?.give?.cash;
-    if (p != null) out.push({ tick: m.tick ?? m.created_tick ?? out.length, who: mine(m) ? "us" : "them", price: p, text: m.text });
+    const p = msgPrice(m);
+    if (p != null) out.push({ tick: m.tick ?? m.created_tick ?? out.length, who: isUs(m, myId) ? "us" : "them", price: p, text: m.text, final: m.final || m.offer?.final });
   }
-  if (!out.some(o => o.who === "them")) {  // fall back to the dealer's standing offers
-    for (const o of th.standing_offers || []) if (o.maker !== myId) {
-      const p = o.want?.cash ?? o.give?.cash; if (p != null) out.push({ tick: o.created_tick ?? o.tick ?? 0, who: "them", price: p, final: o.final });
-    }
+  for (const o of th.standing_offers || []) if (o.maker !== myId && !(th.messages || []).some(m => m.offer?.id === o.id)) {
+    const p = o.want?.cash || o.give?.cash; if (p) out.push({ tick: o.created_tick ?? o.tick ?? 0, who: "them", price: p, final: o.final });
   }
   return out.sort((a, b) => a.tick - b.tick);
 }
-
-function priceChart(mv, dealer) {
-  if (!mv.length) return `<div class="empty">No prices on the table yet: the dealer answers on the next tick.</div>`;
-  const W = 640, H = 200, L = 40, R = 90, T = 12, B = 26;
-  const ticks = mv.map(m => m.tick), prices = mv.map(m => m.price);
-  let x0 = Math.min(...ticks), x1 = Math.max(...ticks); if (x0 === x1) { x0 -= 1; x1 += 1; }
-  let y0 = Math.min(...prices), y1 = Math.max(...prices); const pad = Math.max(2, (y1 - y0) * 0.15); y0 = Math.max(0, y0 - pad); y1 += pad;
-  const X = t => L + (t - x0) / (x1 - x0) * (W - L - R), Y = p => T + (1 - (p - y0) / (y1 - y0)) * (H - T - B);
-  let g = "";
-  for (let i = 0; i <= 4; i++) { const p = y0 + (y1 - y0) * i / 4, y = Y(p);
-    g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${Math.round(p)}</text>`; }
-  g += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--axis)"/>`;
-  g += `<text x="${L}" y="${H - 8}">tick ${Math.round(x0)}</text><text x="${W - R}" y="${H - 8}" text-anchor="end">tick ${Math.round(x1)}</text>`;
-  const series = [["us", "var(--series-1)", "Our offer"], ["them", "var(--series-2)", `${dealer}'s ask`]];
-  for (const [who, color, name] of series) {
-    const pts = mv.filter(m => m.who === who); if (!pts.length) continue;
-    const d = pts.map((m, i) => `${i ? "L" : "M"}${X(m.tick)},${Y(m.price)}`).join("");
-    g += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
-    for (const m of pts) g += `<circle cx="${X(m.tick)}" cy="${Y(m.price)}" r="4.5" fill="${color}" stroke="var(--surface-1)" stroke-width="2"/>`;
-    const lastPt = pts[pts.length - 1];
-    g += `<text x="${X(lastPt.tick) + 10}" y="${Y(lastPt.price) + 4}" style="fill:var(--text-secondary)">${name} ${lastPt.price}${lastPt.final ? " (final)" : ""}</text>`;
-  }
-  // invisible hit targets, bigger than the marks
-  mv.forEach((m, i) => g += `<circle data-i="${i}" cx="${X(m.tick)}" cy="${Y(m.price)}" r="12" fill="transparent"/>`);
-  const legend = `<div class="legend">${series.map(([, c, n]) => `<span><i class="swatch" style="background:${c}"></i>${esc(n)}</span>`).join("")}</div>`;
-  return legend + `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Price over ticks">${g}</svg>`;
+function menuFor(d, th) {
+  const dealer = (d.dealers?.personas || []).find(p => p.id === th.with); if (!dealer || !th.topic) return {};
+  const want = th.topic.buy || th.topic.sell || {};
+  const entry = (dealer.menu?.sells || []).find(s => (want.pack && s.pack === want.pack) || (want.rarity && s.rarity === want.rarity));
+  return { dealer, entry, want, side: th.topic.buy ? "buy" : "sell" };
 }
 
-function threads(data) {
-  const me = data.me, list = data.threads?.threads || [];
-  if (!list.length) { $("threads").innerHTML = `<div class="empty">No conversations yet.</div>`; return; }
-  const sorted = [...list].sort((a, b) => (a.status === "open" ? -1 : 1) - (b.status === "open" ? -1 : 1) || b.id - a.id);
-  $("threads").innerHTML = sorted.slice(0, 4).map(th => {
-    const mv = moves(th, me.id);
-    const status = th.status === "deal" ? ["var(--good)", "✔ deal"] : th.status === "open" ? ["var(--series-1)", "● open"]
-      : ["var(--muted)", `✕ ${th.status}${th.closed_reason ? " · " + th.closed_reason : ""}`];
-    const topic = th.topic ? Object.entries(th.topic).map(([k, v]) => `${k} ${Object.values(v).join(" ")}`).join(", ") : "";
-    const msgs = (th.messages || []).map(m => {
-      const us = [m.from, m.author, m.sender, m.maker, m.side, m.team].some(v => v === me.id || v === "team" || v === "us");
-      const p = m.price ?? m.offer?.price;
-      return `<div class="msg ${us ? "us" : ""}"><div class="who"><i class="swatch" style="background:${us ? "var(--series-1)" : "var(--series-2)"}"></i>${us ? "Team 13" : esc(th.with)} · tick ${m.tick ?? "?"}${p != null ? ` · <span class="price">${p} P</span>` : ""}</div>${esc(m.text)}</div>`;
-    }).join("");
-    return `<div class="thread" data-th="${th.id}"><div class="thread-head"><strong>${esc(th.with)}</strong><span style="color:var(--text-secondary);font-size:13px">${esc(topic)}</span><span style="color:${status[0]};font-size:13px">${esc(status[1])}</span><span style="color:var(--muted);font-size:12px">thread #${th.id}</span></div>
-      ${priceChart(mv, th.with)}<div class="msgs">${msgs || `<div class="empty">Waiting for the first message…</div>`}</div></div>`;
+// ---------- next moves ----------
+function nextMoves(d, M, events) {
+  const me = d.me, c = d.clock || {}, out = [];
+  const add = (pri, st, title, detail, tag) => out.push({ pri, st, title, detail, tag });
+  if (c.paused) add(0, "warning", "The clock is paused by the organisers", "Nothing ticks or settles. Our agents keep their place in the queue; offers stay open.");
+  else if (c.doors !== "open") add(0, "info", `Doors closed until ${c.next_name} ${hm(new Date(c.next_opens))}`, "Use the time to improve the agent and the broker.");
+  if (me.frozen) add(0, "critical", "Our team is frozen", "Talk to the organisers at the desk.");
+
+  const threads = d.threads?.threads || [];
+  for (const th of threads.filter(t => t.status === "open" && t.kind === "persona")) {
+    const mv = moves(th, me.id), hers = mv.filter(m => m.who === "them"), { entry, want } = menuFor(d, th);
+    const ev = want?.pack && d.catalog ? M.packEV(d.catalog.packs.find(p => p.id === want.pack) || { slots: [] }) : null;
+    const last = hers[hers.length - 1];
+    if (last?.final) add(1, "critical", `${th.with}'s FINAL offer: ${last.price} P`, `Take it or she walks.${ev ? ` The item is worth ≈ ${P(ev)} to us.` : ""}`);
+    else if (last) add(2, "info", `Haggling with ${th.with}: her ask ${last.price} P`, `Opening ask ${entry?.opening_ask ?? "?"}, list ${entry?.list_price ?? "?"}. Move in small steps; the same price twice earns nothing.${ev ? ` Worth ≈ ${P(ev)} to us.` : ""}`);
+    else add(3, "info", `Waiting for ${th.with}'s first price`, "The dealer answers on the next tick.");
+  }
+
+  const dealsWith = id => threads.filter(t => t.with === id && t.status === "deal").length;
+  const abuela = (d.dealers?.personas || []).find(p => p.id === "abuela");
+  const need = abuela?.unlock?.early_min_deals ?? 3, done = dealsWith("abuela");
+  if (me.level < 2) add(2, done >= need ? "good" : "serious", `Ladder: ${done}/${need} negotiated deals with Abuela`,
+    `${need} negotiated deals (not at her opening price) unlock the next dealer early. Our best 3 deals per level score: the lower we buy relative to her range, the more we capture. Level 2 also lets us open our own market.`, "negotiating");
+
+  const venue = (d.venues?.venues || []).find(v => v.owner === me.id && v.status === "open");
+  const nextBench = events.find(e => e.action === "bench" && e.at_hours >= (c.t_hours || 0));
+  if (!venue) add(me.level >= 2 ? 1 : 4, me.level >= 2 ? "serious" : "info", me.level >= 2 ? "Open our market before the next Market Test" : "Market Test: we only have the free stall",
+    `${nextBench ? `Next test ${until(nextBench.wall)}. ` : ""}The test is up to 30 points. A <i>board</i> venue with a broker that estimates hidden limits beats the free auto stall, which earns only half points. Costs a refundable 250 P bond + 20 P.`, "market");
+
+  const nextDuel = events.find(e => e.action === "duels" && e.at_hours >= (c.t_hours || 0));
+  if (nextDuel) { const soon = (nextDuel.wall - Date.now()) < 90 * 6e4;
+    add(soon ? 1 : 5, soon ? "serious" : "info", `${nextDuel.params?.name || "Duels"} ${until(nextDuel.wall)}`,
+      `${nextDuel.params?.practice ? "Practice round, does not score: use it to test our duel bot. " : ""}${nextDuel.params?.duel_ticks ?? "?"} ticks per duel, value decays ${Math.round((nextDuel.params?.decay ?? 0) * 100)}% per round: settle early inside our limit.${nextDuel.params?.issues ? " Two issues: trade delivery days we care little about for price." : ""}`, "negotiating"); }
+  const openDuels = (d.duels?.duels || []).filter(x => x.status === "open" || x.status === "active");
+  if (openDuels.length) add(0, "critical", `${openDuels.length} duel(s) running now`, "Every round of talk shrinks the pie. Never accept outside our limit.");
+
+  // trades at private values
+  const spares = Object.values(M.held).filter(l => l.length > 1).flatMap(l => l.slice(1));
+  const lowAff = Object.entries(M.aff).filter(([, v]) => v < 1).map(([k]) => k);
+  const lowCards = me.assets.filter(a => a.kind === "card" && lowAff.includes(a.set));
+  if (spares.length || lowCards.length) add(3, "good", `Swap ${spares.length} spares + ${lowCards.length} low-multiplier cards`,
+    `Trades score the value we gain at <i>our</i> values. Give away duplicates and ${lowAff.map(s => SET_NAMES[s] || s).join(", ")} cards (×${lowAff.map(s => M.aff[s]).join(", ×")} to us); ask for ${Object.entries(M.aff).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([s]) => SET_NAMES[s] || s).join(" and ")} cards.`, "negotiating");
+
+  // closest high-value page
+  const pages = (me.album?.pages || []).map(p => ({ ...p, aff: M.aff[p.set] ?? 1 })).filter(p => !p.complete).sort((a, b) => (b.have / b.of) * b.aff - (a.have / a.of) * a.aff);
+  const best = pages[0];
+  if (best && d.catalog) { const s = d.catalog.sets.find(x => x.id === best.set);
+    const missing = s.cards.filter(c => c.page && !M.held[c.id]);
+    add(4, "info", `Best page to chase: ${best.name} ${best.have}/${best.of} (×${best.aff})`,
+      `Missing ${missing.map(c => c.id).join(", ")}. Worth ≈ ${P(missing.reduce((t, c) => t + M.nextVal(c), 0))} to us + page bonus ≈ ${P(M.pageBonus(s))}.`); }
+
+  const opps = boardRows(d, M).filter(r => r.gain > 0);
+  if (opps.length) add(1, "good", `${opps.length} profitable offer(s) on El Rastro`, opps.slice(0, 3).map(r => `${r.what}: +${fmt(r.gain)} P for us`).join(" · "), "negotiating");
+
+  add(6, "info", "Judges are 40% of the final score", "Ideas and craft: a smart negotiator, a broker that infers hidden limits, and a clear story (this dashboard helps).", "judges");
+  out.sort((a, b) => a.pri - b.pri);
+  const card = m => { const [col, ic] = STATUS[m.st];
+    return `<div class="move"><div class="ic" style="color:${col}">${ic}</div><div><div class="t">${m.title}</div><div class="d">${m.detail}</div></div></div>`; };
+  $("moves").innerHTML = out.slice(0, 3).map(card).join("")
+    + (out.length > 3 ? `<details><summary class="muted" style="font-weight:400">${out.length - 3} more</summary><div class="moves" style="margin-top:8px">${out.slice(3).map(card).join("")}</div></details>` : "");
+}
+
+// ---------- score ----------
+function scorePanel(d) {
+  const me = d.me, s = me.score || {}; if (!first) first = me;
+  const teams = (d.leaderboard?.teams || []).slice().sort((a, b) => b.score - a.score);
+  const leader = teams[0], med = k => { const v = teams.map(t => t[k] || 0).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 0; };
+  const gap = leader ? leader.score - (s.score || 0) : null;
+  const delta = (v, v0) => { const x = (v || 0) - (v0 || 0); return Math.abs(x) < 0.05 ? "no change yet" : `<span class="${x > 0 ? "delta-up" : "delta-down"}">${x > 0 ? "▲" : "▼"} ${fmt(Math.abs(x))}</span> since you opened this`; };
+  const tilesHtml = [
+    ["Board score", `${fmt(s.score)}<span class="muted" style="font-size:14px"> / 60</span>`, `rank #${s.rank ?? "–"} of ${teams.length || "–"} · ${gap > 0 ? `${fmt(gap)} behind #1` : (s.score || 0) > 0 ? "leading" : "everyone tied at 0"}`],
+    ["Cash", P(me.cash), delta(me.cash, first.cash)],
+    ["Collection (our values)", P(me.collection_value), `${me.album?.filled}/${me.album?.slots} album slots · ${s.deals ?? 0} deals`],
+  ];
+  kpis(d, tilesHtml);
+  const rows = [
+    ["Negotiating", "dealers · duels · team trades", s.negotiating || 0, 30, leader?.negotiating || 0, med("negotiating"),
+      `ladder ${fmt(s.ladder_points)} · duels ${fmt(s.duel_points)} · trades ${fmt(s.neg_points)}`],
+    ["Market-making", "Market Test · our venue", s.market || 0, 30, Math.max(...teams.map(t => t.market || 0), 0), med("market"),
+      `Market Test ${fmt(s.bench_points)}${s.bench_efficiency != null ? ` (efficiency ${fmt(s.bench_efficiency * 100, 0)}%)` : ""} · venue ${fmt(s.mm_points)}`],
+  ];
+  const W = 400, H = 26, X = (v, max) => 4 + Math.min(1, v / max) * (W - 8);
+  $("bullets").innerHTML = rows.map(([n, sub, v, max, lead, md, tipTxt], i) => `<div class="bullet"><div class="name">${n}<small>${sub}</small></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" data-tip="${i}"><rect x="0" y="7" width="${W}" height="12" rx="4" fill="var(--grid)"/>
+      <rect x="0" y="7" width="${Math.max(0, X(v, max))}" height="12" rx="4" fill="var(--series-1)"/>
+      <line x1="${X(md, max)}" x2="${X(md, max)}" y1="2" y2="24" stroke="var(--muted)" stroke-width="2"/>
+      <line x1="${X(lead, max)}" x2="${X(lead, max)}" y1="2" y2="24" stroke="var(--text-primary)" stroke-width="2"/></svg>
+    <div class="num">${fmt(v)}<span class="muted"> / ${max}</span></div></div>`).join("")
+    + `<div class="bullet"><div class="name">Judges<small>ideas · craft · pitch</small></div><div class="muted" style="font-size:12px">Scored at the end. Worth more than either line above.</div><div class="num muted">? / 40</div></div>`
+    + `<div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Us</span><span><i class="swatch" style="background:var(--text-primary);width:2px"></i>Best team</span><span><i class="swatch" style="background:var(--muted);width:2px"></i>Median team</span></div>`;
+  bindTips($("bullets"), i => `<b>${rows[i][0]}: ${fmt(rows[i][2])} / ${rows[i][3]}</b><br>${rows[i][6]}<br>best team ${fmt(rows[i][4])} · median ${fmt(rows[i][5])}`);
+  const h = d.history || [];
+  $("hist-score").innerHTML = lineChart(h, p => p.score, "Board score over time", v => fmt(v));
+  $("hist-worth").innerHTML = lineChart(h, p => (p.cash || 0) + (p.collection || 0), "Cash + collection (P)", v => fmt(v, 0));
+  for (const id of ["hist-score", "hist-worth"]) bindLine($(id), h);
+}
+function lineChart(h, f, title, fv) {
+  const pts = h.map(p => ({ t: p.ts, v: f(p), p })).filter(p => p.v != null);
+  const head = `<div class="sec" style="font-size:12px;margin-bottom:4px">${title}</div>`;
+  if (pts.length < 2) return head + `<div class="empty" style="height:90px">The line starts once the game ticks; history is saved to disk.</div>`;
+  const W = 360, H = 110, L = 36, R = 8, T = 8, B = 18;
+  const t0 = pts[0].t, t1 = pts[pts.length - 1].t; let v0 = Math.min(...pts.map(p => p.v)), v1 = Math.max(...pts.map(p => p.v));
+  if (v0 === v1) { v0 -= 1; v1 += 1; } const pad = (v1 - v0) * 0.1; v0 -= pad; v1 += pad;
+  const X = t => L + (t - t0) / Math.max(1, t1 - t0) * (W - L - R), Y = v => T + (1 - (v - v0) / (v1 - v0)) * (H - T - B);
+  let g = "";
+  for (let i = 0; i <= 2; i++) { const v = v0 + (v1 - v0) * i / 2; g += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${L - 4}" y="${Y(v) + 4}" text-anchor="end">${fv(v)}</text>`; }
+  g += `<text x="${L}" y="${H - 3}">${hm(new Date(t0 * 1000))}</text><text x="${W - R}" y="${H - 3}" text-anchor="end">${hm(new Date(t1 * 1000))}</text>`;
+  g += `<path d="${pts.map((p, i) => `${i ? "L" : "M"}${X(p.t)},${Y(p.v)}`).join("")}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`;
+  const lp = pts[pts.length - 1]; g += `<circle cx="${X(lp.t)}" cy="${Y(lp.v)}" r="4" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"/>`;
+  g += `<line class="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--axis)" visibility="hidden"/>`;
+  g += `<rect class="hit" x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent"/>`;
+  return head + `<svg viewBox="0 0 ${W} ${H}" width="100%" data-l="${L}" data-w="${W - L - R}" data-t0="${t0}" data-t1="${t1}" data-title="${esc(title)}">${g}</svg>`;
+}
+function bindLine(el, h) {
+  const svg = el.querySelector("svg"); if (!svg) return; const hit = svg.querySelector(".hit"), xh = svg.querySelector(".xh");
+  const L = +svg.dataset.l, Wd = +svg.dataset.w, t0 = +svg.dataset.t0, t1 = +svg.dataset.t1;
+  hit.addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width * svg.viewBox.baseVal.width;
+    const t = t0 + (sx - L) / Wd * (t1 - t0); const p = h.reduce((a, b) => Math.abs(b.ts - t) < Math.abs(a.ts - t) ? b : a);
+    const x = L + (p.ts - t0) / Math.max(1, t1 - t0) * Wd; xh.setAttribute("x1", x); xh.setAttribute("x2", x); xh.setAttribute("visibility", "visible");
+    showTip(e, `<b>${hm(new Date(p.ts * 1000))} · tick ${p.tick}</b><br>score ${fmt(p.score)} · rank #${p.rank ?? "–"}<br>cash ${P(p.cash)} · collection ${P(p.collection)}`);
+  });
+  hit.addEventListener("mouseleave", () => { hideTip(); xh.setAttribute("visibility", "hidden"); });
+}
+
+// ---------- album ----------
+const SET_NAMES = { LAV: "Lavapiés", MAL: "Malasaña", LAT: "La Latina", SAL: "Salamanca", RET: "El Retiro", CHA: "Chamberí" };
+function album(d, M) {
+  const me = d.me, cat = d.catalog; if (!cat) { $("sets").innerHTML = `<div class="empty">Loading catalog…</div>`; return; }
+  const affRank = Object.entries(M.aff).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  const tipData = {};
+  const sets = [...cat.sets].sort((a, b) => (b.released - a.released) || (M.aff[b.id] - M.aff[a.id]));
+  $("sets").innerHTML = sets.map(s => {
+    const page = (me.album?.pages || []).find(p => p.set === s.id) || { have: 0, of: 10 };
+    const a = M.aff[s.id] ?? 1, rank = affRank.indexOf(s.id) + 1;
+    const verdict = a >= 1.25 ? ["var(--up)", "collect"] : a < 0.8 ? ["var(--serious)", "trade away"] : ["var(--text-secondary)", "neutral"];
+    const sorted = [...s.cards].sort((x, y) => RARITY_ORDER.indexOf(x.rarity) - RARITY_ORDER.indexOf(y.rarity));
+    let cells = "", prev = null;
+    sorted.forEach(c => {
+      const grp = c.rarity === "common" ? 0 : c.rarity === "uncommon" ? 1 : c.rarity === "rare" ? 2 : 3;
+      if (prev != null && grp !== prev) cells += "<div></div>"; prev = grp;
+      const copies = M.held[c.id] || [], have = copies.length > 0, key = c.id;
+      const val = have ? c.book * a : M.nextVal(c);
+      tipData[key] = { c, copies, a, val };
+      cells += `<div class="cell ${have ? "have" : ""} ${c.page ? "" : "extra"}" data-tip="${key}"><div class="r">${c.rarity[0].toUpperCase()}${c.id.slice(4)}</div><div class="v">${fmt(val, 0)}</div>${copies.length > 1 ? `<span class="x">×${copies.length}</span>` : ""}</div>`;
+    });
+    return `<div class="set ${s.released ? "" : "locked"}"><div class="meta"><b>${esc(s.name)}</b> <span class="chip">×${a}</span>
+      <div><span style="color:${verdict[0]};font-weight:600">${verdict[1]}</span> · #${rank} of 6 for us</div>
+      <div>${s.released ? `page ${page.have}/${page.of}${page.complete ? " ✓" : ""} · bonus ≈ ${P(M.pageBonus(s))}` : `arrives ${s.release === "sat+0h" ? "Saturday" : "Sunday"}`}</div></div>
+      <div class="cells">${cells}</div></div>`;
   }).join("");
-  // hover tooltips on chart points
+  bindTips($("sets"), k => { const { c, copies, a, val } = tipData[k];
+    return `<b>${esc(c.name)}</b> · ${c.id}<br>${c.rarity} · book ${c.book} P · ×${a} for us${c.page ? "" : " · not on the page"}<br>
+      ${copies.length ? `We hold ${copies.length}: ${copies.map(x => `#${x.serial}`).join(", ")} · value ${P(val)}${copies.length > 1 ? `<br>each extra copy ≈ ${P(copies[1].your_value)} to us: trade it` : ""}` : `Missing · one would be worth ${P(val)} to us`}<br>
+      <span class="muted">${c.minted}/${c.print_run} printed so far · <i>${esc(c.flavour)}</i></span>`; });
+}
+function packs(d, M) {
+  const cat = d.catalog; if (!cat) return;
+  const sellers = {}; for (const p of d.dealers?.personas || []) for (const s of p.menu?.sells || []) if (s.pack) (sellers[s.pack] ||= []).push({ ...s, dealer: p.name });
+  $("packs").innerHTML = `<table><thead><tr><th>Pack</th><th class="num">Worth to us</th><th class="num">Book</th><th class="num">Ask / list</th></tr></thead><tbody>`
+    + cat.packs.map(p => { const ev = M.packEV(p), s = (sellers[p.id] || [])[0];
+      const verdict = s ? (s.list_price <= ev ? `<span style="color:var(--up)">✓ buy ≤ ${fmt(ev, 0)}</span>` : `<span style="color:var(--serious)">▲ overpriced</span>`) : `<span class="muted">no dealer sells it yet</span>`;
+      return `<tr><td>${esc(p.name)}<div class="muted" style="font-size:11px">${s ? `${esc(s.dealer)} · ${s.per_team_per_hour}/h` : ""}</div></td><td class="num"><b>${fmt(ev)}</b></td><td class="num">${fmt(p.expected_book)}</td>
+        <td class="num">${s ? `${s.opening_ask} / ${s.list_price}` : "–"}<div style="font-size:11px">${verdict}</div></td></tr>`; }).join("")
+    + `</tbody></table><div class="empty" style="margin-top:6px">Worth to us = expected cards × our multipliers × copy factor (duplicates count less), without page bonus. What we pull is "luck" and doesn't score; the ladder scores how far below the dealer's range we buy.</div>`;
+  const bait = d.me.assets.filter(a => a.kind === "card").map(a => {
+    const c = M.byRef[a.ref], book = c?.book ?? 0; return { ...a, book, gap: book - a.your_value }; })
+    .filter(a => a.gap > 0).sort((x, y) => y.gap - x.gap).slice(0, 8);
+  $("bait").innerHTML = bait.length ? `<table><thead><tr><th>Card</th><th class="num">To us</th><th class="num">Book</th></tr></thead><tbody>`
+    + bait.map(a => `<tr><td>${esc(a.name)} <span class="muted">${a.ref} #${a.serial}</span></td><td class="num">${fmt(a.your_value)}</td><td class="num">${a.book}</td></tr>`).join("")
+    + `</tbody></table><div class="empty" style="margin-top:6px">Book value is a rough guide to what other teams might pay.</div>` : `<div class="empty">Nothing cheap to us.</div>`;
+}
+
+// ---------- negotiations ----------
+function priceChart(mv, refs) {
+  const W = 640, H = 190, L = 36, R = 120, T = 10, B = 24;
+  const all = [...mv.map(m => m.price), ...refs.map(r => r.v)];
+  if (!all.length) return `<div class="empty">No prices on the table yet.</div>`;
+  const ticks = mv.map(m => m.tick); let x0 = ticks.length ? Math.min(...ticks) : 0, x1 = ticks.length ? Math.max(...ticks) : 1; if (x0 === x1) { x0 -= 1; x1 += 1; }
+  let y0 = Math.min(...all), y1 = Math.max(...all); const pad = Math.max(2, (y1 - y0) * 0.15); y0 = Math.max(0, y0 - pad); y1 += pad;
+  const X = t => L + (t - x0) / (x1 - x0) * (W - L - R), Y = p => T + (1 - (p - y0) / (y1 - y0)) * (H - T - B);
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const p = y0 + (y1 - y0) * i / 4; g += `<line x1="${L}" x2="${W - R}" y1="${Y(p)}" y2="${Y(p)}" stroke="var(--grid)"/><text x="${L - 6}" y="${Y(p) + 4}" text-anchor="end">${Math.round(p)}</text>`; }
+  g += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--axis)"/><text x="${L}" y="${H - 6}">tick ${Math.round(x0)}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">tick ${Math.round(x1)}</text>`;
+  for (const r of refs) g += `<line x1="${L}" x2="${W - R}" y1="${Y(r.v)}" y2="${Y(r.v)}" stroke="var(--muted)" stroke-dasharray="4 4"/><text x="${W - R + 6}" y="${Y(r.v) + 4}">${r.label} ${fmt(r.v, 0)}</text>`;
+  const series = [["us", "var(--series-1)"], ["them", "var(--series-2)"]];
+  for (const [who, color] of series) {
+    const pts = mv.filter(m => m.who === who); if (!pts.length) continue;
+    g += `<path d="${pts.map((m, i) => `${i ? "L" : "M"}${X(m.tick)},${Y(m.price)}`).join("")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+    for (const m of pts) g += `<circle cx="${X(m.tick)}" cy="${Y(m.price)}" r="${m.final ? 6 : 4.5}" fill="${color}" stroke="var(--surface-1)" stroke-width="2"/>`;
+  }
+  mv.forEach((m, i) => g += `<circle data-tip="${i}" cx="${X(m.tick)}" cy="${Y(m.price)}" r="12" fill="transparent"/>`);
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Prices over ticks">${g}</svg>`;
+}
+function threads(d, M) {
+  const me = d.me, list = (d.threads?.threads || []).filter(t => t.status === "open" || (t.messages || []).length).slice().sort((a, b) => (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1) || b.id - a.id);
+  if (!list.length) { $("threads").innerHTML = `<div class="empty">No conversations yet.</div>`; return; }
+  $("threads").innerHTML = list.slice(0, 5).map(th => {
+    const mv = moves(th, me.id), { entry, want } = menuFor(d, th);
+    const ev = want?.pack && d.catalog ? M.packEV(d.catalog.packs.find(p => p.id === want.pack) || { slots: [] }) : null;
+    const refs = [entry?.opening_ask && { v: entry.opening_ask, label: "opening ask" }, entry?.list_price && { v: entry.list_price, label: "list price" }, ev && { v: ev, label: "worth to us" }].filter(Boolean);
+    const st = th.status === "deal" ? ["var(--good)", "✓ deal"] : th.status === "open" ? ["var(--series-1)", "● open"] : ["var(--muted)", `✕ ${th.status}${th.closed_reason ? " · " + th.closed_reason : ""}`];
+    const us = mv.filter(m => m.who === "us"), them = mv.filter(m => m.who === "them");
+    const spread = us.length && them.length ? them[them.length - 1].price - us[us.length - 1].price : null;
+    const topic = th.topic ? Object.entries(th.topic).map(([k, v]) => `${k} ${Object.values(v).join(" ")}`).join(", ") : "";
+    const msgs = (th.messages || []).map(m => { const u = isUs(m, me.id), p = msgPrice(m);
+      return `<div class="msg ${u ? "us" : ""}"><div class="who"><i class="swatch" style="background:${u ? "var(--series-1)" : "var(--series-2)"}"></i>${u ? "Team 13" : esc(th.with)} · tick ${m.tick ?? "?"}${p != null ? ` · <span class="price">${p} P</span>` : ""}${m.final || m.offer?.final ? " · FINAL" : ""}</div>${esc(m.text)}</div>`; }).join("");
+    return `<div class="thread" data-th="${th.id}"><div class="thread-head"><b style="font-size:15px">${esc(th.with)}</b><span class="sec">${esc(topic)}</span><span style="color:${st[0]}">${esc(st[1])}</span>
+      ${spread != null ? `<span class="pill">gap ${spread} P</span>` : ""}<span class="muted" style="font-size:12px">#${th.id} · since tick ${th.created_tick}</span></div>
+      <div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Our offer</span><span><i class="swatch" style="background:var(--series-2)"></i>${esc(th.with)}'s ask</span><span><i class="swatch" style="border-top:2px dashed var(--muted);height:0"></i>Reference prices</span></div>
+      ${priceChart(mv, refs)}<div class="msgs">${msgs || `<div class="empty">Waiting for the first message…</div>`}</div></div>`;
+  }).join("");
   for (const el of $("threads").querySelectorAll(".thread")) {
     const th = list.find(t => t.id == el.dataset.th), mv = moves(th, me.id);
-    el.querySelectorAll("circle[data-i]").forEach(c => {
-      const m = mv[c.dataset.i];
-      c.addEventListener("mousemove", e => showTip(e, `<b>${m.who === "us" ? "Our offer" : th.with + "'s ask"}: ${m.price} P</b>${m.final ? " (final)" : ""}<br>tick ${m.tick}${m.text ? "<br>" + esc(m.text).slice(0, 140) : ""}`));
-      c.addEventListener("mouseleave", hideTip);
-    });
+    bindTips(el, i => { const m = mv[i]; return `<b>${m.who === "us" ? "Our offer" : esc(th.with) + "'s ask"}: ${m.price} P</b>${m.final ? " · FINAL" : ""}<br>tick ${m.tick}${m.text ? "<br>" + esc(m.text).slice(0, 160) : ""}`; });
     const box = el.querySelector(".msgs"); box.scrollTop = box.scrollHeight;
   }
 }
 
-function hbars(rows, { max, ref, fmtV = fmt, highlight }) {
-  // rows: [{label, value, title}]
-  const W = 420, rowH = 22, L = 90, R = 50, H = rows.length * rowH + 6;
-  max = max ?? Math.max(1, ...rows.map(r => r.value));
-  const X = v => L + v / max * (W - L - R);
-  let g = "";
-  rows.forEach((r, i) => {
-    const y = i * rowH + 4, w = Math.max(0, X(r.value) - L);
-    const color = highlight ? (highlight(r) ? "var(--series-1)" : "var(--neutral)") : "var(--series-1)";
-    g += `<text x="${L - 8}" y="${y + 13}" text-anchor="end" style="fill:var(--text-secondary)">${esc(r.label)}</text>`;
-    g += `<path d="M${L},${y + 2} h${Math.max(0, w - 4)} a4,4 0 0 1 4,4 v6 a4,4 0 0 1 -4,4 h${-Math.max(0, w - 4)} z" fill="${color}"/>`;
-    g += `<text x="${L + w + 6}" y="${y + 13}" style="fill:var(--text-primary)">${fmtV(r.value)}</text>`;
-    g += `<rect data-i="${i}" x="0" y="${y}" width="${W}" height="${rowH}" fill="transparent"/>`;
+// ---------- dealers ----------
+function dealers(d) {
+  const list = d.dealers?.personas || [], threads = d.threads?.threads || [];
+  $("dealers").innerHTML = list.map(p => {
+    const deals = threads.filter(t => t.with === p.id && t.status === "deal").length;
+    const traits = Object.entries(p.traits || {}).map(([k, v]) => `<div class="trait">${k} ${fmt(v * 100, 0)}%<div class="bar"><div style="width:${v * 100}%"></div></div></div>`).join("");
+    const sells = (p.menu?.sells || []).map(s => `<tr><td>${esc(s.name || `${s.rarity} card`)}</td><td class="num">${s.opening_ask ?? "–"}</td><td class="num">${s.list_price ?? "–"}</td><td class="num">${s.per_team_per_hour ?? "–"}</td></tr>`).join("");
+    const u = p.unlock || {};
+    return `<div class="dealer"><div class="avatar">${p.avatar?.emoji || "🃏"}</div><div>
+      <b>${esc(p.name)}</b> <span class="chip">level ${p.level ?? "?"}</span> <span class="chip">${esc(p.status)}</span><div class="muted" style="font-size:12px">${esc(p.title)}</div>
+      ${p.status === "announced" ? "" : `<div class="traits">${traits}</div>
+      <table><thead><tr><th>Sells</th><th class="num">Opening</th><th class="num">List</th><th class="num">Per hour</th></tr></thead><tbody>${sells}</tbody></table>
+      <div class="sec" style="font-size:12px;margin-top:6px">Buys: ${(p.menu?.buys || []).map(b => b.rarity).join(", ") || "–"} · ${p.menu?.deals_per_team_per_hour ?? "?"} deals/team/hour · our deals: <b>${deals}</b>
+      ${u.always ? "" : ` · unlock early: ${u.early_min_deals} deals with ${esc(u.early_deals_with)}`}</div>`}</div></div>`;
+  }).join("") || `<div class="empty">No dealers yet.</div>`;
+  const lv = d.levels?.levels || [];
+  $("levels").innerHTML = `<h2 style="margin-top:16px">Levels</h2>` + (lv.length ? lv.map(l => `<div class="move"><div class="ic" style="color:var(--series-1)">${l.status === "active" ? "✓" : "…"}</div><div><div class="t">${esc(l.name || l.id)} <span class="chip">${esc(l.status)}</span></div><div class="d">${esc(l.line || l.description || l.how || "")}</div></div></div>`).join("")
+    : `<div class="empty">Nothing announced yet. New dealers and mechanics appear here.</div>`);
+}
+function duels(d) {
+  const list = d.duels?.duels || [];
+  $("duels").innerHTML = list.length ? `<table><thead><tr><th>Duel</th><th>Rival</th><th>Role</th><th class="num">Our limit</th><th>Status</th><th>Last offer</th></tr></thead><tbody>`
+    + list.map(x => `<tr><td>#${x.id}</td><td>${esc(x.rival || x.alias || x.opponent || "–")}</td><td>${esc(x.role || x.side || "–")}</td><td class="num">${x.your_limit ?? x.limit ?? x.your_value ?? x.your_cost ?? "–"}</td><td>${esc(x.status)}</td>
+      <td class="sec">${esc(JSON.stringify(x.last_offer || x.standing || (x.messages || []).slice(-1)[0] || "").slice(0, 80))}</td></tr>`).join("") + `</tbody></table>`
+    : `<div class="empty">No duels right now. Watch the timeline for the next session.</div>`;
+}
+
+// ---------- market ----------
+function refsOf(side, d) {
+  if (!side) return [];
+  const out = [...(side.cards || [])];
+  for (const a of side.assets || []) out.push(typeof a === "object" ? a.ref : (d.me.assets.find(x => x.id === a)?.ref || `#${a}`));
+  for (const a of side.items || []) out.push(a.ref || a.card || a);
+  return out;
+}
+function boardRows(d, M) {
+  const offers = d.board?.offers || [];
+  return offers.map(o => {
+    const give = refsOf(o.give, d), want = refsOf(o.want, d), mine = o.maker === d.me.id || o.team === d.me.id;
+    let gain = null, what = "";
+    const card = r => M.byRef[r];
+    if (!mine && give.length && o.want?.cash != null) { // they sell cards for cash: we buy
+      const v = give.reduce((t, r) => t + (card(r) ? M.nextVal(card(r)) : 0), 0);
+      gain = v - o.want.cash; what = `buy ${give.join(", ")} for ${o.want.cash} P`;
+    } else if (!mine && want.length && o.give?.cash != null) { // they pay cash for cards: we sell a copy we hold
+      const v = want.reduce((t, r) => t + ((M.held[r] || []).slice(-1)[0]?.your_value ?? Infinity), 0);
+      const fee = o.give.cash * 0.05 + want.length; gain = isFinite(v) ? o.give.cash - fee - v : null; what = `sell ${want.join(", ")} for ${o.give.cash} P`;
+    }
+    return { o, give, want, mine, gain, what };
   });
-  if (ref != null) g += `<line x1="${X(ref)}" x2="${X(ref)}" y1="0" y2="${H}" stroke="var(--muted)" stroke-dasharray="3 3"/><text x="${X(ref) + 3}" y="${H - 2}">×${ref}</text>`;
-  g = `<line x1="${L}" x2="${L}" y1="0" y2="${H - 2}" stroke="var(--axis)"/>` + g;
-  return `<svg viewBox="0 0 ${W} ${H + 6}" width="100%">${g}</svg>`;
 }
-function bindRowTips(el, rows) {
-  el.querySelectorAll("rect[data-i]").forEach(r => {
-    r.addEventListener("mousemove", e => showTip(e, rows[r.dataset.i].title)); r.addEventListener("mouseleave", hideTip); });
-}
-
-function board(data) {
-  const teams = (data.leaderboard?.teams || []).slice().sort((a, b) => b.score - a.score || a.rank - b.rank);
-  const rows = teams.map(t => ({ label: t.name, value: t.score, id: t.team,
-    title: `<b>#${t.rank} ${esc(t.name)}</b><br>score ${fmt(t.score)}<br>album ${t.album_filled}/${t.album_slots} · ${t.deals} deals · level ${t.level}` }));
-  if (!rows.length) { $("board").innerHTML = `<div class="empty">No leaderboard yet.</div>`; return; }
-  $("board").innerHTML = `<div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Team 13</span><span><i class="swatch" style="background:var(--neutral)"></i>Other teams</span></div>`
-    + hbars(rows, { highlight: r => r.id === data.me.id, max: Math.max(1, ...rows.map(r => r.value)) })
-    + `<div class="empty" style="margin-top:6px">Public board refreshes every few minutes; your tile score is live.</div>`;
-  bindRowTips($("board"), rows);
+function market(d, M) {
+  const rows = boardRows(d, M).sort((a, b) => (b.gain ?? -1e9) - (a.gain ?? -1e9));
+  const side = (s, refs) => [refs.join(", "), s?.cash != null ? `${s.cash} P` : ""].filter(Boolean).join(" + ") || "–";
+  $("board").innerHTML = rows.length ? `<table><thead><tr><th>Maker</th><th>Gives</th><th>Wants</th><th class="num">For us</th></tr></thead><tbody>`
+    + rows.slice(0, 40).map(r => `<tr><td>${esc(r.o.maker_name || r.o.maker || r.o.team || "?")}${r.mine ? " <span class='chip'>us</span>" : ""}</td><td>${esc(side(r.o.give, r.give))}</td><td>${esc(side(r.o.want, r.want))}</td>
+      <td class="num">${r.gain == null ? `<span class="muted">–</span>` : r.gain > 0 ? `<span style="color:var(--up);font-weight:600">✓ +${fmt(r.gain)}</span>` : `<span class="muted">${fmt(r.gain)}</span>`}</td></tr>`).join("") + `</tbody></table>`
+    : `<div class="empty">The board is empty. Offers from every team appear here, ranked by what they would gain us.</div>`;
+  const offers = d.offers?.offers || [];
+  const venues = d.venues?.venues || [];
+  $("mine").innerHTML = (offers.length ? `<table><thead><tr><th>Our offer</th><th>Status</th></tr></thead><tbody>${offers.map(o => `<tr><td>${esc(side(o.give, refsOf(o.give, d)))} → ${esc(side(o.want, refsOf(o.want, d)))}</td><td>${esc(o.status)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">No open listings.</div>`)
+    + `<h2 style="margin-top:18px">Venues</h2><table><thead><tr><th>Venue</th><th class="num">Fee</th><th class="num">Trades</th><th class="num">Volume</th></tr></thead><tbody>`
+    + venues.map(v => `<tr><td>${esc(v.name)}${v.owner === d.me.id ? " <span class='chip'>ours</span>" : ""}<div class="muted" style="font-size:11px">${esc(v.owner_name)} · ${esc(v.rules?.mechanism || (v.house ? "posted offers" : ""))}</div></td><td class="num">${fmt(v.fee_bps / 100)}%${v.fee_per_card ? ` + ${v.fee_per_card}` : ""}</td><td class="num">${v.trades}</td><td class="num">${fmt(v.volume, 0)}</td></tr>`).join("") + `</tbody></table>`;
 }
 
-function album(me) {
-  const pages = me.album?.pages || [];
-  $("album").innerHTML = pages.map(p => `<div class="meter-row"><span>${esc(p.name)}</span>
-    <div class="meter" title="${p.have} of ${p.of}"><div style="width:${p.have / p.of * 100}%"></div></div>
-    <span style="text-align:right;font-variant-numeric:tabular-nums">${p.have}/${p.of}${p.complete ? " ✔" : ""}</span></div>`).join("")
-    || `<div class="empty">No album yet.</div>`;
+// ---------- rivals ----------
+function leaderboard(d) {
+  const teams = (d.leaderboard?.teams || []).slice().sort((a, b) => b.score - a.score || a.rank - b.rank);
+  if (!teams.length) { $("leaderboard").innerHTML = `<div class="empty">No leaderboard yet.</div>`; return; }
+  const W = 640, rowH = 22, L = 110, R = 150, H = teams.length * rowH + 4;
+  const max = Math.max(1, ...teams.map(t => (t.negotiating || 0) + (t.market || 0)));
+  const X = v => v / max * (W - L - R);
+  let g = "";
+  teams.forEach((t, i) => {
+    const y = i * rowH + 2, us = t.team === d.me.id, n = X(t.negotiating || 0), m = X(t.market || 0);
+    if (us) g += `<rect x="0" y="${y - 1}" width="${W}" height="${rowH}" rx="4" fill="var(--surface-2)"/>`;
+    g += `<text x="${L - 8}" y="${y + 14}" text-anchor="end" class="${us ? "ink1" : "ink"}" style="${us ? "font-weight:700" : ""}">${us ? "▶ " : ""}#${i + 1} ${esc(t.name)}</text>`;
+    if (n > 0) g += `<rect x="${L}" y="${y + 4}" width="${Math.max(1, n - 1)}" height="12" rx="2" fill="var(--series-1)"/>`;
+    if (m > 0) g += `<rect x="${L + n + 1}" y="${y + 4}" width="${Math.max(1, m - 1)}" height="12" rx="2" fill="var(--series-2)"/>`;
+    g += `<text x="${L + n + m + 6}" y="${y + 14}" class="ink1">${fmt(t.score)}</text>`;
+    g += `<text x="${W - 4}" y="${y + 14}" text-anchor="end">L${t.level} · ${t.album_filled}/${t.album_slots} · ${t.deals} deals</text>`;
+    g += `<rect data-tip="${i}" x="0" y="${y}" width="${W}" height="${rowH}" fill="transparent"/>`;
+  });
+  g += `<line x1="${L}" x2="${L}" y1="0" y2="${H}" stroke="var(--axis)"/>`;
+  $("leaderboard").innerHTML = `<div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Negotiating</span><span><i class="swatch" style="background:var(--series-2)"></i>Market-making</span><span class="muted">right: level · album · deals</span></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg><div class="empty" style="margin-top:6px">The public board is a snapshot that refreshes every few minutes; our tile score is live.</div>`;
+  bindTips($("leaderboard"), i => { const t = teams[i]; return `<b>${esc(t.name)}</b> · score ${fmt(t.score)}<br>negotiating ${fmt(t.negotiating)} · market ${fmt(t.market)}<br>level ${t.level} · album ${t.album_filled}/${t.album_slots} · ${t.pages_complete} pages · ${t.deals} deals<br>rarest: ${esc(t.rarest?.name || "–")} ${t.rarest ? `#${t.rarest.serial}/${t.rarest.print_run}` : ""}${t.venue ? `<br>venue: ${esc(t.venue)}` : ""}`; });
+}
+function feed(d) {
+  const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
+  const nm = id => id === d.me.id ? "We" : (names[id] || id);
+  const say = e => { const p = e.payload || {};
+    switch (e.type) {
+      case "thread.opened": return `${nm(p.team)} opened talks with ${p.with}${p.topic ? ` (${Object.entries(p.topic).map(([k, v]) => `${k} ${Object.values(v).join(" ")}`).join(", ")})` : ""}`;
+      case "team.joined": return `${nm(p.team || e.actor)} joined`;
+      case "announcement": return `📣 ${p.text || ""}`;
+      default: return `${e.type} ${[p.team && nm(p.team), p.with, p.price != null ? p.price + " P" : "", p.text ? `“${String(p.text).slice(0, 90)}”` : ""].filter(Boolean).join(" · ")}`;
+    } };
+  const ev = (d.feed?.events || []).slice().reverse();
+  $("feed").innerHTML = ev.map(e => `<div${(e.payload?.team === d.me.id) ? ' style="color:var(--text-primary);font-weight:600"' : ""}><span class="t">t${e.tick}</span>${esc(say(e))}</div>`).join("") || `<div class="empty">Quiet.</div>`;
 }
 
-function affinity(me) {
-  const rows = Object.entries(me.affinity || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: SET_NAMES[k] || k, value: v,
-    title: `<b>${SET_NAMES[k] || k} (${k})</b><br>×${v}: ${v > 1 ? "worth more to you than to an average team: keep and buy" : v < 1 ? "worth less to you: good to trade away" : "neutral"}` }));
-  $("affinity").innerHTML = hbars(rows, { ref: 1, max: Math.max(2, ...rows.map(r => r.value)), fmtV: v => "×" + v })
-    + `<div class="empty" style="margin-top:6px">Dashed line = ×1. Above it, a set is worth more to you than to an average team.</div>`;
-  bindRowTips($("affinity"), rows);
+
+// ---------- agent brain ----------
+function describe(r) {
+  const x = { ...r }; for (const k of ["ts", "tick", "module", "action", "plan", "trace", "detail", "payload"]) delete x[k];
+  switch (`${r.module}.${r.action}`) {
+    case "agent.start": return r.dry ? "Agent started in dry-run mode (logs only)" : "Agent started";
+    case "agent.idle": return r.paused ? "Waiting: the organisers paused the clock" : "Waiting: the doors are closed";
+    case "haggle.offer": return `Offered the dealer <b>${r.price} P</b>${r.ask != null ? ` (she asks ${r.ask})` : ""}`;
+    case "haggle.accept": return `<b>Accepted</b> the dealer's price${r.price != null ? ` of ${r.price} P` : ""}: ${esc(r.reason)}`;
+    case "haggle.deal": return `✓ <b>Bought for ${r.price} P</b> (list price ${r.list}) after ${r.rounds} offers`;
+    case "haggle.opened": return `Started haggling with ${esc(r.dealer)}: ${esc(Object.entries(r.topic || {}).map(([k, v]) => `${k} ${Object.values(v).join(" ")}`).join(", "))}, from ${r.plan?.lo} P, max ${r.plan?.hi} P`;
+    case "haggle.adopted": return `Took over an open conversation with the dealer`;
+    case "haggle.ended": return `Conversation ended: ${esc(r.status)}${r.reason ? ` (${esc(r.reason)})` : ""}`;
+    case "trade.list_ask": return `Put spare <b>${esc(r.ref)}</b> up for ${r.price} P (worth ${r.our_value} to us)`;
+    case "trade.list_bid": return `Offered <b>${r.price} P</b> for ${esc(r.ref)} (worth ${r.our_value} to us)`;
+    case "trade.accept": case "trade.accept_team": return `✓ <b>Trade done</b>: +${r.gain} P of value for us`;
+    case "pack.opened": return `Opened a pack: ${esc((r.cards || []).map(c => c[0]).join(", "))}`;
+    case "duel.offer": return `Duel #${r.duel} (${esc(r.role)}, our limit ${r.limit}): offered <b>${r.price}</b>${r.days != null ? `, day ${r.days}` : ""}`;
+    case "duel.accept": return `✓ <b>Duel deal</b> at ${r.price}, our surplus ${r.our_surplus}`;
+    case "venue.opened": return `✓ <b>Opened our market</b> ${esc(r.venue)}`;
+    default: return `${esc(r.action.replace(/_/g, " "))} <span class="muted">${esc(JSON.stringify(x)).slice(0, 140)}</span>`;
+  }
+}
+function activity(d) {
+  const recs = (d.decisions || []).filter(r => r.module !== "dry").slice(-8).reverse();
+  $("activity").innerHTML = recs.map(r => `<div><span class="t">${hm(new Date(r.ts * 1000))}</span>${describe(r)}</div>`).join("")
+    || `<div class="empty">Nothing yet. Start the agent: <code>cd team13 && python3 agent.py</code></div>`;
+}
+function kpis(d, tiles) {
+  const c = d.clock || {}, recs = d.decisions || [], last = recs[recs.length - 1];
+  const ev = (d.schedule?.upcoming || []).find(e => e.at_hours >= (c.t_hours || 0) && ["duels", "bench", "set_release", "grant_all"].includes(e.action));
+  const wall = ev ? wallFor(ev.at_hours, c, ev.action) : null;
+  const agent = d.agent_running
+    ? ["var(--good)", "Running", last ? describe(last).replace(/<[^>]+>/g, "") : "starting"]
+    : ["var(--critical)", "Stopped", "start it: cd team13 && python3 agent.py"];
+  const items = [
+    [tiles[0][0], tiles[0][1], tiles[0][2]],
+    [tiles[1][0], tiles[1][1], tiles[1][2]],
+    ["Our agent", `<span class="dot" style="background:${agent[0]};width:12px;height:12px"></span> ${agent[1]}`, esc(agent[2]).slice(0, 80)],
+    ["Next event", ev ? (c.paused ? "after restart" : until(wall).replace("in ", "")) : "–", ev ? esc(ev.note) : ""],
+  ];
+  $("kpis").innerHTML = items.map(([l, v, sub]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${sub}</div></div>`).join("");
+}
+const MOD_LABEL = { haggle: "Dealer", trade: "Trade", duel: "Duel", venue: "Venue", pack: "Pack", agent: "Agent", dry: "Dry-run" };
+let brainFilter = "all";
+function brain(d) {
+  const recs = (d.decisions || []).slice().reverse();
+  const mods = ["all", ...new Set(recs.map(r => r.module))];
+  $("brain-filter").innerHTML = mods.map(m => `<span style="cursor:pointer;${m === brainFilter ? "color:var(--text-primary);font-weight:600" : ""}" data-m="${m}">${m === "all" ? "All" : (MOD_LABEL[m] || m)}</span>`).join("");
+  $("brain-filter").querySelectorAll("[data-m]").forEach(el => el.onclick = () => { brainFilter = el.dataset.m; brain(D); });
+  const say = describe;
+  const unused = r => {
+    const x = { ...r }; delete x.ts; delete x.tick; delete x.module; delete x.action; delete x.plan; delete x.trace; delete x.detail; delete x.payload;
+    switch (`${r.module}.${r.action}`) {
+      case "haggle.offer": return `Offered <b>${r.price} P</b> to the dealer (her ask ${r.ask ?? "–"}, step ${r.k})`;
+      case "haggle.accept": return `<b>Accepted</b> the dealer's offer at ${r.price ?? "?"} P: ${esc(r.reason)}`;
+      case "haggle.deal": return `✓ <b>Deal</b> at ${r.price} P (list ${r.list}) after ${r.rounds} rounds`;
+      case "haggle.opened": return `Opened talks: ${esc(JSON.stringify(r.topic))}, opening at ${r.plan?.lo} P, cap ${r.plan?.hi} P`;
+      case "trade.list_ask": return `Listed spare <b>${esc(r.ref)}</b> for ${r.price} P (worth ${r.our_value} to us, floor ${r.floor})`;
+      case "trade.list_bid": return `Bid <b>${r.price} P</b> for ${esc(r.ref)} (worth ${r.our_value} to us)`;
+      case "trade.accept": return `✓ <b>Took a board offer</b>: +${r.gain} P of value for us`;
+      case "duel.offer": return `Duel #${r.duel} (${esc(r.role)}, limit ${r.limit}): offered <b>${r.price}</b>${r.days != null ? ` day ${r.days}` : ""}, rival at ${r.rival_price ?? "–"}`;
+      case "duel.accept": return `✓ <b>Duel deal</b> #${r.duel} at ${r.price}: our surplus ${r.our_surplus}`;
+      default: return `${esc(r.action)} <span class="muted">${esc(JSON.stringify(x)).slice(0, 160)}</span>`;
+    } };
+  const shown = recs.filter(r => brainFilter === "all" || r.module === brainFilter).slice(0, 120);
+  $("brain").innerHTML = shown.map(r => `<div><span class="t">t${r.tick ?? "–"} ${hm(new Date(r.ts * 1000))}</span><span class="chip">${MOD_LABEL[r.module] || esc(r.module)}</span> ${say(r)}</div>`).join("")
+    || `<div class="empty">The agent hasn't logged anything yet. Start it with <code>python3 team13/agent.py</code>.</div>`;
+  const deals = recs.filter(r => r.module === "haggle" && r.action === "deal");
+  const trades = recs.filter(r => r.module === "trade" && r.action.startsWith("accept") && r.gain != null);
+  const duelsDone = recs.filter(r => r.module === "duel" && r.action === "accept");
+  const errs = recs.filter(r => /error|crash|refused/.test(r.action));
+  const bm = (d.broker_log || []).filter(r => r.event === "match");
+  const rows = [
+    ["Dealer deals", deals.length, deals.length ? `avg ${fmt(deals.reduce((t, r) => t + (r.price || 0), 0) / deals.length)} P vs list ${deals[0].list}` : "none yet"],
+    ["Team trades", trades.length, trades.length ? `+${fmt(trades.reduce((t, r) => t + r.gain, 0))} P value created for us` : "none yet"],
+    ["Duels settled", duelsDone.length, duelsDone.length ? `surplus ${fmt(duelsDone.reduce((t, r) => t + (r.our_surplus || 0), 0))}` : "none yet"],
+    ["Broker matches", bm.length, bm.length ? `last at tick ${bm[bm.length - 1].tick}` : "venue not open yet"],
+    ["Refusals / errors", errs.length, errs.length ? esc(errs[0].action) + ": " + esc(String(errs[0].error || "").slice(0, 60)) : "clean"],
+  ];
+  $("brain-stats").innerHTML = `<table><tbody>${rows.map(([a, b, c]) => `<tr><td>${a}<div class="muted" style="font-size:11px">${c}</div></td><td class="num" style="font-size:20px;font-weight:600">${b}</td></tr>`).join("")}</tbody></table>`;
 }
 
-function cards(me, offers) {
-  const listed = new Set((offers?.offers || []).flatMap(o => o.give?.assets || []));
-  const counts = {}; for (const a of me.assets) counts[a.ref] = (counts[a.ref] || 0) + 1;
-  const rows = [...me.assets].sort((a, b) => b.your_value - a.your_value);
-  $("cards").innerHTML = `<table><thead><tr><th>Card</th><th>Ref</th><th>Rarity</th><th class="num">Serial</th><th class="num">Your value</th><th>Note</th></tr></thead><tbody>`
-    + rows.map(a => `<tr><td>${esc(a.name)}</td><td>${esc(a.ref)}</td><td>${esc(a.kind === "pack" ? "pack" : a.rarity)}</td>
-      <td class="num">${a.serial != null ? `#${a.serial}/${a.print_run}` : ""}</td><td class="num">${fmt(a.your_value)} P</td>
-      <td style="color:var(--text-secondary)">${[counts[a.ref] > 1 ? "duplicate" : "", listed.has(a.id) ? "listed on market" : ""].filter(Boolean).join(" · ")}</td></tr>`).join("")
-    + `</tbody></table>`;
+// ---------- main loop ----------
+function showTab() {
+  const id = (location.hash || "#overview").slice(1);
+  const tab = document.getElementById("tab-" + id) ? id : "overview";
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.id === "tab-" + tab));
+  document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + tab));
 }
-
-function feed(data) {
-  const ev = (data.feed?.events || []).slice().reverse();
-  const line = e => { const p = e.payload || {};
-    const bits = [p.team, p.with, p.price != null ? p.price + " P" : "", p.text ? `“${String(p.text).slice(0, 80)}”` : ""].filter(Boolean);
-    return `<div${p.team === data.me.id ? ' style="color:var(--text-primary);font-weight:500"' : ""}><span class="t">t${e.tick}</span>${esc(e.type)} ${esc(bits.join(" · "))}</div>`; };
-  $("feed").innerHTML = ev.map(line).join("") || `<div class="empty">Quiet.</div>`;
-}
-
-function header(data) {
-  const c = data.clock || {};
-  const open = c.doors === "open" && !c.paused;
-  const [color, label] = c.paused ? ["var(--warning)", "⏸ paused by organisers"] : open ? ["var(--good)", "● live"] : ["var(--muted)", `closed · opens ${c.next_name || ""}`];
-  $("doors").innerHTML = `<span class="dot" style="background:${color}"></span><span>${label} · ${esc(c.round_name || "")}</span>`;
-  $("tick").textContent = `tick ${c.tick ?? "–"} · ${c.tick_seconds ?? "–"} s`;
-  nextTickAt = c.next_tick_in != null ? Date.now() + c.next_tick_in * 1000 : null;
-  $("updated").textContent = "updated " + new Date().toLocaleTimeString();
-}
-setInterval(() => { if (nextTickAt != null) $("next").textContent = `next tick in ${Math.max(0, Math.round((nextTickAt - Date.now()) / 1000))} s`; }, 500);
-
+addEventListener("hashchange", showTab); showTab();
+let lastSig = "";
 async function refresh() {
   try {
-    const data = await (await fetch("/data")).json();
-    const errs = Object.entries(data).filter(([, v]) => v && v._error).map(([k, v]) => `${k}: ${v._error}`);
-    $("err").textContent = errs.length ? "⚠ " + errs.join(", ") : "";
-    if (data.me && !data.me._error) {
-      last = data; header(data); tiles(data.me); threads(data); album(data.me); affinity(data.me);
-      cards(data.me, data.offers); board(data); feed(data);
-    }
+    const d = await (await fetch("/data")).json();
+    const errs = Object.keys(d).filter(k => k.endsWith("_error"));
+    $("err").textContent = errs.length ? `⚠ stale: ${errs.map(k => k.replace("_error", "")).join(", ")}` : "";
+    if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
+    servedAt = d.served_at;
+    const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
+      d.leaderboard, d.levels, d.dealers, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
+    header(d);
+    if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
+    lastSig = sig;
+    D = d; const M = model(d);
+    const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
+      () => threads(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d)];
+    for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable"; }
 }
-refresh(); setInterval(refresh, 5000);
+refresh(); setInterval(refresh, 2000);
 </script>
 </body>
 </html>
