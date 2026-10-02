@@ -30,6 +30,9 @@ sys.path.insert(0, str(HERE.parent / "team13"))
 import strategy  # noqa: E402  (team13/strategy.py: the knobs the agent reads every tick)
 from intel import Intel  # noqa: E402  (team13/intel.py: what every team does, from the public feed)
 INTEL = Intel(HERE / "feed_events.jsonl", url=URL)
+from learner import Learner  # noqa: E402  (team13/learner.py: lessons from every dealer conversation)
+LEARNER = Learner()
+STATE = HERE.parent / "team13" / "state.json"
 import advisor  # noqa: E402  (team13/advisor.py: recalibrates on every team's deals, proposes better settings)
 RECHECK = threading.Event()
 DECISIONS = HERE.parent / "team13" / "logs" / "decisions.jsonl"
@@ -166,8 +169,13 @@ def poll():
             if isinstance(cache.get("catalog"), dict) and "sets" in cache["catalog"]:
                 INTEL.set_catalog(cache["catalog"])
             INTEL.refresh()
+            summ = INTEL.summary()
+            me_id = (cache.get("me") or {}).get("id", "t13")
+            learned = LEARNER.fit(summ.get("dealer_threads", []), me_id, summ.get("now_tick")) if INTEL.rarity else None
             with lock:
-                cache["intel"] = INTEL.summary()
+                cache["intel"] = {k: v for k, v in summ.items() if k != "dealer_threads"}
+                if learned:
+                    cache["learner"] = learned
             intel_due = now + 10
         for name, (path, every, keyed) in ROUTES.items():
             if now < due[name]:
@@ -212,7 +220,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path.startswith("/data"):
             with lock:
-                body = json.dumps({**cache, "history": history, "served_at": time.time(),
+                try:  # what the agent is doing right now (its own state file; read-only)
+                    st = json.loads(STATE.read_text())
+                    agent_state = {k: st.get(k) for k in ("plans", "team_haggles", "listings", "bandit", "venue", "invites")}
+                    agent_state["plans"] = {k: v for k, v in (agent_state["plans"] or {}).items() if not v.get("done")}
+                except (OSError, ValueError):
+                    agent_state = {}
+                body = json.dumps({**cache, "agent_state": agent_state, "history": history, "served_at": time.time(),
                                    "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60)}).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):

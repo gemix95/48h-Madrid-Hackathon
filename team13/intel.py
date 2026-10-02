@@ -84,6 +84,7 @@ class Intel:
         evs = sorted(self.events.values(), key=lambda e: e["id"])
         threads: dict = {}
         settlements, gifts, listings, market_trades, suspects = [], [], [], [], []
+        closed = set()
         for e in evs:
             p, t = e.get("payload") or {}, e.get("type")
             if t == "thread.opened" and p.get("kind") == "persona":
@@ -106,6 +107,8 @@ class Intel:
                     settlements.append({**p, "tick": e["tick"]})
                 else:
                     market_trades.append({**p, "tick": e["tick"]})
+            elif t == "thread.closed":
+                closed.add(p.get("thread"))
             elif t == "gift.given":
                 gifts.append({**p, "tick": e["tick"]})
             elif t == "offer.listed":
@@ -182,7 +185,15 @@ class Intel:
                 teams[l["maker"]]["listings"] += 1
 
         offer_maker = {l["id"]: l["maker"] for l in listings if l.get("id") and l.get("maker")}
-        self._summary = {"suspects": suspects[-40:], "offer_maker": offer_maker, "classes": classes, "teams": dict(teams), "gifts": gifts[-30:], "listings": listings[-80:],
+        dealer_threads = []
+        for th in threads.values():
+            dealer_threads.append({"id": th["id"], "team": th["team"], "dealer": th["dealer"], "cls": self.item_class(th["topic"]),
+                                   "opened": th["opened"], "asks": th["asks"], "offers": th["offers"], "final": th["final"],
+                                   "deal": th["deal"]["price"] if th["deal"] else None,
+                                   "last": max([x[0] for x in th["asks"] + th["offers"]] or [th["opened"]]),
+                                   "beginner": bool(th["deal"] and th["deal"]["beginner"]),
+                                   "closed": th["id"] in closed})
+        self._summary = {"now_tick": max((e["tick"] for e in evs), default=0), "dealer_threads": dealer_threads, "suspects": suspects[-40:], "offer_maker": offer_maker, "classes": classes, "teams": dict(teams), "gifts": gifts[-30:], "listings": listings[-80:],
                          "market_trades": market_trades[-50:], "events": len(self.events),
                          "dealer_deals": [s["rec"] for s in settlements][-120:]}
         self._at = time.time()

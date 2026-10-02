@@ -176,6 +176,36 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
 .area .stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 10px; }
 .area .stats div { font-size: 12px; color: var(--muted); } .area .stats b { display: block; font-size: 18px; color: var(--text-primary); }
 .status { font-size: 12px; font-weight: 600; }
+.hero { display: grid; grid-template-columns: 56px 1fr auto; gap: 16px; align-items: center; padding: 18px 20px; }
+.hero .pulse { width: 18px; height: 18px; border-radius: 50%; margin: 0 auto; box-shadow: 0 0 0 0 currentColor; animation: pulse 2s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(12,163,12,.5); } 70% { box-shadow: 0 0 0 14px rgba(12,163,12,0); } 100% { box-shadow: 0 0 0 0 rgba(12,163,12,0); } }
+.hero .headline { font-size: 19px; font-weight: 650; line-height: 1.35; }
+.hero .sub { color: var(--text-secondary); margin-top: 4px; font-size: 13px; }
+.hero .side { text-align: right; font-size: 12px; color: var(--muted); }
+.hero .side b { display: block; font-size: 22px; color: var(--text-primary); }
+.convo { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; background: var(--surface-2); }
+.convo-head { display: flex; align-items: center; gap: 10px; }
+.convo-head .av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-1); font-size: 17px; flex: none; }
+.convo-head .ttl { font-weight: 600; } .convo-head .meta { font-size: 12px; color: var(--muted); }
+.convo-head .gap { margin-left: auto; font-size: 12px; text-align: right; color: var(--text-secondary); }
+.convo-head .gap b { display: block; font-size: 18px; color: var(--text-primary); }
+.bubble { font-size: 13px; padding: 7px 10px; border-radius: 10px; margin-top: 6px; max-width: 88%; line-height: 1.4; background: var(--surface-1); }
+.bubble.us { margin-left: auto; border: 1px solid var(--border); }
+.bubble .who { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.ai { font-size: 10px; font-weight: 700; color: var(--series-1); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+.big3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.big3 div { background: var(--surface-2); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--text-secondary); }
+.big3 b { display: block; font-size: 22px; color: var(--text-primary); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chips span { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); cursor: pointer; color: var(--text-secondary); }
+.chips span.on { background: var(--series-1); color: #fff; border-color: var(--series-1); }
+.story { max-height: 560px; overflow: auto; }
+.story .ev { display: grid; grid-template-columns: 46px 26px 1fr; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13px; line-height: 1.4; }
+.story .ev .tm { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; padding-top: 1px; }
+.story .ev .ic { text-align: center; }
+.story .ev .why { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.story .ev.win { background: linear-gradient(90deg, rgba(12,163,12,.08), transparent); }
+.lesson { font-size: 13px; line-height: 1.45; padding: 8px 10px; border-left: 3px solid var(--series-1); background: var(--surface-2); border-radius: 0 6px 6px 0; margin-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -319,10 +349,14 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
   </main>
 
   <main class="tab" id="tab-agent">
-    <div class="grid">
-      <section class="card s8"><h2>Every decision <span class="hint">newest first</span></h2><div class="legend" id="brain-filter"></div><div class="feed" id="brain" style="max-height:640px"></div></section>
-      <section class="card s4"><h2>Scorecard</h2><div id="brain-stats"></div></section>
+    <section class="card hero" id="now"></section>
+    <div class="grid" style="margin-top:16px">
+      <section class="card s7"><h2>Live conversations <span class="hint">what the agent is negotiating right now</span></h2><div id="convos"></div></section>
+      <section class="card s5"><h2>Today so far</h2><div id="today"></div></section>
+      <section class="card s5"><h2>What it has learned <span class="hint">from every team's conversations</span></h2><div id="learned"></div></section>
+      <section class="card s7"><h2>The story <span class="hint">newest first · in plain words</span></h2><div class="chips" id="brain-filter"></div><div id="brain" class="story"></div></section>
     </div>
+    <div id="brain-stats" style="display:none"></div>
   </main>
 <div class="tip" id="tip"></div>
 </div>
@@ -867,7 +901,7 @@ function describe(r) {
 }
 function activity(d) {
   const recs = (d.decisions || []).filter(r => r.module !== "dry").slice(-8).reverse();
-  $("activity").innerHTML = recs.map(r => `<div><span class="t">${hm(new Date(r.ts * 1000))}</span>${describe(r)}</div>`).join("")
+  $("activity").innerHTML = recs.map(r => `<div><span class="t">${hm(new Date(r.ts * 1000))}</span>${CAT[catOf(r)][0]} ${story(r)[0]}</div>`).join("")
     || `<div class="empty">Nothing yet. Start the agent: <code>cd team13 && python3 agent.py</code></div>`;
 }
 function kpis(d, tiles) {
@@ -887,231 +921,153 @@ function kpis(d, tiles) {
 }
 const MOD_LABEL = { haggle: "Dealer", trade: "Trade", duel: "Duel", venue: "Venue", pack: "Pack", agent: "Agent", dry: "Dry-run" };
 let brainFilter = "all";
+const CAT = { // story categories: icon, label, which decisions belong
+  deal: ["🤝", "Deals"], offer: ["💬", "Haggling"], trade: ["🏷️", "Market"], ai: ["✨", "AI"], learn: ["🧠", "Learning"],
+  market: ["🏪", "Our market"], duel: ["⚔️", "Duels"], warn: ["⚠️", "Problems"], info: ["•", "Other"] };
+function catOf(r) {
+  const a = r.action || "", m = r.module;
+  if (/refused|error|crash|fallback/.test(a)) return "warn";
+  if ((m === "haggle" && (a === "deal" || a === "accept")) || (m === "trade" && a.startsWith("accept")) || a === "opened" && m === "pack") return "deal";
+  if (m === "haggle" || a.startsWith("haggle")) return "offer";
+  if (m === "trade") return "trade";
+  if (m === "llm") return "ai";
+  if (m === "learn") return "learn";
+  if (m === "market" || m === "venue") return "market";
+  if (m === "duel") return "duel";
+  return "info";
+}
+function story(r) {  // [sentence, why]
+  const dn = id => ((D?.dealers?.personas || []).find(p => p.id === id)?.name || id || "the dealer").split(" ")[0];
+  const team = id => (D?.leaderboard?.teams || []).find(t => t.team === id)?.name || id;
+  switch (`${r.module}.${r.action}`) {
+    case "agent.start": return ["Agent started", r.dry ? "dry-run: logs only" : ""];
+    case "agent.idle": return [r.paused ? "Waiting: the organisers paused the clock" : "Waiting: the doors are closed", ""];
+    case "haggle.opened": return [`Started haggling with ${dn(r.dealer)} for ${esc(Object.values(Object.values(r.topic || {})[0] || {}).join(" "))}`, `first offer ${r.plan?.lo} P, never above ${r.plan?.hi} P`];
+    case "haggle.offer": return [`Offered ${dn((r.plan || {}).dealer)} <b>${r.price} P</b>${r.ask != null ? ` (she asks ${r.ask} P)` : ""}${r.by === "claude" ? '<span class="ai">AI</span>' : ""}`, r.text ? `“${esc(r.text)}”` : ""];
+    case "haggle.accept": return [`<b>Accepted ${r.price ?? ""} P</b> from the dealer`, esc(r.reason)];
+    case "haggle.deal": return [`✓ <b>Deal: bought for ${r.price} P</b> (list ${r.list} P)`, r.list ? `${Math.round((1 - r.price / r.list) * 100)}% under list, after ${r.rounds} offers` : ""];
+    case "haggle.final_declined": return [`Declined a final offer of ${r.ask} P`, "above what the data says is worth paying; a new conversation will follow"];
+    case "haggle.ended": return [`Conversation ended without a deal`, esc(r.reason || r.status || "")];
+    case "haggle.skip_foreign_thread": return [`Left a teammate's conversation with ${dn(r.dealer)} alone`, "only one bot talks per conversation"];
+    case "trade.list_ask": return [`Put <b>${esc(r.ref)}</b> up for sale at ${r.price} P on ${esc(r.venue || "El Rastro")}`, `worth only ${r.our_value} P to us`];
+    case "trade.list_bid": return [`Bid <b>${r.price} P</b> for ${esc(r.ref)} on ${esc(r.venue || "El Rastro")}`, `worth ${r.our_value} P to us`];
+    case "trade.accept": case "trade.accept_team": return [`✓ <b>Trade done: +${r.gain} P of value</b> for us`, r.venue ? `on ${esc(r.venue)}` : ""];
+    case "trade.haggle_opened": return [`Opened a negotiation with ${esc(team(r.maker))} to ${r.side} <b>${esc(r.ref)}</b>`, `they post ${r.posted} P; our limit ${r.our_limit} P`];
+    case "trade.haggle_offer": return [`Offered ${esc(team((r.maker)))}${r.maker ? "" : "the other team"} <b>${r.price} P</b> for ${esc(r.ref)}`, r.text ? `“${esc(r.text)}”` : ""];
+    case "trade.haggle_closed": return [`Closed a negotiation with another team`, r.answered ? `after ${r.rounds} offers` : "they never answered"];
+    case "trade.listing_gone": return [`A listing of ours left the board`, "sold, expired or cancelled"];
+    case "trade.reprice_cancel": return [`Repriced ${esc(r.ref)}: ${r.old} → ${r.new} P`, "walking toward our floor"];
+    case "llm.message": return [`Claude wrote a message at <b>${r.price} P</b>`, `${esc(r.reason || "")} · ${(r.ms / 1000).toFixed(1)} s`];
+    case "llm.fallback_to_rules": return ["AI unavailable, used the templates", esc(String(r.error || "").slice(0, 120))];
+    case "learn.model": return [`Learned from ${r.conversations} conversations (${r.deals} deals)`, r.best_first ? `best first offer ≈ ${Math.round(r.best_first * 100)}% of the dealer's opening` : ""];
+    case "learn.reward": return [`Scored our own deal: captured ${Math.round((r.capture || 0) * 100)}% of the range`, "the bandit uses this to pick the next first offer"];
+    case "market.opened": return [`🎉 <b>Opened our market</b> ${esc(r.venue)}`, `fee ${(r.fee_bps || 0) / 100}%`];
+    case "market.invited": return [`Invited ${esc(team(r.team))} to our market`, r.text ? `“${esc(r.text)}”` : ""];
+    case "market.announced": return [`Announced our market on the big screen`, `“${esc(r.text)}”`];
+    case "market.open_refused": return [`Market not open yet`, esc(r.code || r.error || "")];
+    case "levels.dealer_active": return [`Dealer in play: ${esc(r.name)} (level ${r.level})`, ""];
+    case "duel.offer": return [`Duel #${r.duel}: offered <b>${r.price}</b>${r.days != null ? `, delivery day ${r.days}` : ""}`, `we are ${esc(r.role)}; rival at ${r.rival_price ?? "–"}`];
+    case "duel.accept": return [`✓ <b>Duel won: deal at ${r.price}</b>`, `our surplus ${r.our_surplus}`];
+    case "duel.raw": return ["Saw a new duel", "its format is logged for tuning"];
+    case "pack.opened": return [`Opened a pack: ${esc((r.cards || []).map(c => c[0]).join(", "))}`, ""];
+    case "flag.candidate": return [`Possible lie by ${dn(r.dealer)}: says ${r.stated} P, offers ${r.structured} P`, "flagging is off; turn on to report it"];
+    default: return [esc((r.action || "").replace(/_/g, " ")), ""];
+  }
+}
 function brain(d) {
-  const recs = (d.decisions || []).slice().reverse();
-  const mods = ["all", ...new Set(recs.map(r => r.module))];
-  $("brain-filter").innerHTML = mods.map(m => `<span style="cursor:pointer;${m === brainFilter ? "color:var(--text-primary);font-weight:600" : ""}" data-m="${m}">${m === "all" ? "All" : (MOD_LABEL[m] || m)}</span>`).join("");
-  $("brain-filter").querySelectorAll("[data-m]").forEach(el => el.onclick = () => { brainFilter = el.dataset.m; brain(D); });
-  const say = describe;
-  const unused = r => {
-    const x = { ...r }; delete x.ts; delete x.tick; delete x.module; delete x.action; delete x.plan; delete x.trace; delete x.detail; delete x.payload;
-    switch (`${r.module}.${r.action}`) {
-      case "haggle.offer": return `Offered <b>${r.price} P</b> to the dealer (her ask ${r.ask ?? "–"}, step ${r.k})`;
-      case "haggle.accept": return `<b>Accepted</b> the dealer's offer at ${r.price ?? "?"} P: ${esc(r.reason)}`;
-      case "haggle.deal": return `✓ <b>Deal</b> at ${r.price} P (list ${r.list}) after ${r.rounds} rounds`;
-      case "haggle.opened": return `Opened talks: ${esc(JSON.stringify(r.topic))}, opening at ${r.plan?.lo} P, cap ${r.plan?.hi} P`;
-      case "trade.list_ask": return `Listed spare <b>${esc(r.ref)}</b> for ${r.price} P (worth ${r.our_value} to us, floor ${r.floor})`;
-      case "trade.list_bid": return `Bid <b>${r.price} P</b> for ${esc(r.ref)} (worth ${r.our_value} to us)`;
-      case "trade.accept": return `✓ <b>Took a board offer</b>: +${r.gain} P of value for us`;
-      case "duel.offer": return `Duel #${r.duel} (${esc(r.role)}, limit ${r.limit}): offered <b>${r.price}</b>${r.days != null ? ` day ${r.days}` : ""}, rival at ${r.rival_price ?? "–"}`;
-      case "duel.accept": return `✓ <b>Duel deal</b> #${r.duel} at ${r.price}: our surplus ${r.our_surplus}`;
-      default: return `${esc(r.action)} <span class="muted">${esc(JSON.stringify(x)).slice(0, 160)}</span>`;
-    } };
-  const shown = recs.filter(r => brainFilter === "all" || r.module === brainFilter).slice(0, 120);
-  $("brain").innerHTML = shown.map(r => `<div><span class="t">t${r.tick ?? "–"} ${hm(new Date(r.ts * 1000))}</span><span class="chip">${MOD_LABEL[r.module] || esc(r.module)}</span> ${say(r)}</div>`).join("")
-    || `<div class="empty">The agent hasn't logged anything yet. Start it with <code>python3 team13/agent.py</code>.</div>`;
-  const deals = recs.filter(r => r.module === "haggle" && r.action === "deal");
-  const trades = recs.filter(r => r.module === "trade" && r.action.startsWith("accept") && r.gain != null);
-  const duelsDone = recs.filter(r => r.module === "duel" && r.action === "accept");
-  const errs = recs.filter(r => /error|crash|refused/.test(r.action));
-  const bm = (d.broker_log || []).filter(r => r.event === "match");
-  const rows = [
-    ["Dealer deals", deals.length, deals.length ? `avg ${fmt(deals.reduce((t, r) => t + (r.price || 0), 0) / deals.length)} P vs list ${deals[0].list}` : "none yet"],
-    ["Team trades", trades.length, trades.length ? `+${fmt(trades.reduce((t, r) => t + r.gain, 0))} P value created for us` : "none yet"],
-    ["Duels settled", duelsDone.length, duelsDone.length ? `surplus ${fmt(duelsDone.reduce((t, r) => t + (r.our_surplus || 0), 0))}` : "none yet"],
-    ["Broker matches", bm.length, bm.length ? `last at tick ${bm[bm.length - 1].tick}` : "venue not open yet"],
-    ["Refusals / errors", errs.length, errs.length ? esc(errs[0].action) + ": " + esc(String(errs[0].error || "").slice(0, 60)) : "clean"],
-  ];
-  $("brain-stats").innerHTML = `<table><tbody>${rows.map(([a, b, c]) => `<tr><td>${a}<div class="muted" style="font-size:11px">${c}</div></td><td class="num" style="font-size:20px;font-weight:600">${b}</td></tr>`).join("")}</tbody></table>`;
-}
+  const all = (d.decisions || []).filter(r => r.module !== "dry");
+  const recs = all.slice().reverse();
+  // ---- right now
+  const st = d.agent_state || {}, threads = d.threads?.threads || [];
+  const plans = st.plans || {}, open = threads.filter(t => t.status === "open");
+  const ourDealer = open.filter(t => plans[String(t.id)]);
+  const haggles = Object.entries(st.team_haggles || {});
+  const listings = Object.values(st.listings || {});
+  const c = d.clock || {};
+  let headline, sub = [], color = "var(--good)";
+  if (!d.agent_running) { headline = "Our agent is stopped"; color = "var(--critical)"; sub.push("Start it: cd team13 && ../.venv/bin/python agent.py"); }
+  else if (c.paused) { headline = "Waiting: the organisers paused the clock"; color = "var(--warning)"; }
+  else if (c.doors !== "open") { headline = `Resting until ${c.next_name || "the doors open"} ${hm(new Date(c.next_opens))}`; color = "var(--warning)"; }
+  else if (ourDealer.length) {
+    const t = ourDealer[0], mv = moves(t, d.me.id), us = mv.filter(m => m.who === "us").pop(), her = mv.filter(m => m.who === "them").pop();
+    const what = Object.values(Object.values(t.topic || {})[0] || {}).join(" ").replace("sobre_barrio", "a Neighbourhood pack");
+    headline = `Haggling with ${((d.dealers?.personas || []).find(p => p.id === t.with)?.name || t.with)} for ${what}`;
+    if (us || her) sub.push(`we offer ${us?.price ?? "–"} P, she asks ${her?.price ?? "–"} P${us && her ? ` · gap ${her.price - us.price} P` : ""}`);
+  } else headline = recs.length ? story(recs[0])[0].replace(/<[^>]+>/g, "") : "Getting started";
+  if (haggles.length) sub.push(`${haggles.length} negotiation${haggles.length > 1 ? "s" : ""} with other teams`);
+  if (listings.length) sub.push(`${listings.length} offers live on ${new Set(listings.map(l => l.venue || "rastro")).size} market(s)`);
+  $("now").innerHTML = `<div><div class="pulse" style="background:${color};color:${color}"></div></div>
+    <div><div class="headline">${headline}</div><div class="sub">${sub.join(" · ") || "&nbsp;"}</div></div>
+    <div class="side">${c.paused || c.doors !== "open" ? "" : `<b>${nextTickAt ? Math.max(0, Math.round((nextTickAt - Date.now()) / 1000)) + " s" : "–"}</b>next move`}</div>`;
 
-
-// ---------- strategy ----------
-let SD = null, draft = null;   // server description, unsaved edits
-async function loadStrategy() {
-  SD = await (await fetch("/strategy")).json(); draft = { ...SD.current }; strategyForm();
-  if (D) try { strategyPlan(D, model(D)); } catch (e) { console.error(e); }
-}
-function strategyForm() {
-  if (!SD) return;
-  const groups = {};
-  for (const [k, kn] of Object.entries(SD.knobs)) (groups[kn.group] ||= []).push([k, kn]);
-  const active = Object.entries(SD.presets).find(([, ov]) => Object.entries({ ...Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])), ...ov }).every(([k, v]) => draft[k] == v));
-  const R = SD.results || {};
-  $("presets").innerHTML = Object.keys(SD.presets).map(n => `<button class="btn ${active && active[0] === n ? "on" : ""}" data-p="${esc(n)}">${esc(n)}${R[n] ? `<span class="muted" style="display:block;font-size:11px;font-weight:400">dealers ${Math.round(R[n].dealers * 100)}% · duels ${Math.round(R[n].duels * 100)}%</span>` : ""}</button>`).join("")
-    + `<div class="muted" style="font-size:11px;width:100%;margin-top:4px">Simulated share captured (dealer price range · duel pie). Trading settings are not simulated.</div>`;
-  $("presets").querySelectorAll("[data-p]").forEach(b => b.onclick = () => {
-    draft = { ...Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])), ...SD.presets[b.dataset.p] };
-    $("saved").textContent = `${b.dataset.p} loaded, not saved yet`; strategyForm(); });
-  $("knobs").innerHTML = Object.entries(groups).map(([g, list]) => `<div class="knob-group"><h4>${esc(g)}</h4>${list.map(([k, kn]) => {
-    const v = draft[k], changed = v != kn.default, toggle = kn.min === 0 && kn.max === 1 && kn.step === 1;
-    return `<div class="knob ${changed ? "changed" : ""}" title="default ${kn.default}"><div>${esc(kn.label)}<small>${esc(kn.help)}</small></div>
-      ${toggle ? `<label style="justify-self:end"><input type="checkbox" data-k="${k}" ${v ? "checked" : ""}> ${v ? "on" : "off"}</label><span></span>`
-        : `<input type="range" data-k="${k}" min="${kn.min}" max="${kn.max}" step="${kn.step}" value="${v}"><input type="number" data-n="${k}" min="${kn.min}" max="${kn.max}" step="${kn.step}" value="${v}">`}</div>`; }).join("")}</div>`).join("");
-  $("knobs").querySelectorAll("input").forEach(el => el.oninput = () => {
-    const k = el.dataset.k || el.dataset.n; draft[k] = el.type === "checkbox" ? (el.checked ? 1 : 0) : +el.value;
-    if (el.type === "checkbox") return strategyForm();
-    const twin = $("knobs").querySelector(el.dataset.k ? `[data-n="${k}"]` : `[data-k="${k}"]`); if (twin) twin.value = el.value;
-    el.closest(".knob").classList.toggle("changed", draft[k] != SD.knobs[k].default);
-    $("saved").textContent = "unsaved changes";
-  });
-}
-$("save").onclick = async () => {
-  const r = await (await fetch("/strategy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) })).json();
-  if (r.ok) { SD.current = r.current; draft = { ...r.current }; $("saved").textContent = `✓ saved ${hm(new Date())}: the agent uses it from the next tick`; strategyForm(); if (D) strategyPlan(D, model(D)); }
-  else $("saved").textContent = "⚠ " + (r.error || "not saved");
-};
-$("reset").onclick = () => { draft = Object.fromEntries(Object.entries(SD.knobs).map(([k, kn]) => [k, kn.default])); $("saved").textContent = "defaults loaded, not saved yet"; strategyForm(); };
-loadStrategy();
-
-function strategyPlan(d, M) {
-  if (!SD) return;
-  const S = SD.current, me = d.me, sc = me.score || {}, c = d.clock || {}, recs = d.decisions || [];
-  const threads = d.threads?.threads || [];
-  const deals = threads.filter(t => t.kind === "persona" && t.status === "deal").length;
-  const trades = recs.filter(r => r.module === "trade" && /^accept/.test(r.action) && r.gain != null);
-  const venue = (d.venues?.venues || []).find(v => v.owner === me.id && v.status === "open");
-  const ev = a => (d.schedule?.upcoming || []).find(e => e.action === a && e.at_hours >= (c.t_hours || 0));
-  const nd = ev("duels"), nb = ev("bench");
-  const row = (ok, area, plan, status) => `<tr><td style="width:22px;color:${ok ? "var(--up)" : "var(--serious)"};font-weight:700">${ok ? "✓" : "▲"}</td>
-    <td style="width:120px"><b>${area}</b></td><td class="sec">${plan}</td><td class="num" style="white-space:normal;max-width:220px">${status}</td></tr>`;
-  $("plan").innerHTML = `<table><tbody>
-    ${row(deals >= 3, "Dealers", `Open at <b>${Math.round(S.haggle_open * 100)}%</b> of list, concede slowly over <b>${S.haggle_rounds}</b> rounds; never above what other teams typically pay; take her ask at once if it matches the best price anyone got.`, `${deals} deals · ${deals >= 3 ? "next dealer unlocked early" : `${3 - deals} more to unlock`}`)}
-    ${row(trades.length > 0, "Trades", `Only trades that gain us <b>≥ ${S.trade_min_gain} P</b> at our values; list spares just under rival prices; bid low for Salamanca and Malasaña cards.`, trades.length ? `${trades.length} trades, +${fmt(trades.reduce((t, r) => t + r.gain, 0))} P` : "none yet")}
-    ${row(true, "Duels", `Open far from our limit, settle within <b>${S.duel_rounds}</b> rounds, accept at <b>${Math.round(S.duel_accept * 100)}%</b> of our next offer; never cross our limit.`, nd ? `next ${until(wallFor(nd.at_hours, c, "duels"))}` : "–")}
-    ${row(!!venue, "Market", `Open <b>Mercado Trece</b> at <b>${S.venue_fee_bps / 100}%</b> fee (El Rastro: 5% + 1 P/card) as soon as we are level 2, run the smart broker, invite every team.`, venue ? "open" : me.level < 2 ? "needs level 2" : "opening…")}
-  </tbody></table>`;
-  const split = [["Negotiating", 30, sc.negotiating || 0, "var(--series-1)"], ["Market-making", 30, sc.market || 0, "var(--series-2)"], ["Judges", 40, null, "var(--neutral)"]];
-  $("plan-split").innerHTML = `<svg viewBox="0 0 600 40" width="100%">${(() => { let x = 0, g = ""; for (const [n, w, v, col] of split) { const W = w * 6;
-      g += `<rect x="${x}" y="0" width="${W - 2}" height="16" rx="4" fill="${col}" opacity=".25"/>`;
-      if (v) g += `<rect x="${x}" y="0" width="${Math.max(2, v / w * (W - 2))}" height="16" rx="4" fill="${col}"/>`;
-      g += `<text x="${x + 4}" y="32" class="ink">${n} ${v == null ? "?" : fmt(v)} / ${w}</text>`; x += W; } return g; })()}</svg>`;
-
-  // advisor
-  const P = d.proposal;
-  let html;
-  if (!P) html = `<div class="empty">First check running…</div>`;
-  else if (P.status === "insufficient_data") html = `<div class="empty">Waiting for data: ${P.deals_used} of ${P.min_deals} haggled deals seen so far.</div>`;
-  else if (P.status === "error") html = `<div class="err">Advisor error: ${esc(P.error)}</div>`;
-  else {
-    const ev2 = P.evidence || {};
-    const evid = `Based on <b>${P.deals_used}</b> real haggled deals by all teams: dealers accept about ${Math.round((ev2.median_floor_vs_opening || 0) * 100)}% of their opening ask after ~${ev2.median_rounds} rounds. Checked ${hm(new Date(P.at * 1000))}.`;
-    if (P.status === "proposal") {
-      const knobs = SD.knobs;
-      html = `<div class="move" style="border-left:3px solid var(--good)"><div class="ic" style="color:var(--good)">✓</div><div>
-        <div class="t">Better strategy found: dealer capture ${Math.round(P.current_score * 100)}% → ${Math.round(P.best_score * 100)}%</div>
-        <div class="d">${Object.entries(P.changes).map(([k, v]) => `${esc(knobs[k]?.label || k)}: <b>${S[k]}</b> → <b>${v}</b>`).join(" · ")}</div>
-        <div class="d">${evid}</div>
-        <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="apply-prop">Apply</button><button class="btn" id="dismiss-prop">Dismiss</button></div></div></div>`;
-    } else {
-      html = `<div class="move"><div class="ic" style="color:var(--up)">✓</div><div><div class="t">${P.status === "dismissed" ? "Proposal dismissed" : "Our current strategy is still the best"}</div>
-        <div class="d">Simulated dealer capture ${Math.round(P.current_score * 100)}%; the best alternative scored ${Math.round((P.best_score || P.current_score) * 100)}% (we only switch for +1.5 points or more).</div><div class="d">${evid}</div></div></div>`;
-    }
-    html += `<button class="btn" id="recheck" style="margin-top:10px">Re-check now</button>`;
-  }
-  $("proposal").innerHTML = html;
-  const post = (u, body) => fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-  if ($("apply-prop")) $("apply-prop").onclick = async () => { await post("/strategy", { ...SD.current, ...P.changes }); await loadStrategy(); await post("/strategy/recheck"); $("proposal").innerHTML = `<div class="empty">Applied: the agent uses it from the next tick. Re-checking…</div>`; };
-  if ($("dismiss-prop")) $("dismiss-prop").onclick = async () => { await post("/strategy/dismiss"); $("proposal").innerHTML = `<div class="empty">Dismissed.</div>`; };
-  if ($("recheck")) $("recheck").onclick = async () => { await post("/strategy/recheck"); $("recheck").textContent = "Checking… (a few seconds)"; };
-
-  // AI negotiator
-  const llm = recs.filter(r => r.module === "llm");
-  const msgs = llm.filter(r => r.action === "message"), fails = llm.filter(r => r.action === "fallback_to_rules");
-  const on = !!S.llm_negotiator, last = msgs[msgs.length - 1];
-  $("llm").innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><b style="font-size:16px">Claude Opus 5.5</b>
-      <label style="margin-left:auto"><input type="checkbox" id="llm-toggle" ${on ? "checked" : ""}> ${on ? "on" : "off"}</label></div>
-    <div class="sec" style="font-size:13px;line-height:1.5">Writes every message and picks the price inside the safe band our tested rules allow. Accept/decline stays with the rules. Falls back to templates if the API is slow.</div>
-    <div class="stats" style="display:flex;gap:18px;margin-top:10px;font-size:12px;color:var(--muted)">
-      <div><b style="display:block;font-size:18px;color:var(--text-primary)">${msgs.length}</b>messages</div>
-      <div><b style="display:block;font-size:18px;color:var(--text-primary)">${msgs.length ? (msgs.reduce((t, r) => t + r.ms, 0) / msgs.length / 1000).toFixed(1) + " s" : "–"}</b>avg time</div>
-      <div><b style="display:block;font-size:18px;color:var(--text-primary)">${fails.length}</b>fallbacks</div></div>
-    ${last ? `<div class="msg" style="margin-top:10px;max-width:none"><div class="who">last · ${hm(new Date(last.ts * 1000))} · ${last.price} P</div>${esc(last.reason || "")}</div>` : ""}
-    ${d.agent_running ? "" : `<div class="muted" style="font-size:12px;margin-top:8px">Agent is stopped. Run it with <code>.venv/bin/python team13/agent.py</code> (the AI needs the .venv).</div>`}`;
-  $("llm-toggle").onchange = async e => { await post("/strategy", { ...SD.current, llm_negotiator: e.target.checked ? 1 : 0 }); await loadStrategy(); };
-
-  // market
-  const mk = recs.filter(r => r.module === "market");
-  const invites = mk.filter(r => r.action === "invited").length, ann = mk.filter(r => r.action === "announced").length;
-  const rivalsMk = (d.venues?.venues || []).filter(v => !v.house && v.owner !== me.id && v.status === "open");
-  $("market-status").innerHTML = `<table><tbody>
-    <tr><td>Status</td><td class="num">${venue ? `<span style="color:var(--up)">● open</span> ${esc(venue.name)}` : me.level < 2 ? "waiting for level 2" : "opening when allowed"}</td></tr>
-    <tr><td>Fee</td><td class="num">${S.venue_fee_bps / 100}% <span class="muted">(El Rastro 5% + 1 P)</span></td></tr>
-    <tr><td>Next Market Test</td><td class="num">${nb ? until(wallFor(nb.at_hours, c, "bench")) : "–"}</td></tr>
-    <tr><td>Invitations sent</td><td class="num">${invites}</td></tr>
-    <tr><td>Announcements</td><td class="num">${ann}</td></tr>
-    <tr><td>Trades on our market</td><td class="num">${venue ? `${venue.trades} · ${fmt(venue.volume, 0)} P` : "–"}</td></tr>
-    <tr><td>Rival markets</td><td class="num">${rivalsMk.length ? rivalsMk.map(v => `${esc(v.name)} ${fmt(v.fee_bps / 100)}%`).join(", ") : "none yet"}</td></tr>
-  </tbody></table>`;
-}
-
-// ---------- intel ----------
-const CLS_LABEL = c => c.replace("buy:pack:sobre_barrio", "Buy · Neighbourhood pack").replace(/^buy:pack:(.+)$/, "Buy · pack $1")
-  .replace(/^buy:card:(.+)$/, "Buy · $1 card").replace(/^sell:card:(.+)$/, "Sell to dealer · $1 card");
-function intelTab(d, M) {
-  const I = d.intel; if (!I) { $("intel-insights").innerHTML = `<div class="empty">Reading the feed…</div>`; return; }
+  // ---- live conversations (dealer + team haggles)
   const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
-  const nm = id => id === d.me.id ? "us" : (names[id] || id);
-  const dealerName = id => ((d.dealers?.personas || []).find(p => p.id === id)?.name || id).split(" ")[0];
-  const classes = Object.values(I.classes).filter(c => c.n || c.beginner.length).sort((a, b) => (b.n + b.beginner_deals.length) - (a.n + a.beginner_deals.length));
-  const listFor = c => { const sells = (d.dealers?.personas || []).find(p => p.id === c.dealer)?.menu?.sells || [];
-    const m = c.cls.match(/pack:(.+)$/); if (m) return sells.find(s => s.pack === m[1])?.list_price;
-    const r = c.cls.split(":").pop(); return sells.find(s => s.rarity === r)?.list_price ?? M.cards.find(x => x.rarity === r)?.book; };
+  const conv = [...ourDealer.map(t => ({ t, kind: "dealer" })), ...haggles.map(([id, H]) => ({ t: threads.find(x => String(x.id) === id), H, kind: "team" })).filter(x => x.t)];
+  $("convos").innerHTML = conv.length ? conv.map(({ t, H, kind }) => {
+    const mv = moves(t, d.me.id), us = mv.filter(m => m.who === "us"), them = mv.filter(m => m.who === "them");
+    const lastUs = us[us.length - 1]?.price, lastThem = them[them.length - 1]?.price;
+    const plan = plans[String(t.id)] || {};
+    const dealer = (d.dealers?.personas || []).find(p => p.id === t.with);
+    const title = kind === "dealer" ? (dealer?.name || t.with) : (names[t.with] || t.with);
+    const item = kind === "dealer" ? Object.values(Object.values(t.topic || {})[0] || {}).join(" ").replace("sobre_barrio", "Neighbourhood pack") : `${H.side} ${H.ref}`;
+    // price gap bar: from our first offer to their first price
+    const lo = Math.min(...[us[0]?.price, lastUs, plan.lo, H?.price].filter(x => x != null), lastThem ?? 0);
+    const hi = Math.max(...[them[0]?.price, lastThem, plan.hi, H?.posted].filter(x => x != null), lastUs ?? 1);
+    const X = v => v == null ? null : 4 + (v - lo) / Math.max(1, hi - lo) * 92;
+    const mark = (v, col, lab) => v == null ? "" : `<div style="position:absolute;left:${X(v)}%;top:-3px;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:${col};border:2px solid var(--surface-2)" title="${lab} ${v} P"></div>`;
+    const tick = (v, lab) => v == null ? "" : `<div style="position:absolute;left:${X(v)}%;top:-6px;height:18px;border-left:2px dashed var(--muted)" title="${lab} ${v} P"></div>`;
+    const bar = `<div style="position:relative;height:6px;background:var(--grid);border-radius:3px;margin:16px 6px 6px">
+        ${lastUs != null && lastThem != null ? `<div style="position:absolute;left:${Math.min(X(lastUs), X(lastThem))}%;width:${Math.abs(X(lastThem) - X(lastUs))}%;height:6px;background:var(--series-2);opacity:.35;border-radius:3px"></div>` : ""}
+        ${tick(plan.target, "close at once at")}${tick(plan.hi ?? H?.limit, "our limit")}${mark(lastUs, "var(--series-1)", "our offer")}${mark(lastThem, "var(--series-2)", "their price")}</div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)"><span>${lo} P</span><span><span style="color:var(--series-1)">●</span> us ${lastUs ?? "–"} · <span style="color:var(--series-2)">●</span> them ${lastThem ?? "–"}${plan.target ? ` · close at ≤ ${plan.target}` : ""}</span><span>${hi} P</span></div>`;
+    const msgs = (t.messages || []).slice(-2).map(m => { const u = m.sender === d.me.id;
+      const byAI = u && all.some(r => r.module === "haggle" && r.action === "offer" && r.thread === t.id && r.by === "claude" && r.text && m.text && m.text.startsWith(r.text.slice(0, 40)));
+      return `<div class="bubble ${u ? "us" : ""}"><div class="who">${u ? "Team 13" : esc(title)} · ${msgPrice(m) ?? "–"} P${byAI ? '<span class="ai">AI</span>' : ""}${m.offer?.final ? " · FINAL" : ""}</div>${esc(m.text || "")}</div>`; }).join("");
+    return `<div class="convo"><div class="convo-head"><div class="av">${kind === "dealer" ? (dealer?.avatar?.emoji || "🧶") : "🧑‍🤝‍🧑"}</div>
+      <div><div class="ttl">${esc(title)}</div><div class="meta">${esc(item)} · round ${us.length}${kind === "team" ? ` · on ${esc(H.venue)}` : ""}</div></div>
+      <div class="gap">${lastUs != null && lastThem != null ? `<b>${Math.abs(lastThem - lastUs)} P</b>gap` : "waiting"}</div></div>${bar}${msgs}</div>`;
+  }).join("") : `<div class="empty">No conversation of ours is open right now. ${open.length ? `${open.length} other conversation(s) on our key belong to teammates.` : ""}</div>`;
 
-  // insights
-  const ins = [];
-  const beg = classes.filter(c => c.beginner.length);
-  if (beg.length) ins.push(["info", `Every team's first deal with ${dealerName(beg[0].dealer)} is a fixed welcome price`,
-    `${beg.map(c => `${CLS_LABEL(c.cls)}: ${c.beginner.join("/")} P`).join(" · ")}. She doesn't move on it, so it is not a negotiated deal and likely scores nothing on the ladder. Our agent spends a new dealer's first deal on the single most valuable item instead of haggling.`]);
-  for (const c of classes.filter(c => c.n)) {
-    const sell = c.cls.startsWith("sell"), best = c.prices.find(p => p[1] === c.best);
-    ins.push([sell ? "good" : "info", `${CLS_LABEL(c.cls)}: teams got ${c.worst === c.best ? c.best : `${sell ? c.worst : c.best}–${sell ? c.best : c.worst}`} P (median ${fmt(c.median)}, ${c.n} deal${c.n > 1 ? "s" : ""})`,
-      `${c.opening ? `Her usual opening: ${fmt(c.opening, 0)} P. ` : ""}Best: ${c.best} P by ${esc(nm(best?.[2]))}.${c.finals.length ? ` Final offers seen: ${c.finals.join(", ")} P.` : ""} ` +
-      (sell ? `We never sell below ${Math.floor(c.median * 0.8)} P and close at once at ${c.best} P.` : `We never pay above ${Math.ceil(c.median)} P and close at once at ${c.best} P or less.`)]);
+  // ---- today
+  const deals = all.filter(r => r.module === "haggle" && r.action === "deal");
+  const trades = all.filter(r => r.module === "trade" && /^accept/.test(r.action) && r.gain != null);
+  const ai = all.filter(r => r.module === "llm" && r.action === "message");
+  const saved = deals.reduce((t, r) => t + ((r.list || r.price) - r.price), 0);
+  $("today").innerHTML = `<div class="big3"><div><b>${deals.length}</b>dealer deals${deals.length ? `<br>${saved} P under list` : ""}</div>
+      <div><b>${trades.length}</b>team trades${trades.length ? `<br>+${fmt(trades.reduce((t, r) => t + r.gain, 0))} P value` : ""}</div>
+      <div><b>${ai.length}</b>messages by Claude${ai.length ? `<br>${(ai.reduce((t, r) => t + r.ms, 0) / ai.length / 1000).toFixed(1)} s each` : ""}</div></div>
+    ${deals.slice(-5).reverse().map(r => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--grid)"><span>🤝 ${esc((r.key || "").split(":").pop().replace("sobre_barrio", "pack"))}</span><span><b>${r.price} P</b> <span class="muted">list ${r.list}</span></span></div>`).join("")
+      || `<div class="empty">No deals by our agent yet today.</div>`}`;
+
+  // ---- learned
+  const L = d.learner || {}, ours = L.ours || {};
+  const band = Object.entries((st.bandit || {})).map(([cls, arms]) => `<div style="font-size:12px;margin:8px 0 4px" class="sec">${esc(CLS_LABEL(cls))}: first-offer experiments</div>`
+    + arms.map(([n, sum], i) => { const off = [-8, 0, 8][i], cap = n ? sum / n : 0;
+      return `<div class="meter-row" style="grid-template-columns:110px 1fr 90px;margin-bottom:6px"><span style="font-size:12px">${off < 0 ? "lower" : off > 0 ? "higher" : "learned"} (${off >= 0 ? "+" : ""}${off}%)</span><div class="meter"><div style="width:${Math.min(100, cap * 300)}%"></div></div><span class="num" style="font-size:12px">${n ? `${Math.round(cap * 100)}% · ${n} tries` : "not tried"}</span></div>`; }).join("")).join("");
+  $("learned").innerHTML = (L.lessons || []).map(x => `<div class="lesson">${esc(x)}</div>`).join("") || `<div class="empty">Collecting conversations…</div>`
+    + "";
+  $("learned").innerHTML += ours.deals ? `<div class="big3" style="margin-top:10px;grid-template-columns:repeat(2,1fr)"><div><b>${Math.round(ours.price_vs_opening * 100)}%</b>we pay, of the dealer's opening</div><div><b>${Math.round(ours.others_price_vs_opening * 100)}%</b>other teams pay</div></div>
+      <div class="sec" style="font-size:12px">We rank <b>#${ours.rank}</b> of ${ours.teams_ranked} teams on dealer prices (lower is better).</div>` : "";
+  $("learned").innerHTML += band;
+
+  // ---- story with filter chips and grouped repeats
+  const counts = {}; for (const r of recs) counts[catOf(r)] = (counts[catOf(r)] || 0) + 1;
+  $("brain-filter").innerHTML = [["all", "All", recs.length], ...Object.entries(CAT).filter(([k]) => counts[k]).map(([k, [ic, lab]]) => [k, `${ic} ${lab}`, counts[k]])]
+    .map(([k, lab, n]) => `<span class="${brainFilter === k ? "on" : ""}" data-m="${k}">${lab} ${n}</span>`).join("");
+  $("brain-filter").querySelectorAll("[data-m]").forEach(el => el.onclick = () => { brainFilter = el.dataset.m; brain(D); });
+  const shown = recs.filter(r => brainFilter === "all" || catOf(r) === brainFilter);
+  const groups = [];  // collapse runs of the same kind of event in the same minute (listings, bids)
+  for (const r of shown) {
+    const key = `${r.module}.${r.action}`, minute = Math.floor(r.ts / 60), g = groups[groups.length - 1];
+    if (g && g.key === key && g.minute === minute && /list_ask|list_bid|listing_gone|reprice_cancel/.test(r.action)) g.items.push(r);
+    else groups.push({ key, minute, items: [r] });
   }
-  const gifts = I.gifts || [];
-  if (gifts.length) ins.push(["good", `${gifts.length} free cards given by dealers`, `${[...new Set(gifts.map(g => nm(g.team)))].join(", ")}. They arrive right after a team's first deals; they don't score but they are trade material.`]);
-  const rivals = Object.entries(I.teams).filter(([t]) => t !== d.me.id).sort((a, b) => b[1].negotiated - a[1].negotiated);
-  if (rivals.length) ins.push(["warning", `Most active rivals: ${rivals.slice(0, 3).map(([t, v]) => `${esc(nm(t))} (${v.negotiated} haggled)`).join(", ")}`,
-    `Three haggled deals unlock the next dealer early. We have ${I.teams[d.me.id]?.negotiated ?? 0}.`]);
-  $("intel-insights").innerHTML = ins.map(([st, t, dd]) => { const [col, ic] = STATUS[st];
-    return `<div class="move"><div class="ic" style="color:${col}">${ic}</div><div><div class="t">${t}</div><div class="d">${dd}</div></div></div>`; }).join("");
-
-  // price strip per class
-  const rowH = 44, L = 210, R = 30, W = 1000, H = classes.length * rowH + 24;
-  const maxP = Math.max(10, ...classes.flatMap(c => [...c.prices.map(p => p[1]), ...c.beginner_deals.map(p => p[1]), c.opening || 0, (listFor(c) || 0) * 1.15]));
-  const X = v => L + v / maxP * (W - L - R);
-  let g = "", tips = [];
-  for (let v = 0; v <= maxP; v += maxP > 40 ? 10 : 5) g += `<line x1="${X(v)}" x2="${X(v)}" y1="0" y2="${H - 18}" stroke="var(--grid)"/><text x="${X(v)}" y="${H - 4}" text-anchor="middle">${v} P</text>`;
-  classes.forEach((c, i) => {
-    const y = i * rowH + 22, lst = listFor(c);
-    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" class="ink1">${esc(CLS_LABEL(c.cls))}</text><text x="${L - 12}" y="${y + 18}" text-anchor="end">${esc(dealerName(c.dealer))} · ${c.n} haggled</text>`;
-    if (lst) g += `<line x1="${X(lst)}" x2="${X(lst)}" y1="${y - 14}" y2="${y + 14}" stroke="var(--muted)" stroke-dasharray="3 3"/>`;
-    if (c.opening) g += `<rect x="${X(c.opening) - 1.5}" y="${y - 14}" width="3" height="28" fill="var(--series-2)"/>`;
-    const dots = [...c.beginner_deals.map(p => [...p, true]), ...c.prices.map(p => [...p, false])];
-    const seen = {};
-    for (const [tick, price, team, beginner] of dots) {
-      const k = Math.round(price); seen[k] = (seen[k] || 0) + 1; const dy = ((seen[k] - 1) % 5 - 2) * 5;  // jitter equal prices
-      const us = team === d.me.id, x = X(price), yy = y + dy;
-      tips.push(`<b>${price} P</b> · ${esc(nm(team))}<br>${CLS_LABEL(c.cls)} · tick ${tick}${beginner ? "<br>fixed first-deal price" : ""}`);
-      g += beginner ? `<circle cx="${x}" cy="${yy}" r="5" fill="none" stroke="${us ? "var(--text-primary)" : "var(--muted)"}" stroke-width="2"/>`
-        : `<circle cx="${x}" cy="${yy}" r="5.5" fill="${us ? "var(--text-primary)" : "var(--series-1)"}" stroke="var(--surface-1)" stroke-width="2"/>`;
-      g += `<circle data-tip="${tips.length - 1}" cx="${x}" cy="${yy}" r="10" fill="transparent"/>`;
-    }
-  });
-  $("intel-prices").innerHTML = classes.length ? `<svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg>` : `<div class="empty">No dealer deals yet.</div>`;
-  bindTips($("intel-prices"), i => tips[i]);
-
-  // rivals table
-  $("intel-teams").innerHTML = `<table><thead><tr><th>Team</th><th class="num">Talks</th><th class="num">Deals</th><th class="num">Haggled</th><th class="num">Spent</th><th class="num">Gifts</th><th class="num">Listings</th></tr></thead><tbody>`
-    + Object.entries(I.teams).sort((a, b) => b[1].negotiated - a[1].negotiated || b[1].deals - a[1].deals).map(([t, v]) =>
-      `<tr${t === d.me.id ? ' style="font-weight:700"' : ""}><td>${esc(nm(t) === "us" ? "Team 13 (us)" : nm(t))}</td><td class="num">${v.conversations}</td><td class="num">${v.deals}</td><td class="num">${v.negotiated}</td><td class="num">${v.spent} P</td><td class="num">${v.gifts}</td><td class="num">${v.listings}</td></tr>`).join("") + `</tbody></table>`;
-  const side = x => x ? [...(x.assets || []).map(a => a.ref), ...(x.types || []).map(t => t.split(":").pop()), x.cash ? `${x.cash} P` : ""].filter(Boolean).join(" + ") || "–" : "–";
-  $("intel-listings").innerHTML = (I.listings || []).length ? `<table><thead><tr><th>Tick</th><th>Team</th><th>Gives</th><th>Wants</th></tr></thead><tbody>`
-    + I.listings.slice(-15).reverse().map(l => `<tr><td class="num">${l.tick}</td><td>${esc(nm(l.maker))}</td><td>${esc(side(l.give))}</td><td>${esc(side(l.want))}</td></tr>`).join("") + `</tbody></table>`
-    : `<div class="empty">No listings yet.</div>`;
+  $("brain").innerHTML = groups.slice(0, 120).map(g => { const r = g.items[0], cat = catOf(r);
+    let [txt, why] = story(r);
+    if (g.items.length > 1) { txt = `${txt.replace(/<b>.*?<\/b>/, `<b>${g.items.length} items</b>`)}`; why = g.items.map(x => `${x.ref} ${x.price ?? ""} P`).join(" · "); }
+    return `<div class="ev ${cat === "deal" ? "win" : ""}"><div class="tm">${hm(new Date(r.ts * 1000))}</div><div class="ic">${CAT[cat][0]}</div><div>${txt}${why ? `<div class="why">${why}</div>` : ""}</div></div>`; }).join("")
+    || `<div class="empty">Nothing yet.</div>`;
 }
-
 // ---------- main loop ----------
 function showTab() {
   const id = (location.hash || "#overview").slice(1);
@@ -1129,7 +1085,7 @@ async function refresh() {
     if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
     servedAt = d.served_at;
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
-      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
+      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
     header(d);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;

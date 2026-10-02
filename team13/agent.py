@@ -29,6 +29,7 @@ from haggler import Haggler
 from trader import Trader
 from values import Values
 from intel import Intel
+from learner import Learner
 from negotiator import Negotiator
 import strategy
 
@@ -71,6 +72,7 @@ class Context:
         self._accepts = {}
         self.S = strategy.load()
         self.intel = None
+        self.learner = Learner()
         self.llm = Negotiator(log=self.log)
 
     # ---------------------------------------------------------------- logging & state
@@ -118,6 +120,9 @@ class Context:
         if self.S.get("llm_negotiator", 1) and self.llm.ready():
             return self.llm.propose(situation, band, fallback, effort=effort)
         return fallback[0], fallback[1], "rules"
+
+    def catalog_loaded(self):
+        return bool(getattr(self, "catalog", None)) and bool(self.intel and self.intel.rarity)
 
     def public_get(self, path):
         """Public reads go without the team key (their own 60/s limit), so the board scan never slows our bots."""
@@ -203,6 +208,13 @@ class Context:
         if self.clock.get("tick", 0) - self.state.get("intel_tick", -99) >= 2:  # the whole public feed, every 2 ticks
             self.intel.refresh()
             self.state["intel_tick"] = self.clock.get("tick", 0)
+            if self.catalog_loaded():
+                summ = self.intel.summary()
+                m = self.learner.fit(summ["dealer_threads"], self.me["id"], summ.get("now_tick"))
+                if m.get("best_first") != self.state.get("learned_first"):
+                    self.state["learned_first"] = m.get("best_first")
+                    self.log("learn", "model", conversations=m["n"], deals=m["deals"], best_first=m.get("best_first"),
+                             final_max=m.get("final_max_vs_opening"), ours=m.get("ours"), lessons=m.get("lessons"))
         self.threads = api.my_threads().get("threads", [])
         self.my_offers = api.my_offers().get("offers", [])
         self.read_markets()

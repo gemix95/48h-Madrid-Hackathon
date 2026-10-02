@@ -35,6 +35,14 @@ KIND_SELL = [
 ]
 
 
+def Learner_reward(ctx, plan, price, opening):
+    if plan.get("arm") is not None and plan.get("cls"):
+        from learner import Learner
+        Learner.reward(ctx.state, plan["cls"], plan["arm"], price, opening)
+        ctx.log("learn", "reward", cls=plan["cls"], arm=plan["arm"], price=price, opening=opening,
+                capture=round(1 - price / opening, 3) if price and opening else 0)
+
+
 def S_use_intel(ctx) -> bool:
     return bool(ctx.S.get("use_intel", 1)) and getattr(ctx, "intel", None) is not None
 
@@ -134,6 +142,14 @@ class Haggler:
             return plan
         cls = (f"buy:pack:{plan['pack']}" if plan.get("pack") else
                f"{plan['side']}:card:{ctx.values.cards.get(plan.get('ref', ''), {}).get('rarity', '')}")
+        L = getattr(ctx, "learner", None)
+        if L and ctx.S.get("learn_conversations", 1) and plan["side"] == "buy" and (L.model.get("n") or 0) >= 15:
+            ratio, arm = L.opening_for(ctx.state, cls)
+            if ratio is not None:
+                opening = (ctx.intel.advice(dealer_id, cls) or {}).get("opening") or plan.get("opening") or (plan.get("list") or 10) * 1.15
+                plan["lo"] = max(1, min(plan["hi"] - 1, math.floor(ratio * opening)))
+                plan.update(arm=arm, cls=cls, learned_first=ratio, final_max_r=L.model.get("final_max_vs_opening"),
+                            lessons=L.model.get("lessons"))
         adv = ctx.intel.advice(dealer_id, cls)
         if adv:
             plan["target"] = adv["best"]
@@ -227,8 +243,16 @@ class Haggler:
         def good(p):
             return p is not None and ((buy and p <= plan["hi"]) or (not buy and p >= plan["lo"]))
 
+        def good_final(p):  # finals: up to the threshold learned from every team's conversations
+            if good(p):
+                return True
+            asks = plan.get("asks") or []
+            if buy and p is not None and plan.get("final_max_r") and asks:
+                return p <= math.floor(plan["final_max_r"] * asks[0]) and p <= math.floor((plan.get("list") or p) * ctx.S["haggle_cap"])
+            return False
+
         if last and last.get("final"):
-            if good(ask) and ctx.take_accept():
+            if good_final(ask) and ctx.take_accept():
                 self._accept(last, th, plan, reason="final offer inside our cap")
             else:
                 ctx.log("haggle", "final_declined", thread=th["id"], ask=ask, plan=plan)
@@ -258,6 +282,7 @@ class Haggler:
             "bio": (dealer.get("bio") or "")[:400], "we_are": "buying" if buy else "selling",
             "item": th.get("topic"), "list_price": plan.get("list"), "her_latest_ask": ask,
             "other_teams_got": plan.get("intel"), "round": plan["k"] + 1,
+            "lessons_from_every_conversation": plan.get("lessons"),
             "history": [{"us" if m.get("sender") == ctx.me["id"] else "them": ((m.get("offer") or {}).get("give") or {}).get("cash")
                          or ((m.get("offer") or {}).get("want") or {}).get("cash"),
                          "text": m.get("text") if m.get("sender") == ctx.me["id"] else f"<their_message>{m.get('text') or ''}</their_message>"}
@@ -320,9 +345,12 @@ class Haggler:
             if plan.get("pack"):
                 c["packs"] += 1
             ctx.log("haggle", "deal", thread=th["id"], price=price, list=plan.get("list"), rounds=plan["k"], key=plan["key"])
+            opening = (plan.get("asks") or [None])[0]
+            Learner_reward(ctx, plan, price, opening)
             ctx.open_new_packs()
         else:
             stats["walked"] += 1
+            Learner_reward(ctx, plan, None, (plan.get("asks") or [None])[0])
             reason = th.get("closed_reason")
             if reason in ("persona_quota", "cooloff", "sold_out"):
                 until = th.get("until_tick") or ctx.clock.get("tick", 0) + 10

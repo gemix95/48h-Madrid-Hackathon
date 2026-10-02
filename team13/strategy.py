@@ -22,6 +22,10 @@ KNOBS = {
     "auto_flag": (0, 0, 1, 1, "Modules", "Flag dealers that lie",
                   "Flag a dealer message in our conversations whose stated price contradicts its structured offer. "
                   "A correct flag scores, a wrong one costs: off by default, candidates are shown on the Intel tab."),
+    "learn_conversations": (1, 0, 1, 1, "Modules", "Learn from every conversation",
+                            "Study every dealer conversation (ours and every rival's): open at the first offer that works best, "
+                            "explore around it with a bandit over our own results, take finals up to the learned threshold, "
+                            "and give Claude the lessons."),
     "use_intel": (1, 0, 1, 1, "Modules", "Learn from other teams",
                   "Read every team's deals in the public feed: never pay above what others typically get, close at once "
                   "when the dealer's ask matches the best price anyone got, spend a new dealer's fixed first-deal price on our best item."),
