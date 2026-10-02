@@ -14,14 +14,17 @@ import threading
 
 from bazaar_sdk import BazaarError, Broker
 
-VENUE_NAME = "Mercado Trece · {fee} fee"
-DESCRIPTION = ("Only {fee} fee, no per-card charge, fair midpoint matching, best pairs first. Built by Team 13 for "
-               "everyone: list your spares here and keep almost all of the price.")
-PITCH = ("Hola! Team 13 here. We just opened Mercado Trece: only {fee} fee and no per-card charge (El Rastro takes "
-         "5% + 1 P per card), with fair midpoint matching. List your spares there. Venue id: {venue}.")
-ANNOUNCE = ["Mercado Trece is open: {fee} fee, no per-card charge, fair midpoint matching.",
-            "Selling spares? Mercado Trece charges {fee}. El Rastro charges 5% + 1 P per card.",
-            "Mercado Trece: {fee} fee, every crossing pair matched at the fair middle, every tick."]
+VENUE_NAME = "Mercado Trece · Top Tier · {fee}"   # used only when (re)opening: an open market cannot be renamed
+DESCRIPTION = ("Madrid's top-tier market: {fee} fee, no per-card charge, a smart broker matching every tick, best "
+               "pairs first. Built by the team leading the board.")
+# FOMO, but only true claims: fee comparison, matching every tick, first come first matched
+PITCH = ("Hola! Team 13 here, top of the board. Our market Mercado Trece ({venue}) is where serious traders list: "
+         "{fee} fee, no per-card charge (El Rastro takes 5% + 1 P per card), and a broker matching every tick. "
+         "The earliest offers get matched first.")
+ANNOUNCE = ["Mercado Trece: Madrid's top-tier market. {fee} fee, no per-card charge, matched every tick.",
+            "Still paying El Rastro 5% + 1 P per card? Mercado Trece charges {fee}. Keep your primas.",
+            "First come, first matched: list on Mercado Trece now, our broker crosses offers every tick.",
+            "The leading team runs Mercado Trece: {fee} fee, fair midpoint prices, best pairs first."]
 
 
 def fee_text(bps) -> str:
