@@ -17,6 +17,7 @@ KNOBS = {
     "enable_duels": (1, 0, 1, 1, "Modules", "Duels", "Play the duel tournament automatically."),
     "enable_venue": (1, 0, 1, 1, "Modules", "Open our market", "Open our own market as soon as we reach level 2."),
     "enable_guard": (1, 0, 1, 1, "Modules", "Guard", "Last each tick: cancel any open offer of ours that loses value at our private values or breaks a team cap."),
+    "enable_flipper": (1, 0, 1, 1, "Modules", "Flipper", "Buy a card a team sells below another team's bid and sell into that bid (profit after both fees)."),
     "llm_negotiator": (1, 0, 1, 1, "Modules", "AI negotiator (Claude Opus 5.5)",
                        "Claude writes each message and picks the price inside the safe band the rules allow; "
                        "falls back to templates if the API is slow or unavailable."),
@@ -43,6 +44,10 @@ KNOBS = {
     "haggle_sell_spares": (1, 0, 1, 1, "Dealers", "Sell spares to dealers", "Sell duplicates/low-value cards to dealers."),
     "haggle_buy_cards": (1, 0, 1, 1, "Dealers", "Buy single cards", "Buy cards we value most (Salamanca, Malasaña)."),
     # trading
+    "flip_min_gain": (4, 1, 30, 1, "Trading", "Minimum profit per flip (P)",
+                      "A flip buys from one team and sells into another team's bid; it must clear this after both fees."),
+    "flip_max_cash": (120, 0, 400, 10, "Trading", "Most cash one flip may use (P)",
+                      "One flip at a time; never more than this, and never below the cash reserve."),
     "trade_min_gain": (3, 0, 20, 1, "Trading", "Minimum gain per trade (P)",
                        "A trade must create at least this much value for us, at our values, after fees."),
     "trade_bid_share": (0.4, 0, 1, 0.05, "Trading", "Share of free cash for bids",

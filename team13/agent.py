@@ -29,6 +29,7 @@ from market import Market
 from haggler import Haggler
 from trader import Trader
 from guard import Guard
+from flipper import Flipper
 from values import Values
 from intel import Intel
 from learner import Learner
@@ -290,9 +291,10 @@ def main():
     modules = [("duels", Duels(ctx)), ("haggler", Haggler(ctx)), ("venue", Market(ctx))]
     if not args.no_trade:
         modules.append(("trader", Trader(ctx)))
+        modules.append(("flipper", Flipper(ctx)))  # buy below another team's bid, sell into it
     modules.append(("guard", Guard(ctx)))  # last: undo anything this tick left open that loses value
     switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue",
-              "guard": "enable_guard"}
+              "guard": "enable_guard", "flipper": "enable_flipper"}
     ctx.log("agent", "start", dry=args.dry_run)
     last_tick, n = None, 0
     while True:

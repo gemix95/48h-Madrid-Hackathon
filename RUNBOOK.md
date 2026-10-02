@@ -2,6 +2,27 @@
 
 One page for the team: who runs what, the rules the bots follow on their own, and what to do at each event.
 
+## 0. Saturday plan in one screen
+
+Cash never scores by itself; value created does. Cash is ammunition: the 270 P market bond (refundable) and a war
+chest for a Salamanca epic or legendary if a higher-level dealer ("vault") appears. Earn it by flipping, not hoarding.
+
+1. **09:00 open our market** (0% fee, `board`) as soon as the 150 P allowance lands; t12 already runs a 0% market,
+   so we win on the broker, not the fee. First Market Test 10:00.
+2. **Flip** (`team13/flipper.py`): buy a card a team sells below another team's bid, sell into that bid. It only
+   flips cards worth less to us than the bid (it keeps the rest), pays both fees and still needs `flip_min_gain`.
+   Friday prices between teams: commons 6 to 40 (median 9), uncommons 12 to 40 (22), rares 53 to 80 (70).
+   Collectors pay up: t15 paid 18 per La Latina common, t04 bids 85 for LAV-10, t17 bids 78 for MAL-09.
+3. **Malasaña page** (6/10): cheap pieces first (MAL-03, MAL-07), rares only inside caps. t17 and t08 compete for
+   MAL-09, so its price will rise.
+4. **War chest**: keep about 400 P after the bond for SAL-11 (epic, worth 288 to us) and SAL-12 (legendary, 720).
+   Caps in `agent/caps.json`: SAL-11 200, SAL-12 500. Watch `levels` for a vault-type dealer.
+5. **Duels I ~11:30, Duels II ~18:00** run on rules; check the first two.
+6. **Sunday**: Chamberí is a 0.9 set for us, so sell what we pull to collectors in the first hours.
+
+Who wants what (from the feed, Friday): LAV buyers t10, t07, t01, t14 · MAL t17, t12, t10 · LAT t15, t07, t14 ·
+SAL t18, t16, t03. `agent/team_intel.py` refreshes this.
+
 ## 1. Who runs what
 
 **Everything runs on Emmanuele's laptop. Exactly one process writes with our team key: `team13/agent.py`.**
@@ -62,13 +83,14 @@ Ticks are 30 s on Saturday and 15 s on Sunday, and offers in dealer and team thr
 
 | Rule | Where | Now |
 |---|---|---|
-| Never pay above a card's team cap | `agent/caps.json` | `SAL-10: 70` |
+| Never pay above a card's team cap | `agent/caps.json` | `SAL-11: 200`, `SAL-12: 500` (SAL-10 done) |
 | Keep cash for the market bond | Strategy tab `reserve_cash` / `seek_keep_cash` | 270 P until our venue is open |
 | A trade must gain us at least | Strategy tab `trade_min_gain` | 3 P after fees |
 | Never give away a card of a nearly complete page cheaply | `values.py` page option | automatic |
 | Cancel anything that loses value or breaks a cap | `guard` module, last each tick | automatic |
 | Claude writes words only inside the tick budget | `agent.py` `tick_deadline` | 70% of the tick, 8 s max per call |
 | Our market fee | Strategy tab `venue_fee_bps` | 0 (fees never score, and they block thin matches) |
+| A flip must clear, after both fees | Strategy tab `flip_min_gain` / `flip_max_cash` | 4 P / 120 P per flip, one at a time |
 
 To change a rule, change it there, not by hand in a thread. Emergency stop for one module: set its `enable_*` to 0 on
 the Strategy tab (applied next tick). Stop everything: Ctrl-C the agent; open offers stay until they expire.
