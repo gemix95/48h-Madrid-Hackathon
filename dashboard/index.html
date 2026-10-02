@@ -349,7 +349,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
   <main class="tab" id="tab-rivals">
     <div class="grid">
       <section class="card s7"><h2>Leaderboard</h2><div id="leaderboard"></div></section>
-      <section class="card s5"><h2>Game feed</h2><div class="feed" id="feed"></div></section>
+      <section class="card s5"><h2>Game feed <span class="hint">everything every team does, in plain words</span></h2><div id="feed"></div></section>
     </div>
   </main>
 
@@ -910,41 +910,100 @@ function leaderboard(d) {
     <svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg><div class="empty" style="margin-top:6px">The public board is a snapshot that refreshes every few minutes; our tile score is live.</div>`;
   bindTips($("leaderboard"), i => { const t = teams[i]; return `<b>${esc(t.name)}</b> · score ${fmt(t.score)}<br>negotiating ${fmt(t.negotiating)} · market ${fmt(t.market)}<br>level ${t.level} · album ${t.album_filled}/${t.album_slots} · ${t.pages_complete} pages · ${t.deals} deals<br>spent at dealers: ${d.intel?.teams?.[t.team]?.spent ?? "–"} P (${d.intel?.teams?.[t.team]?.negotiated ?? 0} haggled)<br>rarest: ${esc(t.rarest?.name || "–")} ${t.rarest ? `#${t.rarest.serial}/${t.rarest.print_run}` : ""}${t.venue ? `<br>venue: ${esc(t.venue)}` : ""}`; });
 }
+let feedFilter = "all";
 function feed(d) {
   const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
-  const me = d.me.id, nm = id => id === me ? "We" : (names[id] || id);
+  const dealers = Object.fromEntries((d.dealers?.personas || []).map(p => [p.id, p]));
+  const cards = Object.fromEntries((d.catalog?.sets || []).flatMap(s2 => s2.cards.map(c2 => [c2.id, c2])));
+  const packs = Object.fromEntries((d.catalog?.packs || []).map(p => [p.id, p.name]));
+  const me = d.me.id;
+  const dealerName = p => { const w = p.name.split(" "); return w[0].length <= 3 ? p.name : w[0]; };  // "El Chato", "Abuela"
+  const nm = id => id === me ? "We" : dealers[id] ? dealerName(dealers[id]) : (names[id] || (id && id.startsWith("v") ? "a market" : id || "someone"));
+  const isTeam = id => /^t\d+$/.test(id || "");
+  const card = ref => cards[ref] ? `${cards[ref].name} <span class="muted">(${ref}, ${cards[ref].rarity})</span>` : esc(ref || "a card");
+  const item = topic => { const t = topic ? Object.values(topic)[0] || {} : {};
+    return t.pack ? esc(packs[t.pack] || t.pack) : t.card ? card(t.card) : t.rarity ? `a ${esc(t.rarity)} card` : t.assets ? "a card" : "something"; };
+  const sideTxt = side => { if (!side) return "–"; const parts = [];
+    for (const a of side.assets || []) parts.push(card(a.ref || a)); for (const t of side.types || []) parts.push(String(t).startsWith("card:") ? card(String(t).slice(5)) : esc(packs[String(t).slice(5)] || t));
+    if (side.cash) parts.push(`<b>${side.cash} P</b>`); return parts.join(" + ") || "–"; };
   const c = d.clock || {}, ts = c.tick_seconds || 60;
-  const ago = e => { const s = Math.max(0, (c.tick ?? e.tick) - e.tick) * ts; return s === 0 ? "now" : s < 90 ? `${Math.round(s)}s ago` : `${Math.round(s / 60)} min ago`; };
-  // counterparts we are talking to right now, with the latest prices (theirs orange, ours blue)
-  const active = {};
-  for (const th of (d.threads?.threads || []).filter(t => t.status === "open")) { const hh = heat(th, me); if (!active[th.with] || hh.s > active[th.with].h.s) active[th.with] = { th, h: hh }; }
-  const badge = ids => { const id = ids.find(x => /^t\d+$/.test(x || "") && x !== me && active[x]); if (!id) return "";
-    const h = active[id].h, pr = h.them != null ? ` <b style="color:var(--series-2)">${h.them} P</b>${h.us != null ? ` · <b style="color:var(--series-1)">${h.us} P</b>` : ""}` : ` <span class="muted">no prices yet</span>`;
-    return ` <span class="chip" style="background:color-mix(in srgb,var(--series-1) 16%,transparent);color:var(--series-1)">● conversation active</span>${pr}`; };
-  const cardOf = side => (side?.types || []).map(t => String(t).replace(/^card:/, "")).join(", ") || (side?.assets?.length ? `${side.assets.length} card(s)` : "");
-  const quote = t => t ? ` <span class="muted">“${esc(String(t).slice(0, 90))}”</span>` : "";
-  const row = e => { const p = e.payload || {}, o = p.offer || {}; let who = [], html = "";
-    switch (e.type) {
-      case "thread.message": { const from = p.sender, to = from === p.team ? p.with : p.team, price = o.give?.cash || o.want?.cash; who = [p.team, p.with];
-        html = `<b>${esc(nm(from))}</b> → ${esc(nm(to))}${price ? ` <b>${price} P</b>${o.final ? " <span class='chip'>FINAL</span>" : ""}` : ""}${quote(p.text)}`; break; }
-      case "thread.opened": who = [p.team, p.with];
-        html = `<b>${esc(nm(p.team))}</b> started talking to ${esc(nm(p.with))}${p.topic ? ` (${p.topic.sell ? "to sell" : "to buy"} ${esc(Object.values(Object.values(p.topic)[0] || {})[0] ?? "")})` : ""}`; break;
-      case "offer.listed": { who = [e.actor]; const give = o.give?.cash ? `${o.give.cash} P` : cardOf(o.give), want = o.want?.cash ? `${o.want.cash} P` : cardOf(o.want);
-        html = `<b>${esc(nm(e.actor))}</b> listed an offer: gives ${esc(give || "–")}, wants ${esc(want || "–")}`; break; }
-      case "offer.cancelled": who = [e.actor]; html = e.actor ? `<b>${esc(nm(e.actor))}</b> withdrew an offer` : `An offer was withdrawn`; break;
-      case "settlement": { who = p.parties || []; const items = (p.items || []).map(i => i.name || i.ref).join(", ");
-        html = `<b>Deal</b> ${esc((p.parties || []).map(nm).join(" ⇄ "))}: ${esc(items || "cards")}${p.price ? ` for <b>${p.price} P</b>` : ""}`; break; }
-      case "gift.given": who = [p.team]; html = `<b>${esc(nm(e.actor))}</b> gave ${esc(nm(p.team))} a present${p.cards?.length ? ` (${esc(p.cards.join(", "))})` : ""}`; break;
-      case "venue.opened": html = `New market opened${p.name ? `: ${esc(p.name)}` : ""}`; break;
-      case "team.joined": html = `${esc(nm(p.team || e.actor))} joined`; break;
-      case "announcement": html = `📣 ${esc(p.text || "")}`; break;
-      default: html = `${esc(e.type)}`;
+  const ago = t => { const s2 = Math.max(0, (c.tick ?? t) - t) * ts; return s2 < 30 ? "now" : s2 < 90 ? `${Math.round(s2)}s` : s2 < 3600 ? `${Math.round(s2 / 60)} min` : `${Math.round(s2 / 3600)} h`; };
+  const quote = t => t ? `<div class="why">“${esc(String(t).slice(0, 160))}”</div>` : "";
+  // ---- build human rows; consecutive messages of one conversation become a single row
+  const evs = (d.feed?.events || []).slice().reverse();
+  const rows = [];
+  for (const e of evs) {
+    const p = e.payload || {}, o = p.offer || {};
+    if (e.type === "thread.message" || e.type === "thread.opened") {
+      const g = rows.find(r => r.thread === p.thread);  // one row per conversation, at its latest message
+      const price = o.give?.cash || o.want?.cash;
+      if (g) { if (e.type === "thread.message") { g.n++; if (price) g.prices.unshift([p.sender, price]); } if (e.type === "thread.opened") g.started = true; continue; }
+      rows.push({ thread: p.thread, open: true, kind: "talk", tick: e.tick, team: p.team, with: p.with, topic: p.topic, n: e.type === "thread.message" ? 1 : 0,
+        prices: price ? [[p.sender, price]] : [], last: p.text, lastFrom: p.sender, final: o.final, started: e.type === "thread.opened",
+        cat: dealers[p.with] ? "haggle" : "market", us: p.team === me || p.with === me });
+      continue;
     }
-    const mine = p.team === me || e.actor === me || (p.parties || []).includes(me);
-    return `<div${mine ? ' style="color:var(--text-primary)"' : ""}><span class="t" title="tick ${e.tick}">${ago(e)}</span>${html}${badge(who)}</div>`; };
-  $("feed").innerHTML = (d.feed?.events || []).slice().reverse().map(row).join("") || `<div class="empty">Quiet.</div>`;
+    const us = p.team === me || e.actor === me || (p.parties || []).includes(me);
+    let icon = "•", cat = "news", txt = "", why = "";
+    switch (e.type) {
+      case "settlement": {
+        cat = "deal"; icon = "🤝";
+        const its = p.items || [], it = its[0] || {};
+        if (p.persona) {
+          const team = (p.parties || []).find(x => x !== p.persona), buy = it.to === team;
+          txt = `<b>${esc(nm(team))}</b> ${buy ? "bought" : "sold"} ${it.kind === "pack" ? esc(packs[it.ref] || it.ref) : card(it.ref)} ${buy ? "from" : "to"} ${esc(nm(p.persona))} for <b>${p.price} P</b>`;
+        } else {
+          const [a, b] = p.parties || [];
+          txt = `<b>${esc(nm(it.to))}</b> bought ${its.map(x => card(x.ref)).join(", ")} from <b>${esc(nm(it.frm))}</b> for <b>${p.price} P</b>`;
+          why = `on ${esc(p.venue === "rastro" ? "El Rastro" : p.venue || "a market")}${p.fee ? ` · fee ${p.fee} P` : ""}`;
+        }
+        break; }
+      case "offer.listed": {
+        cat = "market"; icon = "🏷️";
+        const g = o.give || {}, w = o.want || {}, selling = (g.assets || []).length && w.cash;
+        txt = selling ? `<b>${esc(nm(e.actor))}</b> is selling ${sideTxt(g)} for <b>${w.cash} P</b>`
+          : g.cash ? `<b>${esc(nm(e.actor))}</b> wants to buy ${sideTxt(w)} and offers <b>${g.cash} P</b>`
+          : `<b>${esc(nm(e.actor))}</b> offers ${sideTxt(g)} for ${sideTxt(w)}`;
+        why = `on ${esc(p.venue === "rastro" ? "El Rastro" : p.venue || "a market")}`;
+        break; }
+      case "offer.cancelled": cat = "market"; icon = "↩️"; txt = `${esc(nm(e.actor))} withdrew an offer`; break;
+      case "pack.opened": cat = "deal"; icon = "📦"; txt = `<b>${esc(nm(p.team))}</b> opened a ${esc(packs[p.pack] || p.pack || "pack")}${p.best ? ` and pulled ${card(p.best)}` : ""}`; break;
+      case "gift.given": cat = "gift"; icon = "🎁"; txt = `${esc(nm(e.actor))} gave <b>${esc(nm(p.team))}</b> a free card: ${(p.cards || []).map(card).join(", ")}`; why = "gifts don't score, but the card can be traded"; break;
+      case "announcement": cat = "news"; icon = "📣"; txt = `<b>${esc(p.text || "")}</b>`; break;
+      case "schedule.fired": cat = "news"; icon = "🗓️"; txt = esc(p.note || p.action || "scheduled event"); break;
+      case "clock.changed": cat = "news"; icon = "⏱️"; txt = p.paused ? "The organisers paused the clock" : `Clock running: a tick every ${p.tick_seconds}s`; break;
+      case "day.opened": cat = "news"; icon = "🌅"; txt = `${esc(p.name || "A new day")} is open until ${hm(new Date(p.closes))}`; break;
+      case "thread.closed": cat = "haggle"; icon = "✋"; txt = "A conversation was closed"; break;
+      case "team.joined": cat = "news"; icon = "👋"; txt = `${esc(nm(p.team))} joined the game`; break;
+      case "venue.opened": cat = "market"; icon = "🏪"; txt = `New market opened${p.name ? `: <b>${esc(p.name)}</b>` : ""}`; break;
+      default: if (/duel/.test(e.type)) { cat = "duel"; icon = "⚔️"; } txt = esc(e.type.replace(/[._]/g, " "));
+    }
+    rows.push({ kind: "event", tick: e.tick, icon, cat, txt, why, us, open: false });
+  }
+  // ---- render
+  const CATS = { all: "All", deal: "🤝 Deals", haggle: "💬 Haggling", market: "🏷️ Market", gift: "🎁 Gifts", duel: "⚔️ Duels", news: "📣 News", us: "⭐ Us" };
+  const count = k => k === "all" ? rows.length : k === "us" ? rows.filter(r => r.us).length : rows.filter(r => r.cat === k).length;
+  const chips = Object.entries(CATS).filter(([k]) => k === "all" || count(k)).map(([k, lab]) => `<span class="${feedFilter === k ? "on" : ""}" data-f="${k}">${lab} ${count(k)}</span>`).join("");
+  const shown = rows.filter(r => feedFilter === "all" || (feedFilter === "us" ? r.us : r.cat === feedFilter)).slice(0, 80);
+  // collapse runs of anonymous withdrawals into one line
+  const compact = [];
+  for (const r of shown) { const prev = compact[compact.length - 1];
+    if (prev && r.kind === "event" && prev.kind === "event" && r.txt === prev.txt && /withdrew an offer/.test(r.txt)) { prev.times = (prev.times || 1) + 1; continue; }
+    compact.push({ ...r }); }
+  for (const r of compact) if (r.times) r.txt = r.txt.replace("withdrew an offer", `withdrew ${r.times} offers`);
+  const html = compact.map(r => {
+    if (r.kind === "talk") {
+      const dealer = dealers[r.with], other = r.with, trail = r.prices.slice(-4).map(([who, pr]) => `<span style="color:${who === r.team ? "var(--series-1)" : "var(--series-2)"}">${pr}</span>`).join(" → ");
+      const head = `<b>${esc(nm(r.team))}</b> ${dealer ? "haggling with" : "talking to"} <b>${esc(nm(other))}</b>${r.topic ? ` over ${item(r.topic)}` : ""}`;
+      const meta = [`${r.n} message${r.n === 1 ? "" : "s"}`, trail ? `prices ${trail} P` : "", r.final ? "<b>final offer on the table</b>" : ""].filter(Boolean).join(" · ");
+      return `<div class="ev${r.us ? " win" : ""}"><div class="tm">${ago(r.tick)}</div><div class="ic">${dealer ? (dealer.avatar?.emoji || "💬") : "💬"}</div><div>${head}<div class="why">${meta}</div>${r.last ? `<div class="why">${esc(nm(r.lastFrom))}: “${esc(String(r.last).slice(0, 150))}”</div>` : ""}</div></div>`;
+    }
+    return `<div class="ev${r.us ? " win" : ""}"><div class="tm">${ago(r.tick)}</div><div class="ic">${r.icon}</div><div>${r.txt}${r.why ? `<div class="why">${r.why}</div>` : ""}</div></div>`;
+  }).join("");
+  $("feed").innerHTML = `<div class="chips" id="feed-chips">${chips}</div><div class="story" style="max-height:620px">${html || `<div class="empty">Nothing in this filter yet.</div>`}</div>
+    <div class="muted" style="font-size:11px;margin-top:6px"><span style="color:var(--series-1)">blue</span> = the team's price, <span style="color:var(--series-2)">orange</span> = the other side's · highlighted rows involve us</div>`;
+  $("feed-chips").querySelectorAll("[data-f]").forEach(el => el.onclick = () => { feedFilter = el.dataset.f; feed(D); });
 }
-
 
 // ---------- agent brain ----------
 function describe(r) {

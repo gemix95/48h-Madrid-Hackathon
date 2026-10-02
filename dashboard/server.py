@@ -63,7 +63,7 @@ ROUTES = {
     "duels": ("/api/duels", 6, True),
     "clock": ("/api/clock", 2, False),
     "board": ("/api/venues/rastro/offers", 5, False),
-    "feed": ("/api/feed?limit=60", 5, False),
+    "feed": ("/api/feed?limit=200", 5, False),
     "leaderboard": ("/api/leaderboard", 30, False),
     "levels": ("/api/levels", 30, False),
     "venues": ("/api/venues", 30, False),
