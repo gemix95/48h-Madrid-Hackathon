@@ -23,6 +23,22 @@ chest for a Salamanca epic or legendary if a higher-level dealer ("vault") appea
 Who wants what (from the feed, Friday): LAV buyers t10, t07, t01, t14 · MAL t17, t12, t10 · LAT t15, t07, t14 ·
 SAL t18, t16, t03. `agent/team_intel.py` refreshes this.
 
+## 0b. Where else to push (from RULES.md, Friday night)
+
+1. **Judges, 40 points**, the largest share, and nothing prepared yet. Build one page for them on Saturday: feed intel
+   that guessed our own multipliers blind, "numbers by code, words by the LLM" (validator, guard, tick budget),
+   dealer models from other teams' threads (Abuela's floor, Chato's step-for-step midpoint), proof-only flags, the dashboard.
+2. **Ladder: zero buys from Chato.** Best three deals per level count, a missing one as zero, higher levels weigh
+   more. First thing Saturday: three good Chato deals on cheap items (uncommons ~26 list, not rares at 90), opening
+   low with 5-6 P steps (section 6). Be first at every new dealer: early unlock is a head start.
+3. **Market making, 30 points, we have 0.** Keep v03 open all day (each Market Test counts the best venue open during
+   it; closing after a good session keeps nothing). We have 0 trades on v03: 0% fee, invitations, and a broker that
+   pairs other teams' crossing offers on our venue.
+4. **Duels**: I (~11:30), II (~18:00), III and the Grand Final on Sunday. No deal is 0, a deal past our limit is
+   negative. Merge `duels-wait-rule` if Duels I rivals concede like the practice ones.
+5. Bookkeeping: Friday weighs 1/2, Saturday and Sunday 1 each (Saturday is ~40% of the total). Penalties are a share
+   of the round score: no key sharing, no feeding another team. Gifts, pack luck, easter eggs and hidden cards never score.
+
 ## 1. Who runs what
 
 **Everything runs on Emmanuele's laptop. Exactly one process writes with our team key: `team13/agent.py`.**
