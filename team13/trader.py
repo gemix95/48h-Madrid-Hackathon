@@ -211,6 +211,20 @@ class Trader:
         budget = ctx.limit("offers_per_team_per_tick", 12) - 1
         open_total = len(mine)
 
+        # drop bids that stopped paying: our holdings change under them (a dealer deal, a pack, a trade)
+        for oid, L in list(listed.items()):
+            if L["kind"] != "bid":
+                continue
+            gain = v.gain_of_adding([L["ref"]])
+            if gain - L["price"] - fee(L["price"], 1) < MIN_GAIN:
+                try:
+                    ctx.api.cancel(int(oid))
+                    listed.pop(oid)
+                    open_total -= 1
+                    ctx.log("trade", "bid_dropped", offer=oid, ref=L["ref"], price=L["price"], our_value=round(gain, 1))
+                except BazaarError as e:
+                    ctx.log("trade", "cancel_refused", offer=oid, error=str(e))
+
         # reprice stale listings toward their floor
         for oid, L in list(listed.items()):
             if budget <= 1 or tick - L["tick"] < REPRICE:
