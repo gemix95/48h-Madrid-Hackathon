@@ -5,6 +5,8 @@
 Public routes are read without the team key (their own, generous rate limit), so the dashboard
 never eats into the 5 req/s our agents need. Team routes are spaced out in one background thread.
 """
+import base64
+import hmac
 import json
 import os
 import subprocess
@@ -19,6 +21,8 @@ from pathlib import Path
 URL = os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai")
 KEY = os.environ["BAZAAR_KEY"]
 PORT = int(os.environ.get("PORT", "8765"))
+# Set DASHBOARD_PASSWORD to require a login (user "team13") — always do this before sharing the dashboard remotely.
+PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 HERE = Path(__file__).parent
 PAGE = HERE / "index.html"
 HISTORY = HERE / "history.json"
@@ -146,7 +150,27 @@ def poll():
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _authorized(self):
+        """HTTP Basic auth when DASHBOARD_PASSWORD is set; the browser shows its own login box."""
+        if not PASSWORD:
+            return True
+        header = self.headers.get("Authorization", "")
+        if header.startswith("Basic "):
+            try:
+                user, _, pw = base64.b64decode(header[6:]).decode().partition(":")
+                if hmac.compare_digest(pw, PASSWORD):
+                    return True
+            except ValueError:
+                pass
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Team 13 war room"')
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return False
+
     def do_GET(self):
+        if not self._authorized():
+            return
         if self.path.startswith("/data"):
             with lock:
                 body = json.dumps({**cache, "history": history, "served_at": time.time(),
@@ -160,6 +184,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "text/plain", b"not found")
 
     def do_POST(self):
+        if not self._authorized():
+            return
         if not self.path.startswith("/strategy"):
             return self._send(404, "text/plain", b"not found")
         try:

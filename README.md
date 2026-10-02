@@ -23,6 +23,15 @@ the median other teams got, closes at once at the best price anyone got, spends 
 its most valuable item, and undercuts rival listings. See the dashboard's **Intel** tab.
 Strategy tests: `python3 team13/tests/tournament.py` (results in `team13/tests/RESULTS.md`).
 
+Remote access for teammates: start the dashboard with a password, then open a Cloudflare tunnel:
+
+```bash
+cd dashboard && DASHBOARD_PASSWORD=... python3 server.py      # login user: team13
+cloudflared tunnel --url http://localhost:8765                 # prints an https://...trycloudflare.com link
+```
+
+Never share the dashboard without `DASHBOARD_PASSWORD`: it shows our private values and can change the agent's strategy.
+
 Run only ONE agent per team key: two agents would fight over the one accept per tick.
 
 ## How we play to win
