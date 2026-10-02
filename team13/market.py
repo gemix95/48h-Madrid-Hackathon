@@ -166,7 +166,7 @@ class Market:
                          "instruction": "Write a short, friendly invitation. Only state the facts given. No price needed."}
             text, _, _ = ctx.speak(situation, (0, 0), (text, 0))
         try:
-            th = ctx.api.open_thread(target, venue=venue)
+            th = ctx.api.open_thread(target, venue="rastro")  # not on our own market: self_venue forbids it
             ctx.api.say(th["id"], text)
             inv[target] = day
             open_inv[str(th["id"])] = {"team": target, "tick": tick}
