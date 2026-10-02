@@ -240,10 +240,12 @@ class Haggler:
         buy = plan["side"] == "buy"
         nxt = self._next_price(plan)
 
-        def good(p):
-            return p is not None and ((buy and p <= plan["hi"]) or (not buy and p >= plan["lo"]))
+        def good(p):  # inside our limits, and (buying) never with the cash kept for the market bond
+            return p is not None and ((buy and p <= plan["hi"] and p <= ctx.me["cash"] - ctx.reserve()) or (not buy and p >= plan["lo"]))
 
         def good_final(p):  # finals: up to the threshold learned from every team's conversations
+            if buy and p is not None and p > ctx.me["cash"] - ctx.reserve():
+                return False  # never dip into the cash we keep for the market bond
             if good(p):
                 return True
             asks = plan.get("asks") or []
@@ -257,7 +259,9 @@ class Haggler:
             else:
                 ctx.log("haggle", "final_declined", thread=th["id"], ask=ask, plan=plan)
             return
-        if last and ask is not None and good(ask) and (plan.get("beginner") or (plan.get("target") is not None and (
+        if buy and ask is not None and ask > ctx.me["cash"] - ctx.reserve():
+            pass  # cannot afford it without touching the bond reserve: keep talking, never accept
+        elif last and ask is not None and good(ask) and (plan.get("beginner") or (plan.get("target") is not None and (
                 (buy and ask <= plan["target"]) or (not buy and ask >= plan["target"])))):
             if ctx.take_accept():
                 why = "fixed first-deal price" if plan.get("beginner") else f"matches the best price any team got ({plan['target']})"
