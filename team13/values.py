@@ -79,11 +79,19 @@ class Values:
                 return float("inf")  # we do not hold it: never agree
             c = self.cards[ref]
             sid = c["set"]
-            before = self.bonus(sid, held)
+            before = self.bonus(sid, held) + self.page_option(sid, held)
             held[ref] -= 1
             total += c["book"] * self.m(ref) * self.copy_factor(held[ref])
-            total += before - self.bonus(sid, held)
+            total += before - self.bonus(sid, held) - self.page_option(sid, held)
         return total
+
+    PAGE_OPTION = {1: 0.6, 2: 0.3}  # chance-weighted share of the page bonus while 1 or 2 page cards are missing
+
+    def page_option(self, set_id: str, held) -> float:
+        """What a nearly complete page is worth before it is complete: giving away one of its cards (SAL-07 from a
+        9/10 Salamanca page) costs the card and part of the bonus the last card would bring."""
+        missing = sum(1 for r in self.page_cards(set_id) if held[r] <= 0)
+        return self.PAGE_OPTION.get(missing, 0.0) * self.page_bonus_rate * self.page_value(set_id)
 
     # ---------------------------------------------------------------- helpers for strategies
     def spares(self) -> list:
