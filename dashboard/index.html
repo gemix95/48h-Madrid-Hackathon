@@ -739,7 +739,7 @@ function priceChart(mv, refs) {
   mv.forEach((m, i) => g += `<circle data-tip="${i}" cx="${X(m.tick)}" cy="${Y(m.price)}" r="12" fill="transparent"/>`);
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Prices over ticks">${g}</svg>`;
 }
-const THR = { sel: null };   // selected conversation tab
+const THR = { sel: null, view: null };   // selected conversation tab, and which group (open | deal | nodeal)
 // what a conversation trades, at what agreed price, and what that is worth to us
 function dealInfo(th, d, M) {
   const t = th.topic || {}, side = t.sell ? "sell" : "buy", w = t.sell || t.buy || {};
@@ -772,13 +772,18 @@ function heat(th, myId) {
 function threads(d, M) {
   const me = d.me, list = (d.threads?.threads || []).filter(t => t.status === "open" || (t.messages || []).length).slice().sort((a, b) => (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1) || b.id - a.id);
   if (!list.length) { $("threads").innerHTML = `<div class="empty">No conversations yet.</div>`; return; }
-  const rows = list.map(th => ({ th, h: heat(th, me.id) })).sort((a, b) => b.h.s - a.h.s || b.th.id - a.th.id).slice(0, 14);
+  const allRows = list.map(th => ({ th, h: heat(th, me.id), g: th.status === "open" ? "open" : th.status === "deal" ? "deal" : "nodeal" })).sort((a, b) => b.h.s - a.h.s || b.th.id - a.th.id);
+  const count = g => allRows.filter(r => r.g === g).length;
+  if (!THR.view || !count(THR.view)) THR.view = count("open") ? "open" : count("deal") ? "deal" : "nodeal";
+  const rows = allRows.filter(r => r.g === THR.view).slice(0, 40);
   if (!rows.some(r => r.th.id === THR.sel)) THR.sel = rows[0].th.id;
+  const grp = (g, label) => `<button class="btn-s ${THR.view === g ? "on" : ""}" onclick="THR.view='${g}';THR.sel=null;threads(D,model(D))">${label} · ${count(g)}</button>`;
+  const groups = `<div style="display:flex;gap:8px;margin-bottom:10px">${grp("open", "Open")}${grp("deal", "✓ Deals")}${grp("nodeal", "✕ No deal")}</div>`;
   const tabs = `<div class="thr-tabs">${rows.map(r => { const x = dealInfo(r.th, d, M), deal = r.th.status === "deal", open = r.th.status === "open";
     const status = deal ? `✓ ${x.side === "sell" ? "sold" : "bought"}${x.price != null ? ` ${x.price} P` : ""}` : open ? r.h.label : "✕ no deal";
     return `<button class="thr-tab ${r.th.id === THR.sel ? "on" : ""}" style="--hc:${r.h.col}" onclick="THR.sel=${r.th.id};threads(D,model(D))"><b>${esc(r.th.with)}</b><span>${x.what}</span>${open && r.h.them != null ? `<span><b style="color:var(--series-2)">${r.h.them} P</b>${r.h.us != null ? ` · <b style="color:var(--series-1)">${r.h.us} P</b>` : ""}</span>` : ""}<em>${esc(status)}</em></button>`; }).join("")}</div>`;
   const shownList = rows.filter(r => r.th.id === THR.sel).map(r => r.th);
-  $("threads").innerHTML = tabs + shownList.map(th => {
+  $("threads").innerHTML = groups + tabs + shownList.map(th => {
     const mv = moves(th, me.id), { entry, want } = menuFor(d, th);
     const ev = want?.pack && d.catalog ? M.packEV(d.catalog.packs.find(p => p.id === want.pack) || { slots: [] }) : null;
     const x = dealInfo(th, d, M);
@@ -791,14 +796,15 @@ function threads(d, M) {
     const msgs = (th.messages || []).map(m => { const u = isUs(m, me.id), p = msgPrice(m);
       return `<div class="msg ${u ? "us" : ""}"><div class="who" title="tick ${m.tick ?? "?"}"><i class="swatch" style="background:${u ? "var(--series-1)" : "var(--series-2)"}"></i>${u ? "Team 13" : esc(th.with)}${p != null ? ` <span class="px" style="color:${u ? "var(--series-1)" : "var(--series-2)"}">${p} P</span>` : ""}${m.final || m.offer?.final ? ` <span class="final-chip">FINAL · take it or leave it</span>` : ""}</div>${esc(m.text)}</div>`; }).join("");
     const verb = x.side === "sell" ? "Sell" : "Buy", prep = x.side === "sell" ? "to" : "from", lastThem = them[them.length - 1];
+    const subject = Object.keys(th.topic || {}).length ? `${verb} ${esc(x.name)} ${prep} ${esc(th.with)}` : `Chat with ${esc(th.with)}`;
     const gainTxt = x.gain != null ? ` <span class="muted">worth ≈ ${fmt(x.worth, 0)} P to us →</span> <b style="color:${x.gain >= 0 ? "var(--up)" : "var(--critical)"}">${x.gain >= 0 ? "+" : ""}${fmt(x.gain, 0)} P</b>` : "";
     const result = th.status === "deal"
       ? `<div class="result" style="--rc:var(--good)"><b class="big" style="color:var(--up)">✓ ${x.side === "sell" ? "Sold" : "Bought"} ${esc(x.name)}${x.price != null ? ` for ${x.price} P` : ""}</b> ${x.what} <span class="muted">${prep} ${esc(th.with)}</span>${gainTxt}</div>`
       : th.status !== "open"
-      ? `<div class="result" style="--rc:var(--muted)"><b class="big">✕ No deal</b> <span>${verb} ${esc(x.name)} ${prep} ${esc(th.with)}</span> ${x.what}${th.closed_reason ? ` <span class="muted">· ${esc(th.closed_reason)}</span>` : ""}</div>`
+      ? `<div class="result" style="--rc:var(--muted)"><b class="big">✕ No deal</b> <span>${subject}</span> ${x.what}<span class="muted">· ${esc(th.status === "walked" ? `${th.with} walked away` : th.closed_reason === "final_offer_refused" ? "we turned down the final offer" : th.closed_reason ? th.closed_reason.replace(/_/g, " ") : "conversation closed without a deal")}</span></div>`
       : lastThem?.final
       ? `<div class="result" style="--rc:var(--critical)"><b class="big" style="color:var(--critical)">FINAL offer from ${esc(th.with)}: ${lastThem.price} P</b> <span>take it or ${esc(th.with)} walks</span> <span class="muted">· ${verb.toLowerCase()} ${esc(x.name)}</span> ${x.what}</div>`
-      : `<div class="result" style="--rc:var(--serious)"><b class="big">● Open</b> <span>${verb} ${esc(x.name)} ${prep} ${esc(th.with)}</span> ${x.what}${lastThem ? ` · <b style="color:var(--series-2)">${esc(th.with)} ${lastThem.price} P</b>` : ""}${us.length ? ` · <b style="color:var(--series-1)">us ${us[us.length - 1].price} P</b>` : ""}${spread != null ? ` · <span class="muted">gap ${spread} P</span>` : ""}</div>`;
+      : `<div class="result" style="--rc:var(--serious)"><b class="big">● Open</b> <span>${subject}</span> ${x.what}${lastThem ? ` · <b style="color:var(--series-2)">${esc(th.with)} ${lastThem.price} P</b>` : ""}${us.length ? ` · <b style="color:var(--series-1)">us ${us[us.length - 1].price} P</b>` : ""}${spread != null ? ` · <span class="muted">gap ${spread} P</span>` : ""}</div>`;
     return `<div class="thread" data-th="${th.id}"><div class="thread-head"><b style="font-size:15px">${esc(th.with)}</b><span class="muted" style="font-size:12px">#${th.id} · since tick ${th.created_tick}</span></div>${result}
       <div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Our offer</span><span><i class="swatch" style="background:var(--series-2)"></i>${esc(th.with)}'s ask</span><span><i class="swatch" style="border-top:2px dashed var(--muted);height:0"></i>Reference prices</span></div>
       ${priceChart(mv, refs)}<div class="msgs">${msgs || `<div class="empty">Waiting for the first message…</div>`}</div></div>`;
