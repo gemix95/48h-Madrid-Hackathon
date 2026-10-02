@@ -943,7 +943,7 @@ function story(r) {  // [sentence, why]
     case "agent.start": return ["Agent started", r.dry ? "dry-run: logs only" : ""];
     case "agent.idle": return [r.paused ? "Waiting: the organisers paused the clock" : "Waiting: the doors are closed", ""];
     case "haggle.opened": return [`Started haggling with ${dn(r.dealer)} for ${esc(Object.values(Object.values(r.topic || {})[0] || {}).join(" "))}`, `first offer ${r.plan?.lo} P, never above ${r.plan?.hi} P`];
-    case "haggle.offer": return [`Offered ${dn((r.plan || {}).dealer)} <b>${r.price} P</b>${r.ask != null ? ` (she asks ${r.ask} P)` : ""}${r.by === "claude" ? '<span class="ai">AI</span>' : ""}`, r.text ? `“${esc(r.text)}”` : ""];
+    case "haggle.offer": return [`Offered ${dn((D?.threads?.threads || []).find(t => t.id === r.thread)?.with || "abuela")} <b>${r.price} P</b>${r.ask != null ? ` (she asks ${r.ask} P)` : ""}${r.by === "claude" ? '<span class="ai">AI</span>' : ""}`, r.text ? `“${esc(r.text)}”` : ""];
     case "haggle.accept": return [`<b>Accepted ${r.price ?? ""} P</b> from the dealer`, esc(r.reason)];
     case "haggle.deal": return [`✓ <b>Deal: bought for ${r.price} P</b> (list ${r.list} P)`, r.list ? `${Math.round((1 - r.price / r.list) * 100)}% under list, after ${r.rounds} offers` : ""];
     case "haggle.final_declined": return [`Declined a final offer of ${r.ask} P`, "above what the data says is worth paying; a new conversation will follow"];
@@ -1064,7 +1064,7 @@ function brain(d) {
   }
   $("brain").innerHTML = groups.slice(0, 120).map(g => { const r = g.items[0], cat = catOf(r);
     let [txt, why] = story(r);
-    if (g.items.length > 1) { txt = `${txt.replace(/<b>.*?<\/b>/, `<b>${g.items.length} items</b>`)}`; why = g.items.map(x => `${x.ref} ${x.price ?? ""} P`).join(" · "); }
+    if (g.items.length > 1) { txt = `${txt.replace(/<b>.*?<\/b>/, `<b>${g.items.length} items</b>`)}`; why = g.items.map(x => { const i = x.info || x; return `${i.ref || "?"}${i.price != null ? ` ${i.price} P` : ""}`; }).join(" · "); }
     return `<div class="ev ${cat === "deal" ? "win" : ""}"><div class="tm">${hm(new Date(r.ts * 1000))}</div><div class="ic">${CAT[cat][0]}</div><div>${txt}${why ? `<div class="why">${why}</div>` : ""}</div></div>`; }).join("")
     || `<div class="empty">Nothing yet.</div>`;
 }
