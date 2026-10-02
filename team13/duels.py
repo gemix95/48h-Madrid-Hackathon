@@ -40,6 +40,8 @@ class Duels:
             return
         seen = ctx.state.setdefault("duels_seen", [])
         for d in duels:
+            if d.get("id") is None and d.get("duel") is not None:
+                d["id"] = d["duel"]  # the server names the duel's id "duel" (practice round, Fri 22:20)
             if str(d.get("id")) not in seen:
                 seen.append(str(d.get("id")))
                 ctx.log("duel", "raw", payload=d)  # learn the shape during the practice round
