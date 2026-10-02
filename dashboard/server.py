@@ -30,6 +30,8 @@ sys.path.insert(0, str(HERE.parent / "team13"))
 import strategy  # noqa: E402  (team13/strategy.py: the knobs the agent reads every tick)
 from intel import Intel  # noqa: E402  (team13/intel.py: what every team does, from the public feed)
 INTEL = Intel(HERE / "feed_events.jsonl", url=URL)
+import advisor  # noqa: E402  (team13/advisor.py: recalibrates on every team's deals, proposes better settings)
+RECHECK = threading.Event()
 DECISIONS = HERE.parent / "team13" / "logs" / "decisions.jsonl"
 BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 
@@ -111,6 +113,33 @@ def listen():
             time.sleep(5)
 
 
+def list_prices():
+    lp = {}
+    for p in (cache.get("dealers") or {}).get("personas", []):
+        for s in (p.get("menu") or {}).get("sells", []):
+            lp[f"buy:pack:{s['pack']}" if s.get("pack") else f"buy:card:{s.get('rarity')}"] = s.get("list_price")
+    return lp
+
+
+def advise():
+    """Every 5 minutes (or on demand): re-run the tournament on what all teams got, store any better strategy."""
+    time.sleep(20)  # let the first feed refresh land
+    while True:
+        try:
+            res = advisor.propose(INTEL.summary(), list_prices(), strategy.load())
+            with lock:
+                dismissed = (cache.get("proposal") or {}).get("dismissed")
+                if dismissed and res.get("changes") == dismissed:
+                    res["status"], res["note"] = "dismissed", "you dismissed this proposal"
+                res["dismissed"] = dismissed
+                cache["proposal"] = res
+        except Exception as e:
+            with lock:
+                cache["proposal"] = {"status": "error", "error": repr(e)[:200], "at": time.time()}
+        RECHECK.wait(300)
+        RECHECK.clear()
+
+
 def agent_running():
     """Is team13/agent.py running on this machine? (matches ' agent.py' or '/agent.py', not starter_agent.py)"""
     try:
@@ -186,6 +215,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._authorized():
             return
+        if self.path.startswith("/strategy/recheck"):
+            RECHECK.set()
+            return self._send(200, "application/json", b'{"ok": true}')
+        if self.path.startswith("/strategy/dismiss"):
+            with lock:
+                prop = cache.get("proposal") or {}
+                prop["dismissed"], prop["status"] = prop.get("changes"), "dismissed"
+            return self._send(200, "application/json", b'{"ok": true}')
         if not self.path.startswith("/strategy"):
             return self._send(404, "text/plain", b"not found")
         try:
@@ -210,5 +247,6 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     threading.Thread(target=poll, daemon=True).start()
     threading.Thread(target=listen, daemon=True).start()
+    threading.Thread(target=advise, daemon=True).start()
     print(f"Team 13 war room on http://localhost:{PORT}")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

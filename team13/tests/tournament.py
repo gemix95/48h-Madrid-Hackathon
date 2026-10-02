@@ -32,11 +32,17 @@ class Stub:
         self.S = S
 
 
-def dealer_episode(rnd, S, persona, impatient=False):
+def dealer_episode(rnd, S, persona, impatient=False, calib=None):
+    """calib (from intel.py, every team's real deals): {"open_ratio": [...], "floor_ratio": [...], "rounds": [...]}"""
     lst = rnd.choice([10, 25, 26])
-    O = lst * rnd.uniform(0.7, 1.2)                     # dealer's opening ask
-    F = O * rnd.uniform(0.5, 0.85)                      # secret floor
-    patience = rnd.randint(4, 10) if impatient else rnd.randint(8, 22)  # Abuela: patience 0.85; later dealers may be less
+    if calib:
+        O = lst * rnd.choice(calib["open_ratio"])        # a real opening ask, relative to list
+        F = O * rnd.choice(calib["floor_ratio"]) * rnd.uniform(0.9, 1.0)  # real deals bound the floor from above
+        patience = max(3, rnd.choice(calib["rounds"]) + rnd.randint(0, 4))
+    else:
+        O = lst * rnd.uniform(0.7, 1.2)                     # dealer's opening ask
+        F = O * rnd.uniform(0.5, 0.85)                      # secret floor
+        patience = rnd.randint(4, 10) if impatient else rnd.randint(8, 22)  # Abuela: patience 0.85; later dealers may be less
     h = Haggler(Stub(S))
     plan = {"side": "buy", "lo": max(1, math.floor(S["haggle_open"] * lst)), "hi": math.floor(lst * S["haggle_cap"]),
             "k": 0, "offers": [], "asks": [math.ceil(O)]}
@@ -68,6 +74,17 @@ def dealer_episode(rnd, S, persona, impatient=False):
             return ((O - final) / (O - F), rnd_i) if final <= plan["hi"] else (0.0, rnd_i)
         plan["asks"].append(math.ceil(ask))
     return 0.0, 60
+
+
+def eval_dealers_calibrated(S, calib, n=400, seed=3):
+    """Dealers drawn from what every team actually saw (reciprocal and drop-hold behaviour)."""
+    out = {}
+    for persona in ("reciprocal", "drop-hold"):
+        rnd = random.Random(seed)
+        res = [dealer_episode(rnd, S, persona, calib=calib) for _ in range(n)]
+        out["observed-" + persona] = (statistics.mean(max(0, min(1, c)) for c, _ in res), statistics.mean(r for _, r in res),
+                                      sum(1 for c, _ in res if c > 0) / n)
+    return out
 
 
 def eval_dealers(S, n=600, seed=1):

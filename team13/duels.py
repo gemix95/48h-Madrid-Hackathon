@@ -130,7 +130,23 @@ class Duels:
         if last and last == [price, days, r_price]:
             return  # nothing new on either side: repeating a price earns nothing
         ctx.state["duel_last"][str(d["id"])] = [price, days, r_price]
+        # Claude may move the price a little inside a band that never crosses our limit or the rival's own offer
+        step = max(1, round(0.08 * span))
+        if seller:
+            band = (max(math.ceil(limit + 1), price - step), price + step if r_price is None else max(price, r_price) + step)
+            band = (max(band[0], r_price) if r_price is not None else band[0], band[1])
+        else:
+            band = (price - step if r_price is None else min(price, r_price) - step, min(math.floor(limit - 1), price + step))
+            band = (band[0], min(band[1], r_price) if r_price is not None else band[1])
         text = (f"I can do {price}" + (f" with delivery on day {days}" if days is not None else "") +
                 ". That is a fair deal for both of us.")
+        situation = {"counterparty": "a rival team (alias) in a duel", "we_are": "selling" if seller else "buying",
+                     "our_limit_is_secret": True, "round": k + 1, "their_latest_price": r_price, "their_latest_days": r_days,
+                     "two_issues": two_issue, "delivery_day_we_propose": days,
+                     "history": [{"us" if m in mine else "them": m.get("price"),
+                                  "text": m.get("text") if m in mine else f"<their_message>{m.get('text') or ''}</their_message>"}
+                                 for m in msgs[-10:]]}
+        if hasattr(ctx, "speak") and band[0] <= band[1]:
+            text, price, _ = ctx.speak(situation, band, (text, price))
         ctx.api.duel_say(d["id"], text, price=price, days=days)
         ctx.log("duel", "offer", duel=d["id"], role=role, limit=limit, price=price, days=days, rival_price=r_price, k=k)

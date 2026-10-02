@@ -195,6 +195,13 @@ class Haggler:
         ctx = self.ctx
         plans = ctx.state.setdefault("plans", {})
         plan = plans.get(str(th["id"]))
+        if plan is None and not ctx.S.get("adopt_threads", 0):
+            # opened by someone else on our key (a teammate's tool): leave it alone, never talk over them
+            seen = ctx.state.setdefault("foreign_threads", [])
+            if th["id"] not in seen:
+                seen.append(th["id"])
+                ctx.log("haggle", "skip_foreign_thread", thread=th["id"], dealer=dealer["id"])
+            return
         if plan is None:  # a conversation we did not open (the starter's): adopt it with defaults
             menu = (dealer.get("menu") or {}).get("sells", [])
             want = (th.get("topic") or {}).get("buy") or {}
@@ -238,11 +245,30 @@ class Haggler:
             return  # at our cap: wait for her to move or name a final offer
         texts = KIND_BUY if buy else KIND_SELL
         text = texts[(plan["k"] + random.randrange(len(texts))) % len(texts)].format(name=plan.get("name", "Carmen"), p=nxt)
+        # the safe band around the rule price: always a new price, never past our cap or her ask
+        last_ours = plan["offers"][-1] if plan["offers"] else None
+        if buy:
+            lo_b = max(nxt - 2, (last_ours + 1) if last_ours is not None else 1, 1)
+            hi_b = min(nxt + 2, plan["hi"], (ask - 1) if ask is not None else plan["hi"])
+        else:
+            lo_b = max(nxt - 2, plan["lo"], (ask + 1) if ask is not None else plan["lo"])
+            hi_b = min(nxt + 2, (last_ours - 1) if last_ours is not None else nxt + 2)
+        situation = {
+            "counterparty": f"{dealer.get('name')} (dealer): {dealer.get('title', '')}", "traits": dealer.get("traits"),
+            "bio": (dealer.get("bio") or "")[:400], "we_are": "buying" if buy else "selling",
+            "item": th.get("topic"), "list_price": plan.get("list"), "her_latest_ask": ask,
+            "other_teams_got": plan.get("intel"), "round": plan["k"] + 1,
+            "history": [{"us" if m.get("sender") == ctx.me["id"] else "them": ((m.get("offer") or {}).get("give") or {}).get("cash")
+                         or ((m.get("offer") or {}).get("want") or {}).get("cash"),
+                         "text": m.get("text") if m.get("sender") == ctx.me["id"] else f"<their_message>{m.get('text') or ''}</their_message>"}
+                        for m in th.get("messages", [])[-10:]],
+        }
+        text, nxt, source = ctx.speak(situation, (lo_b, hi_b), (text, nxt)) if lo_b <= hi_b else (text, nxt, "rules")
         try:
             ctx.api.say(th["id"], text, price=nxt)
             plan["offers"].append(nxt)
             plan["k"] += 1
-            ctx.log("haggle", "offer", thread=th["id"], price=nxt, ask=ask, k=plan["k"])
+            ctx.log("haggle", "offer", thread=th["id"], price=nxt, ask=ask, k=plan["k"], by=source, text=text[:200])
         except BazaarError as e:
             if e.code != "wait_for_tick":
                 ctx.log("haggle", "say_refused", thread=th["id"], price=nxt, error=str(e))

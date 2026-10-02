@@ -10,3 +10,4 @@ team13/logs/
 logs/
 feed_events.jsonl
 dashboard/.password
+.venv/

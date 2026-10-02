@@ -16,6 +16,9 @@ KNOBS = {
     "enable_trader": (1, 0, 1, 1, "Modules", "Team trading", "Trade with other teams on El Rastro at our private values."),
     "enable_duels": (1, 0, 1, 1, "Modules", "Duels", "Play the duel tournament automatically."),
     "enable_venue": (1, 0, 1, 1, "Modules", "Open our market", "Open our own market as soon as we reach level 2."),
+    "llm_negotiator": (1, 0, 1, 1, "Modules", "AI negotiator (Claude Opus 5.5)",
+                       "Claude writes each message and picks the price inside the safe band the rules allow; "
+                       "falls back to templates if the API is slow or unavailable."),
     "use_intel": (1, 0, 1, 1, "Modules", "Learn from other teams",
                   "Read every team's deals in the public feed: never pay above what others typically get, close at once "
                   "when the dealer's ask matches the best price anyone got, spend a new dealer's fixed first-deal price on our best item."),
@@ -51,8 +54,8 @@ KNOBS = {
     "duel_accept": (0.6, 0.4, 1.0, 0.05, "Duels", "Accept threshold",
                     "Take the rival's offer when it gives us this share of what our next offer would."),
     # market
-    "venue_fee_bps": (100, 0, 1000, 25, "Market", "Our market fee (bps)",
-                      "100 = 1%. Low fees attract trades; fees earned never score."),
+    "venue_fee_bps": (0, 0, 1000, 25, "Market", "Our market fee (bps)",
+                      "0 = free. Fees earned never score; trades between other teams on our market do, so free attracts the most."),
     "reserve_cash": (270, 0, 400, 10, "Market", "Cash kept for the market bond (P)",
                      "The bond is 250 + 20. Set 0 to spend everything on deals."),
 }
@@ -63,7 +66,7 @@ PRESETS = {
     "Previous defaults": {"haggle_open": 0.45, "haggle_rounds": 12, "duel_rounds": 6, "duel_anchor": 0.6, "duel_accept": 0.9},
     "Fast closer": {"haggle_open": 0.6, "haggle_rounds": 7, "haggle_curve": 1.5, "trade_min_gain": 2,
                     "trade_ask_start": 1.1, "trade_bid_start": 0.75, "duel_rounds": 4, "duel_accept": 0.8},
-    "Market first": {"reserve_cash": 270, "trade_bid_share": 0.2, "haggle_buy_cards": 0, "venue_fee_bps": 50},
+    "Market first": {"reserve_cash": 270, "trade_bid_share": 0.2, "haggle_buy_cards": 0, "venue_fee_bps": 0},
 }
 
 # Simulated scores per preset (tests/tournament.py, see tests/RESULTS.md)

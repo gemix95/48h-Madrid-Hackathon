@@ -155,6 +155,11 @@ def main():
         key = json.loads(st.read_text()).get("broker_key") if st.exists() else None
     if not key:
         raise SystemExit("No broker key yet: the agent opens our venue at level 2 and stores it in state.json.")
+    run(url, key)
+
+
+def run(url, key):
+    """The broker loop. The agent starts it in a thread as soon as our venue is open (market.py)."""
     broker, tracker, seen = Broker(url, key), Tracker(), None
     log(event="start")
     while True:

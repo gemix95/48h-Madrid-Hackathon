@@ -141,6 +141,11 @@ class Trader:
         for th in ctx.threads:
             if th.get("kind") == "persona" or th["status"] != "open":
                 continue
+            if str(th["id"]) not in ctx.state.get("team_threads_ours", []) and any(
+                    m.get("sender") == ctx.me["id"] for m in th.get("messages", [])) and not ctx.S.get("adopt_threads", 0):
+                continue  # a teammate is already talking in this conversation
+            if th.get("venue") and th.get("venue") == ctx.state.get("venue"):
+                continue  # our own market: we may not trade there (self_venue); market.py handles these talks
             theirs = [o for o in th.get("standing_offers", []) if o.get("maker") != ctx.me["id"] and o.get("status") == "open"]
             if theirs:
                 o = theirs[-1]
@@ -155,6 +160,14 @@ class Trader:
                 counter = self.counter(ev)
                 last_tick = ctx.state.setdefault("team_reply_tick", {}).get(str(th["id"]), -99)
                 if counter and ctx.clock["tick"] - last_tick >= 2:
+                    p = (counter["offer"].get("want") or {}).get("cash") or (counter["offer"].get("give") or {}).get("cash")
+                    situation = {"counterparty": f"another team ({th.get('with')})", "we_are": "trading cards at a venue",
+                                 "our_structured_offer": counter["offer"], "their_offer": o,
+                                 "history": [{"them" if m.get("sender") != ctx.me["id"] else "us":
+                                              f"<their_message>{m.get('text') or ''}</their_message>" if m.get("sender") != ctx.me["id"] else m.get("text")}
+                                             for m in th.get("messages", [])[-8:]]}
+                    if p:  # words only: the structured offer stays exactly as the rules computed it
+                        counter["text"], _, _ = ctx.speak(situation, (p, p), (counter["text"], p))
                     try:
                         ctx.api.say(th["id"], counter["text"], offer=counter["offer"])
                         ctx.state["team_reply_tick"][str(th["id"])] = ctx.clock["tick"]

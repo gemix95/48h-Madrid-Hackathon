@@ -208,23 +208,33 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
 
   <main class="tab" id="tab-strategy">
     <div class="grid">
-      <section class="s7">
+      <section class="s8">
         <div class="card" style="margin-bottom:16px">
-          <h2>Our game plan <span class="hint">100 points: where they come from, how we go after them, how it is going</span></h2>
-          <div id="plan-split"></div>
+          <h2>Our strategy right now</h2>
+          <div id="plan"></div>
+          <div id="plan-split" style="margin-top:14px"></div>
         </div>
-        <div id="plan"></div>
+        <div class="card" id="proposal-card">
+          <h2>Strategy advisor <span class="hint">re-tests our settings on every team's real deals, every 5 minutes</span></h2>
+          <div id="proposal"></div>
+        </div>
       </section>
-      <section class="card s5" style="align-self:start;position:sticky;top:64px">
-        <h2>Settings <span class="hint">the agent picks changes up on the next tick</span></h2>
-        <div class="legend" style="margin-bottom:10px">Presets:</div>
-        <div id="presets" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
-        <div id="knobs"></div>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:14px">
-          <button class="btn primary" id="save">Save strategy</button>
-          <button class="btn" id="reset">Back to defaults</button>
-          <span id="saved" class="muted" style="font-size:12px"></span>
-        </div>
+      <section class="s4">
+        <div class="card" style="margin-bottom:16px"><h2>AI negotiator</h2><div id="llm"></div></div>
+        <div class="card"><h2>Our market</h2><div id="market-status"></div></div>
+      </section>
+      <section class="card s12">
+        <details id="advanced"><summary>Advanced settings: presets and every knob</summary>
+          <div style="max-width:720px;margin-top:12px">
+            <div id="presets" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+            <div id="knobs"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:14px">
+              <button class="btn primary" id="save">Save strategy</button>
+              <button class="btn" id="reset">Back to defaults</button>
+              <span id="saved" class="muted" style="font-size:12px"></span>
+            </div>
+          </div>
+        </details>
       </section>
     </div>
   </main>
@@ -717,7 +727,7 @@ function market(d, M) {
 function leaderboard(d) {
   const teams = (d.leaderboard?.teams || []).slice().sort((a, b) => b.score - a.score || a.rank - b.rank);
   if (!teams.length) { $("leaderboard").innerHTML = `<div class="empty">No leaderboard yet.</div>`; return; }
-  const W = 640, rowH = 22, L = 110, R = 150, H = teams.length * rowH + 4;
+  const W = 700, rowH = 22, L = 110, R = 230, H = teams.length * rowH + 4;
   const max = Math.max(1, ...teams.map(t => (t.negotiating || 0) + (t.market || 0)));
   const X = v => v / max * (W - L - R);
   let g = "";
@@ -728,13 +738,14 @@ function leaderboard(d) {
     if (n > 0) g += `<rect x="${L}" y="${y + 4}" width="${Math.max(1, n - 1)}" height="12" rx="2" fill="var(--series-1)"/>`;
     if (m > 0) g += `<rect x="${L + n + 1}" y="${y + 4}" width="${Math.max(1, m - 1)}" height="12" rx="2" fill="var(--series-2)"/>`;
     g += `<text x="${L + n + m + 6}" y="${y + 14}" class="ink1">${fmt(t.score)}</text>`;
-    g += `<text x="${W - 4}" y="${y + 14}" text-anchor="end">L${t.level} · ${t.album_filled}/${t.album_slots} · ${t.deals} deals</text>`;
+    const spent = d.intel?.teams?.[t.team]?.spent;
+    g += `<text x="${W - 4}" y="${y + 14}" text-anchor="end">L${t.level} · ${t.album_filled}/${t.album_slots} · ${t.deals} deals · ${spent ?? 0} P spent</text>`;
     g += `<rect data-tip="${i}" x="0" y="${y}" width="${W}" height="${rowH}" fill="transparent"/>`;
   });
   g += `<line x1="${L}" x2="${L}" y1="0" y2="${H}" stroke="var(--axis)"/>`;
-  $("leaderboard").innerHTML = `<div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Negotiating</span><span><i class="swatch" style="background:var(--series-2)"></i>Market-making</span><span class="muted">right: level · album · deals</span></div>
+  $("leaderboard").innerHTML = `<div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Negotiating</span><span><i class="swatch" style="background:var(--series-2)"></i>Market-making</span><span class="muted">right: level · album · deals · spent at dealers</span></div>
     <svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg><div class="empty" style="margin-top:6px">The public board is a snapshot that refreshes every few minutes; our tile score is live.</div>`;
-  bindTips($("leaderboard"), i => { const t = teams[i]; return `<b>${esc(t.name)}</b> · score ${fmt(t.score)}<br>negotiating ${fmt(t.negotiating)} · market ${fmt(t.market)}<br>level ${t.level} · album ${t.album_filled}/${t.album_slots} · ${t.pages_complete} pages · ${t.deals} deals<br>rarest: ${esc(t.rarest?.name || "–")} ${t.rarest ? `#${t.rarest.serial}/${t.rarest.print_run}` : ""}${t.venue ? `<br>venue: ${esc(t.venue)}` : ""}`; });
+  bindTips($("leaderboard"), i => { const t = teams[i]; return `<b>${esc(t.name)}</b> · score ${fmt(t.score)}<br>negotiating ${fmt(t.negotiating)} · market ${fmt(t.market)}<br>level ${t.level} · album ${t.album_filled}/${t.album_slots} · ${t.pages_complete} pages · ${t.deals} deals<br>spent at dealers: ${d.intel?.teams?.[t.team]?.spent ?? "–"} P (${d.intel?.teams?.[t.team]?.negotiated ?? 0} haggled)<br>rarest: ${esc(t.rarest?.name || "–")} ${t.rarest ? `#${t.rarest.serial}/${t.rarest.print_run}` : ""}${t.venue ? `<br>venue: ${esc(t.venue)}` : ""}`; });
 }
 function feed(d) {
   const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
@@ -861,7 +872,7 @@ function strategyForm() {
     if (el.type === "checkbox") return strategyForm();
     const twin = $("knobs").querySelector(el.dataset.k ? `[data-n="${k}"]` : `[data-k="${k}"]`); if (twin) twin.value = el.value;
     el.closest(".knob").classList.toggle("changed", draft[k] != SD.knobs[k].default);
-    $("saved").textContent = "unsaved changes"; if (D) strategyPlan(D, model(D));
+    $("saved").textContent = "unsaved changes";
   });
 }
 $("save").onclick = async () => {
@@ -874,61 +885,84 @@ loadStrategy();
 
 function strategyPlan(d, M) {
   if (!SD) return;
-  const S = draft || SD.current, me = d.me, sc = me.score || {}, c = d.clock || {};
-  const threads = d.threads?.threads || [], recs = d.decisions || [];
-  const dealsT = threads.filter(t => t.kind === "persona" && t.status === "deal");
-  const paid = dealsT.map(t => { const ours = (t.messages || []).filter(m => m.offer && m.offer.status !== "cancelled"); const last = (t.messages || []).slice(-1)[0]; return last ? msgPrice(last) : null; }).filter(p => p);
-  const lists = dealsT.map(t => { const { entry } = menuFor(d, t); const w = t.topic?.buy || {}; return entry?.list_price ?? (w.card ? (M.byRef[w.card]?.rarity === "uncommon" ? 25 : 10) : null); });
-  const share = paid.length ? paid.reduce((t, p, i) => t + p / (lists[i] || p), 0) / paid.length : null;
+  const S = SD.current, me = d.me, sc = me.score || {}, c = d.clock || {}, recs = d.decisions || [];
+  const threads = d.threads?.threads || [];
+  const deals = threads.filter(t => t.kind === "persona" && t.status === "deal").length;
+  const trades = recs.filter(r => r.module === "trade" && /^accept/.test(r.action) && r.gain != null);
+  const venue = (d.venues?.venues || []).find(v => v.owner === me.id && v.status === "open");
   const ev = a => (d.schedule?.upcoming || []).find(e => e.action === a && e.at_hours >= (c.t_hours || 0));
   const nd = ev("duels"), nb = ev("bench");
-  const trades = recs.filter(r => r.module === "trade" && /^accept/.test(r.action) && r.gain != null);
-  const rastro = (d.offers?.offers || []).filter(o => o.venue === "rastro");
-  const venue = (d.venues?.venues || []).find(v => v.owner === me.id && v.status === "open");
-  const unlocked = (me.unlocked || []).length;
-  const ok = (good, warnTxt, goodTxt) => good ? `<span class="status" style="color:var(--up)">✓ ${goodTxt}</span>` : `<span class="status" style="color:var(--serious)">▲ ${warnTxt}</span>`;
-  const areas = [
-    { name: "Dealer ladder", pts: "part of Negotiating · 30", st: ok(dealsT.length >= 3, `${dealsT.length}/3 negotiated deals`, `${dealsT.length} deals, ladder unlocked`),
-      why: ["Scores the share of each dealer's price range we capture; only our best 3 deals per level count.", "3 negotiated deals (never at the opening price) unlock the next dealer early, and level 2 lets us open our market."],
-      how: [`Open at <b>${Math.round(S.haggle_open * 100)}%</b> of list, reach our cap of <b>${Math.round(S.haggle_cap * 100)}%</b> over <b>${S.haggle_rounds}</b> rounds (curve ${S.haggle_curve}: small steps first).`,
-        `Kind, varied words for Abuela; a final offer is taken only inside our cap.`,
-        `Buys: ${[S.haggle_buy_packs && "packs", S.haggle_buy_cards && "single cards we value", S.haggle_sell_spares && "and sells spares"].filter(Boolean).join(", ") || "nothing (all off)"}.`],
-      stats: [["deals", dealsT.length], ["avg paid vs list", share != null ? `${Math.round(share * 100)}%` : "–"], ["ladder points", fmt(sc.ladder_points)], ["dealers open", unlocked]] },
-    { name: "Team trades", pts: "part of Negotiating · 30", st: ok(trades.length > 0, "no trades yet", `${trades.length} trades`),
-      why: ["Scores the value we gain at our private values: give what is worth little to us, get what is worth a lot.",
-        `Our multipliers: ${Object.entries(M.aff).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${SET_NAMES[k] || k} ×${v}`).join(", ")}.`],
-      how: [`Take any board offer that gains us ≥ <b>${S.trade_min_gain} P</b> after fees.`,
-        `List up to <b>${S.trade_max_asks}</b> spares from <b>${S.trade_ask_start}×</b> book, dropping every ${S.trade_reprice_ticks} ticks toward a floor that still gains us value.`,
-        `Bid up to <b>${S.trade_max_bids}</b> cards from <b>${S.trade_bid_start}×</b> book with at most <b>${Math.round(S.trade_bid_share * 100)}%</b> of free cash.`],
-      stats: [["trades", trades.length], ["value created", trades.length ? `+${fmt(trades.reduce((t, r) => t + r.gain, 0))} P` : "–"], ["our offers on El Rastro", rastro.length], ["trade points", fmt(sc.neg_points)]] },
-    { name: "Duels", pts: "part of Negotiating · 30", st: nd ? `<span class="status muted">next: ${esc(nd.params?.name || "duels")} ${until(wallFor(nd.at_hours, c, "duels"))}</span>` : "",
-      why: ["One rival, private limits, and the deal shrinks every round of talk. A deal outside our limit loses points; no deal scores zero."],
-      how: [`Open <b>${S.duel_anchor}×</b> our limit away, reach our limit over <b>${S.duel_rounds}</b> rounds; never cross it.`,
-        `Accept when the rival gives us ≥ <b>${Math.round(S.duel_accept * 100)}%</b> of what our next offer would (after decay).`,
-        "Two-issue duels: give the rival the delivery days that cost us little, ask for price instead."],
-      stats: [["duel points", fmt(sc.duel_points)], ["settled", recs.filter(r => r.module === "duel" && r.action === "accept").length]] },
-    { name: "Market-making", pts: "30 points", st: ok(!!venue, me.level < 2 ? "needs level 2 to open our market" : "market not open yet", "our market is open"),
-      why: ["Mostly the Market Test: every 2 game hours each market gets the same traders; our broker scores the share of possible gains it realises.", "The free stall earns half points; full points go to the best brokers."],
-      how: [S.enable_venue ? `Open a <b>board</b> market at <b>${S.venue_fee_bps / 100}%</b> fee as soon as we are level 2, keeping <b>${S.reserve_cash} P</b> aside for the bond.` : "Opening our market is <b>off</b>.",
-        "smart_broker.py estimates hidden limits and matches efficient pairs first; never worse than the stall."],
-      stats: [["market points", fmt(sc.market)], ["next Market Test", nb ? until(wallFor(nb.at_hours, c, "bench")) : "–"], ["level", me.level]] },
-    { name: "Judges", pts: "40 points", st: `<span class="status muted">scored at the end</span>`,
-      why: ["Ideas and craft: the biggest single block of points."],
-      how: ["Show the reasoning: exact private-value model, Boulware haggling, value-only trading, smart broker with simulations, and this war room with every decision logged."],
-      stats: [] },
-  ];
+  const row = (ok, area, plan, status) => `<tr><td style="width:22px;color:${ok ? "var(--up)" : "var(--serious)"};font-weight:700">${ok ? "✓" : "▲"}</td>
+    <td style="width:120px"><b>${area}</b></td><td class="sec">${plan}</td><td class="num" style="white-space:normal;max-width:220px">${status}</td></tr>`;
+  $("plan").innerHTML = `<table><tbody>
+    ${row(deals >= 3, "Dealers", `Open at <b>${Math.round(S.haggle_open * 100)}%</b> of list, concede slowly over <b>${S.haggle_rounds}</b> rounds; never above what other teams typically pay; take her ask at once if it matches the best price anyone got.`, `${deals} deals · ${deals >= 3 ? "next dealer unlocked early" : `${3 - deals} more to unlock`}`)}
+    ${row(trades.length > 0, "Trades", `Only trades that gain us <b>≥ ${S.trade_min_gain} P</b> at our values; list spares just under rival prices; bid low for Salamanca and Malasaña cards.`, trades.length ? `${trades.length} trades, +${fmt(trades.reduce((t, r) => t + r.gain, 0))} P` : "none yet")}
+    ${row(true, "Duels", `Open far from our limit, settle within <b>${S.duel_rounds}</b> rounds, accept at <b>${Math.round(S.duel_accept * 100)}%</b> of our next offer; never cross our limit.`, nd ? `next ${until(wallFor(nd.at_hours, c, "duels"))}` : "–")}
+    ${row(!!venue, "Market", `Open <b>Mercado Trece</b> at <b>${S.venue_fee_bps / 100}%</b> fees as soon as we are level 2, run the smart broker, invite every team.`, venue ? "open" : me.level < 2 ? "needs level 2" : "opening…")}
+  </tbody></table>`;
   const split = [["Negotiating", 30, sc.negotiating || 0, "var(--series-1)"], ["Market-making", 30, sc.market || 0, "var(--series-2)"], ["Judges", 40, null, "var(--neutral)"]];
-  $("plan-split").innerHTML = `<svg viewBox="0 0 600 46" width="100%">${(() => { let x = 0, g = ""; for (const [n, w, v, col] of split) { const W = w * 6;
-      g += `<rect x="${x}" y="0" width="${W - 2}" height="22" rx="4" fill="${col}" opacity=".25"/>`;
-      if (v) g += `<rect x="${x}" y="0" width="${Math.max(2, v / w * (W - 2))}" height="22" rx="4" fill="${col}"/>`;
-      g += `<text x="${x + 6}" y="38" class="ink">${n} · ${v == null ? "?" : fmt(v)} / ${w}</text>`; x += W; } return g; })()}</svg>`;
-  $("plan").innerHTML = areas.map(a => `<div class="card area"><div class="area-head"><b>${a.name}</b>${a.st}<span class="pts">${a.pts}</span></div>
-    <ul>${a.why.map(x => `<li>${x}</li>`).join("")}</ul>
-    <div class="sec" style="font-size:12px;margin-top:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em">How we play it</div>
-    <ul>${a.how.map(x => `<li>${x}</li>`).join("")}</ul>
-    ${a.stats.length ? `<div class="stats">${a.stats.map(([l, v]) => `<div><b>${v}</b>${l}</div>`).join("")}</div>` : ""}</div>`).join("");
-}
+  $("plan-split").innerHTML = `<svg viewBox="0 0 600 40" width="100%">${(() => { let x = 0, g = ""; for (const [n, w, v, col] of split) { const W = w * 6;
+      g += `<rect x="${x}" y="0" width="${W - 2}" height="16" rx="4" fill="${col}" opacity=".25"/>`;
+      if (v) g += `<rect x="${x}" y="0" width="${Math.max(2, v / w * (W - 2))}" height="16" rx="4" fill="${col}"/>`;
+      g += `<text x="${x + 4}" y="32" class="ink">${n} ${v == null ? "?" : fmt(v)} / ${w}</text>`; x += W; } return g; })()}</svg>`;
 
+  // advisor
+  const P = d.proposal;
+  let html;
+  if (!P) html = `<div class="empty">First check running…</div>`;
+  else if (P.status === "insufficient_data") html = `<div class="empty">Waiting for data: ${P.deals_used} of ${P.min_deals} haggled deals seen so far.</div>`;
+  else if (P.status === "error") html = `<div class="err">Advisor error: ${esc(P.error)}</div>`;
+  else {
+    const ev2 = P.evidence || {};
+    const evid = `Based on <b>${P.deals_used}</b> real haggled deals by all teams: dealers accept about ${Math.round((ev2.median_floor_vs_opening || 0) * 100)}% of their opening ask after ~${ev2.median_rounds} rounds. Checked ${hm(new Date(P.at * 1000))}.`;
+    if (P.status === "proposal") {
+      const knobs = SD.knobs;
+      html = `<div class="move" style="border-left:3px solid var(--good)"><div class="ic" style="color:var(--good)">✓</div><div>
+        <div class="t">Better strategy found: dealer capture ${Math.round(P.current_score * 100)}% → ${Math.round(P.best_score * 100)}%</div>
+        <div class="d">${Object.entries(P.changes).map(([k, v]) => `${esc(knobs[k]?.label || k)}: <b>${S[k]}</b> → <b>${v}</b>`).join(" · ")}</div>
+        <div class="d">${evid}</div>
+        <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="apply-prop">Apply</button><button class="btn" id="dismiss-prop">Dismiss</button></div></div></div>`;
+    } else {
+      html = `<div class="move"><div class="ic" style="color:var(--up)">✓</div><div><div class="t">${P.status === "dismissed" ? "Proposal dismissed" : "Our current strategy is still the best"}</div>
+        <div class="d">Simulated dealer capture ${Math.round(P.current_score * 100)}%; the best alternative scored ${Math.round((P.best_score || P.current_score) * 100)}% (we only switch for +1.5 points or more).</div><div class="d">${evid}</div></div></div>`;
+    }
+    html += `<button class="btn" id="recheck" style="margin-top:10px">Re-check now</button>`;
+  }
+  $("proposal").innerHTML = html;
+  const post = (u, body) => fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  if ($("apply-prop")) $("apply-prop").onclick = async () => { await post("/strategy", { ...SD.current, ...P.changes }); await loadStrategy(); await post("/strategy/recheck"); $("proposal").innerHTML = `<div class="empty">Applied: the agent uses it from the next tick. Re-checking…</div>`; };
+  if ($("dismiss-prop")) $("dismiss-prop").onclick = async () => { await post("/strategy/dismiss"); $("proposal").innerHTML = `<div class="empty">Dismissed.</div>`; };
+  if ($("recheck")) $("recheck").onclick = async () => { await post("/strategy/recheck"); $("recheck").textContent = "Checking… (a few seconds)"; };
+
+  // AI negotiator
+  const llm = recs.filter(r => r.module === "llm");
+  const msgs = llm.filter(r => r.action === "message"), fails = llm.filter(r => r.action === "fallback_to_rules");
+  const on = !!S.llm_negotiator, last = msgs[msgs.length - 1];
+  $("llm").innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><b style="font-size:16px">Claude Opus 5.5</b>
+      <label style="margin-left:auto"><input type="checkbox" id="llm-toggle" ${on ? "checked" : ""}> ${on ? "on" : "off"}</label></div>
+    <div class="sec" style="font-size:13px;line-height:1.5">Writes every message and picks the price inside the safe band our tested rules allow. Accept/decline stays with the rules. Falls back to templates if the API is slow.</div>
+    <div class="stats" style="display:flex;gap:18px;margin-top:10px;font-size:12px;color:var(--muted)">
+      <div><b style="display:block;font-size:18px;color:var(--text-primary)">${msgs.length}</b>messages</div>
+      <div><b style="display:block;font-size:18px;color:var(--text-primary)">${msgs.length ? (msgs.reduce((t, r) => t + r.ms, 0) / msgs.length / 1000).toFixed(1) + " s" : "–"}</b>avg time</div>
+      <div><b style="display:block;font-size:18px;color:var(--text-primary)">${fails.length}</b>fallbacks</div></div>
+    ${last ? `<div class="msg" style="margin-top:10px;max-width:none"><div class="who">last · ${hm(new Date(last.ts * 1000))} · ${last.price} P</div>${esc(last.reason || "")}</div>` : ""}
+    ${d.agent_running ? "" : `<div class="muted" style="font-size:12px;margin-top:8px">Agent is stopped. Run it with <code>.venv/bin/python team13/agent.py</code> (the AI needs the .venv).</div>`}`;
+  $("llm-toggle").onchange = async e => { await post("/strategy", { ...SD.current, llm_negotiator: e.target.checked ? 1 : 0 }); await loadStrategy(); };
+
+  // market
+  const mk = recs.filter(r => r.module === "market");
+  const invites = mk.filter(r => r.action === "invited").length, ann = mk.filter(r => r.action === "announced").length;
+  const rivalsMk = (d.venues?.venues || []).filter(v => !v.house && v.owner !== me.id && v.status === "open");
+  $("market-status").innerHTML = `<table><tbody>
+    <tr><td>Status</td><td class="num">${venue ? `<span style="color:var(--up)">● open</span> ${esc(venue.name)}` : me.level < 2 ? "waiting for level 2" : "opening when allowed"}</td></tr>
+    <tr><td>Fee</td><td class="num">${S.venue_fee_bps / 100}% <span class="muted">(El Rastro 5% + 1 P)</span></td></tr>
+    <tr><td>Next Market Test</td><td class="num">${nb ? until(wallFor(nb.at_hours, c, "bench")) : "–"}</td></tr>
+    <tr><td>Invitations sent</td><td class="num">${invites}</td></tr>
+    <tr><td>Announcements</td><td class="num">${ann}</td></tr>
+    <tr><td>Trades on our market</td><td class="num">${venue ? `${venue.trades} · ${fmt(venue.volume, 0)} P` : "–"}</td></tr>
+    <tr><td>Rival markets</td><td class="num">${rivalsMk.length ? rivalsMk.map(v => `${esc(v.name)} ${fmt(v.fee_bps / 100)}%`).join(", ") : "none yet"}</td></tr>
+  </tbody></table>`;
+}
 
 // ---------- intel ----------
 const CLS_LABEL = c => c.replace("buy:pack:sobre_barrio", "Buy · Neighbourhood pack").replace(/^buy:pack:(.+)$/, "Buy · pack $1")
@@ -1014,7 +1048,7 @@ async function refresh() {
     if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
     servedAt = d.served_at;
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
-      d.leaderboard, d.levels, d.dealers, d.intel?.events, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
+      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
     header(d);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;

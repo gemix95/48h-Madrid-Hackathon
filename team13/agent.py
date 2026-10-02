@@ -7,7 +7,7 @@ Modules, in priority order each tick (one accept per team per tick is shared bet
   duels    the tournament: never cross our limit, settle before the pie decays
   haggler  the dealer ladder: Boulware concessions, kind words, take finals inside our cap
   trader   team trades at our private values: take good board offers, list spares, bid for what we value most
-  venue    open our own market as soon as we reach level 2 (the broker runs in smart_broker.py)
+  market   open our own market at 0% fees as soon as we reach level 2, run the smart broker, invite every team
 
 Every decision is appended to logs/decisions.jsonl; the dashboard shows it live.
 """
@@ -23,10 +23,12 @@ from pathlib import Path
 
 from bazaar_sdk import Bazaar, BazaarError
 from duels import Duels
+from market import Market
 from haggler import Haggler
 from trader import Trader
 from values import Values
 from intel import Intel
+from negotiator import Negotiator
 import strategy
 
 HERE = Path(__file__).parent
@@ -62,10 +64,12 @@ class Context:
         self.raw = api
         self.state = json.loads(STATE.read_text()) if STATE.exists() else {}
         self.clock, self.me, self.threads, self.my_offers, self.board, self.dealers = {}, {}, [], [], [], []
+        self.leaderboard = []
         self.values = None
         self._accepts = {}
         self.S = strategy.load()
         self.intel = None
+        self.llm = Negotiator(log=self.log)
 
     # ---------------------------------------------------------------- logging & state
     def log(self, module, action, **detail):
@@ -107,6 +111,12 @@ class Context:
                 ids.add(topic["asset"])
         return ids
 
+    def speak(self, situation, band, fallback, effort="low"):
+        """Message + price for a negotiation: Claude inside the safe band when enabled, else the rules."""
+        if self.S.get("llm_negotiator", 1) and self.llm.ready():
+            return self.llm.propose(situation, band, fallback, effort=effort)
+        return fallback[0], fallback[1], "rules"
+
     def open_new_packs(self):
         try:
             me = self.raw.me()
@@ -140,6 +150,7 @@ class Context:
             self.dealers = api.dealers().get("personas", [])
             self.catalog = api.catalog()
             self.levels = api.levels().get("levels", [])
+            self.leaderboard = api.leaderboard().get("teams", [])
         if self.values is None or full:
             self.values = Values(self.catalog, self.me)
             self.intel.set_catalog(self.catalog)
@@ -149,32 +160,6 @@ class Context:
         self._accepts = {"team": self.limit("accepts_per_team_per_tick", 1), "duel": 3}
 
 
-class Venue:
-    """Open our market as soon as the rules allow; the broker key goes to state.json for smart_broker.py."""
-
-    def __init__(self, ctx):
-        self.ctx = ctx
-
-    def step(self):
-        ctx = self.ctx
-        if not ctx.S["enable_venue"] or ctx.state.get("venue") or ctx.me.get("level", 1) < 2:
-            return
-        if ctx.me["cash"] < VENUE_BOND + 5:
-            ctx.log("venue", "waiting_for_cash", cash=ctx.me["cash"])
-            return
-        last = ctx.state.get("venue_try_tick", -99)
-        if ctx.clock.get("tick", 0) - last < 10:
-            return
-        ctx.state["venue_try_tick"] = ctx.clock.get("tick", 0)
-        try:
-            res = ctx.api.open_venue("Mercado Trece", fee_bps=int(ctx.S["venue_fee_bps"]), fee_per_card=0, rules={"mechanism": "board"})
-            ctx.state["venue"] = res.get("venue") or res.get("id")
-            ctx.state["broker_key"] = res.get("broker_key")
-            ctx.log("venue", "opened", venue=ctx.state["venue"])
-        except BazaarError as e:
-            ctx.log("venue", "open_refused", error=str(e))
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -182,7 +167,7 @@ def main():
     args = ap.parse_args()
     api = Bazaar(os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai"), os.environ["BAZAAR_KEY"], wait_on_tick=False)
     ctx = Context(api, dry=args.dry_run)
-    modules = [("duels", Duels(ctx)), ("haggler", Haggler(ctx)), ("venue", Venue(ctx))]
+    modules = [("duels", Duels(ctx)), ("haggler", Haggler(ctx)), ("venue", Market(ctx))]
     if not args.no_trade:
         modules.append(("trader", Trader(ctx)))
     switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue"}

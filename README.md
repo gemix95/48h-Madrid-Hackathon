@@ -10,9 +10,10 @@ The team key is in `bazaar.env` (this repo is private: keep it to Team 13).
 
 ```bash
 source bazaar.env
-cd team13 && python3 agent.py              # the agent, all weekend (add --dry-run to log decisions without acting)
+/opt/homebrew/bin/python3.13 -m venv .venv && .venv/bin/pip install anthropic pydantic   # once
+cd team13 && ../.venv/bin/python agent.py  # the agent, all weekend (add --dry-run to log decisions without acting)
 cd dashboard && python3 server.py          # the war room on http://localhost:8765
-cd team13 && python3 smart_broker.py       # once we are level 2 and the agent has opened our venue
+# the agent opens our market (0% fees) at level 2 and runs smart_broker.py inside itself
 ```
 
 Strategy: open the dashboard's **Strategy** tab to read the game plan and tune the agent (presets or sliders).
@@ -31,6 +32,14 @@ cloudflared tunnel --url http://localhost:8765                 # prints an https
 ```
 
 Never share the dashboard without `DASHBOARD_PASSWORD`: it shows our private values and can change the agent's strategy.
+
+AI negotiator: with `ANTHROPIC_API_KEY` set, Claude Opus 5.5 (`team13/negotiator.py`) writes every message and picks
+each price inside the safe band the rules allow (never past our cap or a duel limit); accept/decline stays rule-based,
+and it falls back to templates if the API is slow. Toggle it on the Strategy tab.
+Strategy advisor: `team13/advisor.py` re-runs the tournament on every team's real deals every 5 minutes and proposes
+better settings on the Strategy tab (Apply / Dismiss).
+Market: `team13/market.py` opens Mercado Trece at 0% fees at level 2, runs the smart broker, announces it and invites
+every team once per game day.
 
 Run only ONE agent per team key: two agents would fight over the one accept per tick.
 
