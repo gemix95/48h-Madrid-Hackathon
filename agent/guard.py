@@ -13,6 +13,7 @@ from values import Values  # noqa: E402
 
 POLL = float(sys.argv[1]) if len(sys.argv) > 1 else 10
 LOG = os.path.join(HERE, "..", "logs", "guard.jsonl")
+CAPS = os.path.join(HERE, "caps.json")
 b = Bazaar(os.environ["BAZAAR_URL"], os.environ["BAZAAR_KEY"], wait_on_tick=False)
 cat = b.catalog()
 
@@ -37,13 +38,20 @@ while True:
             if any(not t.startswith("card:") for t in (g.get("types") or []) + (w.get("types") or [])):
                 continue  # packs etc.: not judged here
             out_refs, in_refs = refs(g, own), refs(w, own)
-            if not out_refs:
+            try:
+                with open(CAPS) as f:
+                    caps = json.load(f)  # hand-set price caps per card, e.g. {"SAL-10": 70}
+            except (OSError, ValueError):
+                caps = {}
+            over_cap = (not out_refs and len(in_refs) == 1 and in_refs[0] in caps
+                        and (g.get("cash") or 0) > caps[in_refs[0]])
+            if not out_refs and not over_cap:
                 continue  # pure bids are handled by the trader's own stale-bid check
             loss = v.loss_of_removing(out_refs) + (g.get("cash") or 0)
             gain = v.gain_of_adding(in_refs) + (w.get("cash") or 0)
-            if loss > gain:
+            if loss > gain or over_cap:
                 rec = {"ts": time.time(), "ev": "guard_cancel", "offer": o["id"], "thread": o.get("thread"),
-                       "give": out_refs, "want": in_refs or w.get("cash"), "loss": round(loss, 1), "gain": round(gain, 1)}
+                       "give": out_refs, "want": in_refs or w.get("cash"), "loss": round(loss, 1), "gain": round(gain, 1), "over_cap": over_cap}
                 try:
                     b.cancel(o["id"])
                     if o.get("thread"):
