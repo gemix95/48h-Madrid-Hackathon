@@ -88,13 +88,20 @@ svg .ink { fill: var(--text-secondary); } svg .ink1 { fill: var(--text-primary);
 .set { display: grid; grid-template-columns: 170px 1fr; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--grid); }
 .set:first-of-type { border-top: 0; }
 .set .meta b { font-size: 14px; } .set .meta div { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-.cells { display: grid; grid-template-columns: repeat(5, 1fr) 6px repeat(3, 1fr) 6px repeat(2, 1fr) 10px repeat(2, 1fr); gap: 4px; }
-.cell { position: relative; border-radius: 6px; padding: 5px 4px; min-height: 46px; text-align: center; font-size: 11px; line-height: 1.25;
-  border: 1.5px dashed var(--axis); color: var(--muted); cursor: default; }
-.cell.have { border: 1.5px solid transparent; background: var(--seq-2); color: #fff; }
-.cell.extra { opacity: .85; border-style: dotted; }
-.cell .r { font-weight: 700; font-size: 10px; letter-spacing: .04em; }
-.cell .v { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600; }
+.cells { display: grid; grid-template-columns: repeat(5, 1fr) 6px repeat(3, 1fr) 6px repeat(2, 1fr) 10px repeat(2, 1fr); gap: 5px; }
+/* each tile is a mini card: rarity colour + emblem (common ●, uncommon ◆, rare ⬢, epic ✦, legendary ★), our value in P underneath */
+.cell { --rc: #9aa4b8; --ink: #14213d; position: relative; border-radius: 8px; padding: 6px 2px 5px; min-height: 58px; display: flex; flex-direction: column;
+  align-items: center; justify-content: space-between; font-size: 12px; cursor: default; background: transparent;
+  border: 1.5px dashed color-mix(in srgb, var(--rc) 60%, transparent); color: color-mix(in srgb, var(--rc) 70%, var(--muted)); }
+.cell svg { width: 24px; height: 24px; display: block; opacity: .6; }
+.cell.extra:not(.have) { border-style: dotted; }
+.cell.have { border: 1.5px solid var(--rc); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--rc) 70%, #fff), var(--rc)); }
+.cell.have svg { opacity: 1; }
+.cell .v { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; }
+.set .meta { border-left: 4px solid var(--sc, var(--axis)); padding-left: 10px; }
+.tilekey { display: inline-flex; align-items: center; gap: 5px; }
+.tilekey svg { width: 14px; height: 14px; }
 .cell .x { position: absolute; top: -7px; right: -6px; background: var(--series-2); color: #fff; border-radius: 999px; font-size: 10px;
   font-weight: 700; padding: 1px 5px; border: 2px solid var(--surface-1); }
 .set.locked { opacity: .45; }
@@ -251,9 +258,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <div class="grid">
       <section class="card s8">
         <h2>Album <span class="hint">the number is what the card is worth to us</span></h2>
-        <div class="legend"><span><i class="swatch" style="background:var(--seq-2)"></i>We have it</span>
-          <span><i class="swatch" style="border:1.5px dashed var(--axis)"></i>Missing</span>
-          <span><i class="swatch" style="background:var(--series-2)"></i>×N spare copies</span></div>
+        <div class="legend" id="album-legend"></div>
         <div id="sets"></div>
       </section>
       <section class="card s4">
@@ -566,8 +571,22 @@ function bindLine(el, h) {
 
 // ---------- album ----------
 const SET_NAMES = { LAV: "Lavapiés", MAL: "Malasaña", LAT: "La Latina", SAL: "Salamanca", RET: "El Retiro", CHA: "Chamberí" };
+// rarity colours come from /api/catalog (rarities[].color); each rarity also has its own shape, so the album reads without labels
+const RARITY_COLOR = { common: "#9aa4b8", uncommon: "#3ddc97", rare: "#4c8dff", epic: "#b061ff", legendary: "#ffc44d" };
+const EMBLEM = {
+  common: `<circle cx="12" cy="12" r="6.5"/>`,
+  uncommon: `<path d="M12 3 21 12 12 21 3 12Z"/>`,
+  rare: `<path d="M12 2.5 20.2 7.25v9.5L12 21.5 3.8 16.75v-9.5Z"/>`,
+  epic: `<path d="M12 2c.9 5.2 3.8 8.1 10 10-6.2 1.9-9.1 4.8-10 10-.9-5.2-3.8-8.1-10-10 6.2-1.9 9.1-4.8 10-10Z"/>`,
+  legendary: `<path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9Z"/>`,
+};
+const emblem = r => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${EMBLEM[r] || EMBLEM.common}</svg>`;
+const inkFor = hex => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150 ? "#14213d" : "#fff"; };
 function album(d, M) {
   const me = d.me, cat = d.catalog; if (!cat) { $("sets").innerHTML = `<div class="empty">Loading catalog…</div>`; return; }
+  const rarityColor = r => cat.rarities?.[r]?.color || RARITY_COLOR[r];
+  $("album-legend").innerHTML = RARITY_ORDER.map(r => `<span class="tilekey" style="color:${rarityColor(r)}">${emblem(r)}<span style="color:var(--text-secondary)">${esc(cat.rarities?.[r]?.label || r)}</span></span>`).join("")
+    + `<span>filled = we have it</span><span><i class="swatch" style="border:1.5px dashed var(--axis)"></i>dashed = missing</span><span><i class="swatch" style="background:var(--series-2)"></i>×N spare copies</span>`;
   const affRank = Object.entries(M.aff).sort((a, b) => b[1] - a[1]).map(([k]) => k);
   const tipData = {};
   const sets = [...cat.sets].sort((a, b) => (b.released - a.released) || (M.aff[b.id] - M.aff[a.id]));
@@ -583,9 +602,10 @@ function album(d, M) {
       const copies = M.held[c.id] || [], have = copies.length > 0, key = c.id;
       const val = have ? c.book * a : M.nextVal(c);
       tipData[key] = { c, copies, a, val };
-      cells += `<div class="cell ${have ? "have" : ""} ${c.page ? "" : "extra"}" data-tip="${key}"><div class="r">${c.rarity[0].toUpperCase()}${c.id.slice(4)}</div><div class="v">${fmt(val, 0)}</div>${copies.length > 1 ? `<span class="x">×${copies.length}</span>` : ""}</div>`;
+      const col = rarityColor(c.rarity);
+      cells += `<div class="cell ${have ? "have" : ""} ${c.page ? "" : "extra"}" style="--rc:${col};--ink:${inkFor(col)}" data-tip="${key}">${emblem(c.rarity)}<div class="v">${fmt(val, 0)}</div>${copies.length > 1 ? `<span class="x">×${copies.length}</span>` : ""}</div>`;
     });
-    return `<div class="set ${s.released ? "" : "locked"}"><div class="meta"><b>${esc(s.name)}</b> <span class="chip">×${a}</span>
+    return `<div class="set ${s.released ? "" : "locked"}"><div class="meta" style="--sc:${esc(s.color || "")}"><b>${esc(s.name)}</b> <span class="chip">×${a}</span>
       <div><span style="color:${verdict[0]};font-weight:600">${verdict[1]}</span> · #${rank} of 6 for us</div>
       <div>${s.released ? `page ${page.have}/${page.of}${page.complete ? " ✓" : ""} · bonus ≈ ${P(M.pageBonus(s))}` : `arrives ${s.release === "sat+0h" ? "Saturday" : "Sunday"}`}</div></div>
       <div class="cells">${cells}</div></div>`;
