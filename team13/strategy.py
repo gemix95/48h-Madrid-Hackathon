@@ -72,9 +72,9 @@ KNOBS = {
     # duels
     "duel_rounds": (8, 2, 12, 1, "Duels", "Rounds to reach our limit",
                     "The pie shrinks every round (6-8%): fewer rounds = settle sooner."),
-    "duel_anchor": (2.0, 0.2, 3.0, 0.1, "Duels", "Opening ambition",
+    "duel_anchor": (5.0, 0.2, 6.0, 0.1, "Duels", "Opening ambition",
                     "How far from our limit we open (× limit). Higher = greedier, riskier."),
-    "duel_accept": (0.6, 0.4, 1.0, 0.05, "Duels", "Accept threshold",
+    "duel_accept": (0.5, 0.4, 1.0, 0.05, "Duels", "Accept threshold",
                     "Take the rival's offer when it gives us this share of what our next offer would."),
     # market
     "venue_fee_bps": (100, 0, 1000, 25, "Market", "Our market fee (bps)",

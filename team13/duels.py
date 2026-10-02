@@ -100,15 +100,19 @@ class Duels:
         ROUNDS = int(S["duel_rounds"])
         k = len(mine)
         # anchor: far from our limit; if the rival has spoken, aim past the midpoint on our side
-        span = max(5.0, abs(limit) * S["duel_anchor"])
+        # duel_anchor 2.0 -> a seller opens 60% above its cost, a buyer 37.5% below its value (always a real price)
+        amb = 0.3 * S["duel_anchor"]
+        span = max(5.0, limit * amb if seller else limit - limit / (1 + amb))
         if r_price is not None:
             span = max(span, abs(r_price - limit) * 1.4)
-        anchor = limit + span if seller else limit - span
+        anchor = min(limit + span, limit * 2.2) if seller else max(limit - span, limit * 0.3, 1)
+        span = abs(anchor - limit)
         x = min(1.0, k / ROUNDS)
         target = anchor + ((limit + (1 if seller else -1) * max(1, 0.08 * span)) - anchor) * (x ** 1.3)
         price = math.ceil(target) if seller else math.floor(target)
         if r_price is not None:  # never concede past the rival's own offer
             price = max(price, r_price) if seller else min(price, r_price)
+        price = max(1, int(price))  # the server refuses prices below 1
 
         days = None
         if two_issue:
