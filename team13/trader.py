@@ -207,6 +207,17 @@ class Trader:
                 ctx.log("trade", "haggle_ended", thread=tid, status=th["status"] if th else "gone", item=H["ref"])
                 hag.pop(tid)
                 continue
+            # a card promised elsewhere since this haggle opened (a swap, a direct offer): stop selling it here
+            elsewhere = {a["id"] if isinstance(a, dict) else a for o in ctx.my_offers if str(o.get("thread")) != tid
+                         for a in (o.get("give") or {}).get("assets") or []}
+            if H["side"] == "sell" and elsewhere & set(H.get("assets") or []):
+                try:
+                    ctx.api.close_thread(int(tid))
+                except BazaarError:
+                    pass
+                ctx.log("trade", "haggle_closed_asset_promised", thread=tid, item=H["ref"])
+                hag.pop(tid)
+                continue
             answered = any(m.get("sender") not in (ctx.me["id"], None) for m in th.get("messages", []))
             if H["round"] >= 5 or (not answered and tick - H["opened"] >= 8):
                 try:
