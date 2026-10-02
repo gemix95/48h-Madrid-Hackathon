@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import urllib.request
 import sys
 import time
 import traceback
@@ -65,6 +66,7 @@ class Context:
         self.state = json.loads(STATE.read_text()) if STATE.exists() else {}
         self.clock, self.me, self.threads, self.my_offers, self.board, self.dealers = {}, {}, [], [], [], []
         self.leaderboard = []
+        self.venues, self.boards = [], {}
         self.values = None
         self._accepts = {}
         self.S = strategy.load()
@@ -107,8 +109,8 @@ class Context:
                 ids.add(a["id"] if isinstance(a, dict) else a)
         for th in self.threads:
             topic = (th.get("topic") or {}).get("sell") or {}
-            if th["status"] == "open" and topic.get("asset"):
-                ids.add(topic["asset"])
+            if th["status"] == "open":
+                ids.update(topic.get("assets") or ([topic["asset"]] if topic.get("asset") else []))
         return ids
 
     def speak(self, situation, band, fallback, effort="low"):
@@ -116,6 +118,67 @@ class Context:
         if self.S.get("llm_negotiator", 1) and self.llm.ready():
             return self.llm.propose(situation, band, fallback, effort=effort)
         return fallback[0], fallback[1], "rules"
+
+    def public_get(self, path):
+        """Public reads go without the team key (their own 60/s limit), so the board scan never slows our bots."""
+        with urllib.request.urlopen(self.raw.url + path, timeout=10) as r:
+            return json.load(r)
+
+    def read_markets(self):
+        """Every open market and its order book: El Rastro, the starter stalls and every team's venue."""
+        try:
+            if self.clock.get("tick", 0) - self.state.get("venues_tick", -99) >= 3 or not self.venues:
+                self.venues = [v for v in self.public_get("/api/venues").get("venues", []) if v.get("status") == "open"]
+                self.state["venues_tick"] = self.clock.get("tick", 0)
+        except Exception:
+            pass
+        boards = {}
+        for v in self.venues:
+            if v["venue"] == self.state.get("venue"):
+                continue  # our own market: we may not trade there
+            try:
+                boards[v["venue"]] = [{**o, "venue": o.get("venue") or v["venue"]}
+                                      for o in self.public_get(f"/api/venues/{v['venue']}/offers").get("offers", [])]
+            except Exception:
+                boards[v["venue"]] = self.boards.get(v["venue"], [])
+        self.boards = boards
+
+    def venue_fee(self, venue):
+        v = next((x for x in self.venues if x["venue"] == venue), None)
+        return (v.get("fee_bps", 500), v.get("fee_per_card", 1)) if v else (500, 1)
+
+    def watch_levels(self):
+        """Log every newly announced or activated level and dealer, once."""
+        seen = self.state.setdefault("levels_seen", {})
+        for l in (self.levels or []):
+            key = str(l.get("id") or l.get("name"))
+            st = l.get("status")
+            if seen.get(key) != st:
+                seen[key] = st
+                self.log("levels", "level_" + str(st), level=key, name=l.get("name"), line=l.get("line"), how=l.get("how"))
+        for d in self.dealers:
+            key = "dealer:" + d["id"]
+            if seen.get(key) != d.get("status"):
+                seen[key] = d.get("status")
+                self.log("levels", "dealer_" + str(d.get("status")), dealer=d["id"], name=d.get("name"), level=d.get("level"),
+                         unlock=d.get("unlock"))
+
+    def maybe_flag(self):
+        """Words vs structure in OUR dealer conversations: flag only when switched on, each message once."""
+        flagged = self.state.setdefault("flagged", [])
+        mine = {t["id"] for t in self.threads}
+        for s in (self.intel.summary().get("suspects", []) if self.intel else []):
+            if s["thread"] not in mine or s["message"] in flagged:
+                continue
+            flagged.append(s["message"])
+            if not self.S.get("auto_flag", 0):
+                self.log("flag", "candidate", **s)
+                continue
+            try:
+                self.api.flag(s["message"], f"Bad faith: the message says {s['stated']} P but the structured offer is {s['structured']} P.")
+                self.log("flag", "flagged", **s)
+            except BazaarError as e:
+                self.log("flag", "flag_refused", error=str(e)[:160], **s)
 
     def open_new_packs(self):
         try:
@@ -142,10 +205,8 @@ class Context:
             self.state["intel_tick"] = self.clock.get("tick", 0)
         self.threads = api.my_threads().get("threads", [])
         self.my_offers = api.my_offers().get("offers", [])
-        try:
-            self.board = api.board("rastro").get("offers", [])
-        except BazaarError:
-            self.board = []
+        self.read_markets()
+        self.board = self.boards.get("rastro", [])
         if full or not self.dealers:
             self.dealers = api.dealers().get("personas", [])
             self.catalog = api.catalog()
@@ -188,6 +249,11 @@ def main():
             last_tick = ctx.clock["tick"]
             ctx.observe(full=(n % 20 == 0))
             n += 1
+            for extra in (ctx.watch_levels, ctx.maybe_flag):
+                try:
+                    extra()
+                except Exception as e:
+                    ctx.log("agent", "crash", where=extra.__name__, error=repr(e))
             for name, mod in modules:
                 if not ctx.S.get(switch[name], 1):
                     continue

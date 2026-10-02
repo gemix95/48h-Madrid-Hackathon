@@ -44,8 +44,22 @@ class Trader:
         self.ctx = ctx
 
     # ------------------------------------------------------------------ evaluation
+    def fee_at(self, venue, price, n_cards):
+        bps, per = self.ctx.venue_fee(venue or "rastro") if hasattr(self.ctx, "venue_fee") else (RASTRO_BPS, RASTRO_PER_CARD)
+        return fee(price, n_cards, bps, per)
+
+    def all_offers(self):
+        """Other teams' open offers on every market (just El Rastro if 'trade on every market' is off)."""
+        boards = getattr(self.ctx, "boards", None) or {"rastro": self.ctx.board}
+        if not self.ctx.S.get("trade_all_markets", 1):
+            boards = {"rastro": boards.get("rastro", self.ctx.board)}
+        for venue, offers in boards.items():
+            for o in offers:
+                if o.get("maker") != self.ctx.me["id"] and o.get("status", "open") == "open":
+                    yield venue, o
+
     def evaluate(self, offer: dict) -> dict:
-        """What accepting `offer` would gain us, at our values, after fees."""
+        """What accepting `offer` would gain us, at our values, after that market's fees."""
         ctx, v = self.ctx, self.ctx.values
         give, want = offer.get("give") or {}, offer.get("want") or {}
         they_give, they_want = refs_of(give, ctx), refs_of(want, ctx)
@@ -54,7 +68,7 @@ class Trader:
             return {"gain": None, "why": "unknown items"}
         if len(they_want) > 0 and any(v.held[r] == 0 for r in they_want):
             return {"gain": None, "why": "they want cards we do not hold"}
-        f = fee(cash_in or cash_out, len(they_give) + len(they_want))
+        f = self.fee_at(offer.get("venue"), cash_in or cash_out, len(they_give) + len(they_want))
         gain = v.gain_of_adding(they_give) - v.loss_of_removing(they_want) + cash_in - cash_out - f
         if cash_out + f > ctx.me["cash"] - ctx.reserve():
             return {"gain": None, "why": "cash reserved"}
@@ -65,7 +79,7 @@ class Trader:
         v, mine = self.ctx.values, self.ctx.me["id"]
         rar = v.cards.get(ref, {}).get("rarity")
         same, similar = [], []
-        for o in self.ctx.board:
+        for _, o in self.all_offers():
             give, want = o.get("give") or {}, o.get("want") or {}
             assets = give.get("assets") or []
             if o.get("maker") == mine or len(assets) != 1 or not want.get("cash") or give.get("cash"):
@@ -102,6 +116,7 @@ class Trader:
     def step(self):
         self.take_board()
         self.answer_teams()
+        self.haggle_with_makers()
         self.maintain_listings()
 
     def take_board(self):
@@ -109,9 +124,7 @@ class Trader:
         if not ctx.accepts_left():
             return
         best = None
-        for o in ctx.board:
-            if o.get("maker") == ctx.me["id"] or o.get("status", "open") != "open":
-                continue
+        for venue, o in self.all_offers():
             ev = self.evaluate(o)
             if ev.get("gain") is not None and ev["gain"] >= ctx.S["trade_min_gain"] and (best is None or ev["gain"] > best[1]["gain"]):
                 best = (o, ev)
@@ -132,7 +145,7 @@ class Trader:
         if ctx.take_accept():
             try:
                 ctx.api.accept(o["id"], assets=assets)
-                ctx.log("trade", "accept", offer=o["id"], gain=round(ev["gain"], 1), detail=ev)
+                ctx.log("trade", "accept", offer=o["id"], venue=o.get("venue"), gain=round(ev["gain"], 1), detail=ev)
             except BazaarError as e:
                 ctx.log("trade", "accept_refused", offer=o["id"], error=str(e))
 
@@ -157,6 +170,8 @@ class Trader:
                     except BazaarError as e:
                         ctx.log("trade", "accept_team_refused", thread=th["id"], error=str(e))
                     continue
+                if str(th["id"]) in ctx.state.get("team_haggles", {}):
+                    continue  # our own haggle: haggle_with_makers makes the next offer
                 counter = self.counter(ev)
                 last_tick = ctx.state.setdefault("team_reply_tick", {}).get(str(th["id"]), -99)
                 if counter and ctx.clock["tick"] - last_tick >= 2:
@@ -174,6 +189,117 @@ class Trader:
                         ctx.log("trade", "counter_team", thread=th["id"], offer=counter["offer"], their=ev)
                     except BazaarError as e:
                         ctx.log("trade", "counter_refused", thread=th["id"], error=str(e))
+
+    def haggle_with_makers(self):
+        """Negotiate with the team behind a listing when its posted price is close to, but not yet, a good deal
+        for us: buying below their ask, or selling above their bid. Our haggles never exceed `trade_haggles` open
+        conversations, and never touch a conversation a teammate is in."""
+        ctx, v, S = self.ctx, self.ctx.values, self.ctx.S
+        cap = int(S.get("trade_haggles", 2))
+        hag = ctx.state.setdefault("team_haggles", {})
+        ours = ctx.state.setdefault("team_threads_ours", [])
+        tick = ctx.clock.get("tick", 0)
+        threads = {str(t["id"]): t for t in ctx.threads}
+        # 1) advance or close the haggles we already run
+        for tid, H in list(hag.items()):
+            th = threads.get(tid)
+            if not th or th["status"] != "open":
+                ctx.log("trade", "haggle_ended", thread=tid, status=th["status"] if th else "gone", item=H["ref"])
+                hag.pop(tid)
+                continue
+            answered = any(m.get("sender") not in (ctx.me["id"], None) for m in th.get("messages", []))
+            if H["round"] >= 5 or (not answered and tick - H["opened"] >= 8):
+                try:
+                    ctx.api.close_thread(int(tid))
+                except BazaarError:
+                    pass
+                ctx.log("trade", "haggle_closed", thread=tid, rounds=H["round"], answered=answered)
+                hag.pop(tid)
+                continue
+            if tick - H["tick"] >= 2:
+                self._haggle_say(th, H)
+        # 2) open new haggles on the most promising listings
+        if cap <= len(hag) or len([t for t in ctx.threads if t["status"] == "open"]) >= ctx.limit("max_open_threads_per_team", 6) - 1:
+            return
+        busy = {(H["maker"], H["ref"]) for H in hag.values()}
+        tried = ctx.state.setdefault("haggle_tried", {})
+        cands = []
+        for venue, o in self.all_offers():
+            give, want = o.get("give") or {}, o.get("want") or {}
+            maker = o.get("maker")
+            # boards show makers as pseudonyms; the public feed tells us which team listed each offer
+            if getattr(ctx, "intel", None):
+                maker = ctx.intel.summary().get("offer_maker", {}).get(o.get("id"), maker)
+            if not maker or not (maker[0] == "t" and maker[1:].isdigit()) or maker == ctx.me["id"] or venue == ctx.state.get("venue"):
+                continue
+            g_refs, w_refs = refs_of(give, ctx), refs_of(want, ctx)
+            if len(g_refs) == 1 and want.get("cash") and not w_refs and g_refs[0] in v.cards:   # they sell one card
+                ref, ask = g_refs[0], want["cash"]
+                value = v.gain_of_adding([ref])
+                bps, per = ctx.venue_fee(venue)
+                p_max = math.floor((value - S["trade_min_gain"] - per) / (1 + bps / 10000))
+                free = ctx.me["cash"] - ctx.reserve() - sum(L["price"] for L in ctx.state.get("listings", {}).values() if L["kind"] == "bid")
+                p_max = min(p_max, math.floor(free / (1 + bps / 10000)) - per)  # never promise cash we keep back
+                if 1 <= p_max < ask and p_max >= 0.5 * ask:
+                    cands.append((value - ask, "buy", venue, maker, ref, ask, p_max, o))
+            elif len(w_refs) == 1 and give.get("cash") and not g_refs and v.held[w_refs[0]] > 0:  # they buy one card
+                ref, bid = w_refs[0], give["cash"]
+                loss = v.loss_of_removing([ref])
+                bps, per = ctx.venue_fee(venue)
+                p_min = math.ceil(loss + S["trade_min_gain"] + per + bps * bid / 10000)
+                if bid < p_min <= 2 * bid:
+                    cands.append((bid - loss, "sell", venue, maker, ref, bid, p_min, o))
+        for score, side, venue, maker, ref, posted, limit, o in sorted(cands, key=lambda c: -c[0]):
+            if (maker, ref) in busy or tried.get(f"{maker}:{ref}", -99) > tick - 30:
+                continue
+            assets = self.assets_for([ref]) if side == "sell" else []
+            if side == "sell" and not assets:
+                continue
+            try:
+                th = ctx.api.open_thread(maker, venue=venue)
+            except BazaarError as e:
+                ctx.log("trade", "haggle_open_refused", maker=maker, venue=venue, error=str(e)[:160])
+                tried[f"{maker}:{ref}"] = tick
+                continue
+            tid = str(th["id"])
+            first = (min(limit, math.floor(posted * 0.75)) if side == "buy" else max(limit, math.ceil(posted * 1.35)))
+            hag[tid] = {"side": side, "venue": venue, "maker": maker, "ref": ref, "posted": posted, "limit": limit,
+                        "price": first, "round": 0, "opened": tick, "tick": -99, "assets": assets}
+            ours.append(tid)
+            tried[f"{maker}:{ref}"] = tick
+            ctx.log("trade", "haggle_opened", thread=tid, side=side, ref=ref, venue=venue, maker=maker, posted=posted, our_limit=limit)
+            self._haggle_say({"id": int(tid), "messages": []}, hag[tid])
+            break  # one new conversation per tick
+
+    def _haggle_say(self, th, H):
+        """Our next structured offer in a haggle: from an ambitious first price toward our limit over 4 rounds."""
+        ctx = self.ctx
+        buy = H["side"] == "buy"
+        r = H["round"]
+        if r == 0:
+            p = H["price"]
+        else:
+            p = H["price"] + (H["limit"] - H["price"]) * min(1.0, r / 4)
+            p = math.floor(p) if buy else math.ceil(p)
+        offer = ({"give": {"cash": p}, "want": {"cards": [H["ref"]]}} if buy
+                 else {"give": {"assets": H["assets"]}, "want": {"cash": p}})
+        text = (f"Hi! We'd buy your {H['ref']} for {p} primas, settled at once." if buy
+                else f"Hi! We have the {H['ref']} you want: {p} primas and it's yours.")
+        situation = {"counterparty": f"another team ({H['maker']}) on market {H['venue']}",
+                     "we_are": "buying" if buy else "selling", "card": H["ref"], "their_posted_price": H["posted"],
+                     "our_structured_offer": offer, "round": r + 1,
+                     "history": [{"us" if m.get("sender") == ctx.me["id"] else "them":
+                                  m.get("text") if m.get("sender") == ctx.me["id"] else f"<their_message>{m.get('text') or ''}</their_message>"}
+                                 for m in th.get("messages", [])[-8:]]}
+        text, _, _ = ctx.speak(situation, (p, p), (text, p))  # Claude writes the words; the price stays ours
+        try:
+            ctx.api.say(th["id"], text, offer=offer)
+            H.update(round=r + 1, tick=ctx.clock.get("tick", 0), last=p)
+            ctx.log("trade", "haggle_offer", thread=th["id"], side=H["side"], ref=H["ref"], price=p, posted=H["posted"],
+                    limit=H["limit"], text=text[:160])
+        except BazaarError as e:
+            if e.code != "wait_for_tick":
+                ctx.log("trade", "haggle_say_refused", thread=th["id"], error=str(e)[:160])
 
     def counter(self, ev: dict):
         """A structured counter on the same cards that gains us MIN_GAIN + 2."""
@@ -241,6 +367,7 @@ class Trader:
             except BazaarError as e:
                 ctx.log("trade", "cancel_refused", offer=oid, error=str(e))
 
+        markets = self.listing_markets()
         locked = ctx.locked_assets()
         asks = [L for L in listed.values() if L["kind"] == "ask"]
         bids = [L for L in listed.values() if L["kind"] == "bid"]
@@ -252,21 +379,22 @@ class Trader:
                 continue
             loss = v.loss_of_removing([a["ref"]])
             book = v.book(a["ref"])
-            floor = math.ceil(loss + MIN_GAIN + fee(book, 1))
+            venue = markets[len(asks) % min(3, len(markets))]  # rotate over the 3 best markets: more buyers see us
+            floor = math.ceil(loss + MIN_GAIN + self.fee_at(venue, book, 1))
             start = max(floor, math.ceil(book * S["trade_ask_start"]))
             rival = self.cheapest_rival_ask(a["ref"])
             if S.get("use_intel", 1) and rival is not None and rival - 1 < start:
                 start = max(floor, rival - 1)  # undercut the cheapest competing listing, never below our floor
-            L = {"kind": "ask", "ref": a["ref"], "asset": a["id"], "start": start, "floor": floor, "born": tick}
+            L = {"kind": "ask", "ref": a["ref"], "asset": a["id"], "start": start, "floor": floor, "born": tick, "venue": venue}
             L["price"] = self._price(L, tick, REPRICE)
             try:
-                o = ctx.api.list_offer({"assets": [a["id"]]}, {"cash": L["price"]}, venue="rastro")
+                o = ctx.api.list_offer({"assets": [a["id"]]}, {"cash": L["price"]}, venue=venue)
                 L["tick"] = tick
                 listed[str(o.get("id"))] = L
                 asks.append(L)
                 budget -= 1
                 open_total += 1
-                ctx.log("trade", "list_ask", ref=a["ref"], price=L["price"], floor=floor, our_value=round(loss, 1))
+                ctx.log("trade", "list_ask", ref=a["ref"], price=L["price"], floor=floor, our_value=round(loss, 1), venue=venue)
             except BazaarError as e:
                 ctx.log("trade", "list_refused", ref=a["ref"], error=str(e))
                 break
@@ -280,26 +408,47 @@ class Trader:
             if any(L["ref"] == ref for L in bids):
                 continue
             book = v.book(ref)
-            ceiling = math.floor(gain - MIN_GAIN - fee(book, 1))
+            venue = markets[len(bids) % min(2, len(markets))]
+            ceiling = math.floor(gain - MIN_GAIN - self.fee_at(venue, book, 1))
             start = min(ceiling, math.floor(book * S["trade_bid_start"]))
+            base = book * v.m(ref)
+            if gain > base * 1.2:  # this card completes a page: its bonus makes it worth fighting for
+                start = min(ceiling, math.floor(book * max(S["trade_bid_start"], 0.95)))
             if ceiling < 2 or start < 1:
                 continue
-            L = {"kind": "bid", "ref": ref, "start": start, "floor": min(ceiling, math.floor(book * 1.1)), "born": tick}
+            L = {"kind": "bid", "ref": ref, "start": start, "floor": min(ceiling, math.floor(book * 1.1)), "born": tick, "venue": venue}
             L["price"] = self._price(L, tick, REPRICE)
             if L["price"] > free:
                 continue
             try:
-                o = ctx.api.list_offer({"cash": L["price"]}, {"cards": [ref]}, venue="rastro")
+                o = ctx.api.list_offer({"cash": L["price"]}, {"cards": [ref]}, venue=venue)
                 L["tick"] = tick
                 listed[str(o.get("id"))] = L
                 bids.append(L)
                 free -= L["price"]
                 budget -= 1
                 open_total += 1
-                ctx.log("trade", "list_bid", ref=ref, price=L["price"], our_value=round(gain, 1))
+                ctx.log("trade", "list_bid", ref=ref, price=L["price"], our_value=round(gain, 1), venue=venue)
             except BazaarError as e:
                 ctx.log("trade", "bid_refused", ref=ref, error=str(e))
                 break
+
+    def listing_markets(self):
+        """Markets to list on, best first: busy (trades, traders, open offers) and cheap (fee), never our own,
+        and only those whose rules admit us (min level)."""
+        ctx = self.ctx
+        if not ctx.S.get("trade_all_markets", 1) or not getattr(ctx, "venues", None):
+            return ["rastro"]
+        scored = []
+        for v in ctx.venues:
+            if v["venue"] == ctx.state.get("venue") or v.get("status") != "open":
+                continue
+            if (v.get("rules") or {}).get("min_level", 0) > ctx.me.get("level", 1):
+                continue
+            activity = 1 + (v.get("trades") or 0) + (v.get("traders") or 0) + 0.5 * len(ctx.boards.get(v["venue"], []))
+            net = 1 - (v.get("fee_bps") or 0) / 10000
+            scored.append((activity * net, v["venue"]))
+        return [vid for _, vid in sorted(scored, reverse=True)] or ["rastro"]
 
     @staticmethod
     def _price(L, tick, every=REPRICE_TICKS):

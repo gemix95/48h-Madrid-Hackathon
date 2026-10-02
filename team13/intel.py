@@ -13,6 +13,7 @@ ask already matches the best price anyone has got; the dashboard shows it in the
 from __future__ import annotations
 
 import json
+import re
 import statistics
 import time
 import urllib.request
@@ -82,7 +83,7 @@ class Intel:
             return self._summary
         evs = sorted(self.events.values(), key=lambda e: e["id"])
         threads: dict = {}
-        settlements, gifts, listings, market_trades = [], [], [], []
+        settlements, gifts, listings, market_trades, suspects = [], [], [], [], []
         for e in evs:
             p, t = e.get("payload") or {}, e.get("type")
             if t == "thread.opened" and p.get("kind") == "persona":
@@ -91,6 +92,11 @@ class Intel:
             elif t == "thread.message" and p.get("thread") in threads:
                 th, o = threads[p["thread"]], p.get("offer") or {}
                 price = (o.get("give") or {}).get("cash") or (o.get("want") or {}).get("cash")
+                if p.get("sender") == th["dealer"] and price and p.get("text"):
+                    stated = {int(x) for x in re.findall(r"(\d+)\s*(?:P|primas)\b", p["text"])}
+                    if len(stated) == 1 and abs(next(iter(stated)) - price) >= 2:  # words say one price, structure another
+                        suspects.append({"tick": e["tick"], "message": p.get("message"), "thread": p["thread"], "dealer": th["dealer"],
+                                         "team": th["team"], "stated": next(iter(stated)), "structured": price, "text": p["text"][:160]})
                 if price:
                     (th["asks"] if p.get("sender") == th["dealer"] else th["offers"]).append((e["tick"], price))
                     if o.get("final") and p.get("sender") == th["dealer"]:
@@ -104,7 +110,7 @@ class Intel:
                 gifts.append({**p, "tick": e["tick"]})
             elif t == "offer.listed":
                 o = p.get("offer") or {}
-                listings.append({"tick": e["tick"], "maker": o.get("maker"), "venue": p.get("venue"), "give": o.get("give"), "want": o.get("want")})
+                listings.append({"tick": e["tick"], "id": o.get("id"), "maker": o.get("maker"), "venue": p.get("venue"), "give": o.get("give"), "want": o.get("want")})
 
         # classify each dealer settlement from its own items (who gave what to whom), then link the conversation
         first_deal = {}
@@ -175,7 +181,8 @@ class Intel:
             if l["maker"]:
                 teams[l["maker"]]["listings"] += 1
 
-        self._summary = {"classes": classes, "teams": dict(teams), "gifts": gifts[-30:], "listings": listings[-80:],
+        offer_maker = {l["id"]: l["maker"] for l in listings if l.get("id") and l.get("maker")}
+        self._summary = {"suspects": suspects[-40:], "offer_maker": offer_maker, "classes": classes, "teams": dict(teams), "gifts": gifts[-30:], "listings": listings[-80:],
                          "market_trades": market_trades[-50:], "events": len(self.events),
                          "dealer_deals": [s["rec"] for s in settlements][-120:]}
         self._at = time.time()

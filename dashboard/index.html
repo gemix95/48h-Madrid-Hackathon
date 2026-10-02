@@ -270,8 +270,9 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
 
   <main class="tab" id="tab-market">
     <div class="grid">
-      <section class="card s8"><h2>El Rastro <span class="hint">offers from all teams, best for us first (fees 5% + 1 P per card)</span></h2><div id="board"></div></section>
-      <section class="card s4"><h2>Our offers &amp; markets</h2><div id="mine"></div></section>
+      <section class="card s12"><h2>Markets <span class="hint">every place we can trade: our agent scans all of them, lists on the best three, and haggles with sellers</span></h2><div id="markets"></div></section>
+      <section class="card s8"><h2>Every market's offers <span class="hint">best for us first, after each market's fee</span></h2><div id="board"></div></section>
+      <section class="card s4"><h2>Our offers &amp; haggles</h2><div id="mine"></div></section>
     </div>
   </main>
 
@@ -713,34 +714,58 @@ function refsOf(side, d) {
   for (const a of side.items || []) out.push(a.ref || a.card || a);
   return out;
 }
+function venueFee(d, v) { const x = (d.venues?.venues || []).find(y => y.venue === v); return x ? [x.fee_bps || 0, x.fee_per_card || 0] : [500, 1]; }
 function boardRows(d, M) {
-  const offers = d.board?.offers || [];
+  const boards = d.boards || { rastro: d.board?.offers || [] };
+  const offers = Object.entries(boards).flatMap(([v, list]) => list.map(o => ({ ...o, venue: o.venue || v })));
+  const makerOf = d.intel?.offer_maker || {};
   return offers.map(o => {
+    const [bps, per] = venueFee(d, o.venue);
     const give = refsOf(o.give, d), want = refsOf(o.want, d), mine = o.maker === d.me.id || o.team === d.me.id;
     let gain = null, what = "";
     const card = r => M.byRef[r];
     if (!mine && give.length && o.want?.cash != null) { // they sell cards for cash: we buy
       const v = give.reduce((t, r) => t + (card(r) ? M.nextVal(card(r)) : 0), 0);
-      gain = v - o.want.cash; what = `buy ${give.join(", ")} for ${o.want.cash} P`;
+      gain = v - o.want.cash - Math.ceil(o.want.cash * bps / 10000) - per * give.length; what = `buy ${give.join(", ")} for ${o.want.cash} P`;
     } else if (!mine && want.length && o.give?.cash != null) { // they pay cash for cards: we sell a copy we hold
       const v = want.reduce((t, r) => t + ((M.held[r] || []).slice(-1)[0]?.your_value ?? Infinity), 0);
-      const fee = o.give.cash * 0.05 + want.length; gain = isFinite(v) ? o.give.cash - fee - v : null; what = `sell ${want.join(", ")} for ${o.give.cash} P`;
+      const fee = Math.ceil(o.give.cash * bps / 10000) + per * want.length; gain = isFinite(v) ? o.give.cash - fee - v : null; what = `sell ${want.join(", ")} for ${o.give.cash} P`;
     }
-    return { o, give, want, mine, gain, what };
+    return { o, give, want, mine, gain, what, venue: o.venue, maker: makerOf[o.id] || o.maker };
   });
 }
 function market(d, M) {
+  const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
+  const nm = id => id === d.me.id ? "us" : (names[id] || id);
+  const venues = (d.venues?.venues || []).filter(v => v.status === "open");
+  const vname = id => (venues.find(v => v.venue === id)?.name) || id;
   const rows = boardRows(d, M).sort((a, b) => (b.gain ?? -1e9) - (a.gain ?? -1e9));
-  const side = (s, refs) => [refs.join(", "), s?.cash != null ? `${s.cash} P` : ""].filter(Boolean).join(" + ") || "–";
-  $("board").innerHTML = rows.length ? `<table><thead><tr><th>Maker</th><th>Gives</th><th>Wants</th><th class="num">For us</th></tr></thead><tbody>`
-    + rows.slice(0, 40).map(r => `<tr><td>${esc(r.o.maker_name || r.o.maker || r.o.team || "?")}${r.mine ? " <span class='chip'>us</span>" : ""}</td><td>${esc(side(r.o.give, r.give))}</td><td>${esc(side(r.o.want, r.want))}</td>
-      <td class="num">${r.gain == null ? `<span class="muted">–</span>` : r.gain > 0 ? `<span style="color:var(--up);font-weight:600">✓ +${fmt(r.gain)}</span>` : `<span class="muted">${fmt(r.gain)}</span>`}</td></tr>`).join("") + `</tbody></table>`
-    : `<div class="empty">The board is empty. Offers from every team appear here, ranked by what they would gain us.</div>`;
+  const side = (s2, refs) => [refs.join(", "), s2?.cash ? `${s2.cash} P` : ""].filter(Boolean).join(" + ") || "–";
   const offers = d.offers?.offers || [];
-  const venues = d.venues?.venues || [];
-  $("mine").innerHTML = (offers.length ? `<table><thead><tr><th>Our offer</th><th>Status</th></tr></thead><tbody>${offers.map(o => `<tr><td>${esc(side(o.give, refsOf(o.give, d)))} → ${esc(side(o.want, refsOf(o.want, d)))}</td><td>${esc(o.status)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">No open listings.</div>`)
-    + `<h2 style="margin-top:18px">Venues</h2><table><thead><tr><th>Venue</th><th class="num">Fee</th><th class="num">Trades</th><th class="num">Volume</th></tr></thead><tbody>`
-    + venues.map(v => `<tr><td>${esc(v.name)}${v.owner === d.me.id ? " <span class='chip'>ours</span>" : ""}<div class="muted" style="font-size:11px">${esc(v.owner_name)} · ${esc(v.rules?.mechanism || (v.house ? "posted offers" : ""))}</div></td><td class="num">${fmt(v.fee_bps / 100)}%${v.fee_per_card ? ` + ${v.fee_per_card}` : ""}</td><td class="num">${v.trades}</td><td class="num">${fmt(v.volume, 0)}</td></tr>`).join("") + `</tbody></table>`;
+  // markets table
+  const recs = d.decisions || [];
+  $("markets").innerHTML = venues.length ? `<table><thead><tr><th>Market</th><th>Owner</th><th>How it trades</th><th class="num">Fee</th><th class="num">Open offers</th><th class="num">Trades</th><th class="num">Volume</th><th class="num">Our offers</th><th class="num">Best for us</th></tr></thead><tbody>`
+    + venues.map(v => { const list = (d.boards || {})[v.venue] || [];
+      const best = rows.filter(r => r.venue === v.venue && r.gain != null).reduce((m, r) => Math.max(m, r.gain), -Infinity);
+      const ours = offers.filter(o => o.venue === v.venue).length, isOurs = v.owner === d.me.id;
+      return `<tr${isOurs ? ' style="font-weight:700"' : ""}><td>${esc(v.name)}${isOurs ? " <span class='chip'>ours</span>" : ""}</td><td>${esc(v.house ? "the house" : nm(v.owner))}</td>
+        <td class="sec">${esc(v.rules?.mechanism || (v.house ? "posted offers" : v.starter ? "auto (starter stall)" : "–"))}</td>
+        <td class="num">${fmt((v.fee_bps || 0) / 100)}%${v.fee_per_card ? ` + ${v.fee_per_card} P` : ""}</td><td class="num">${list.length}</td><td class="num">${v.trades}</td><td class="num">${fmt(v.volume, 0)} P</td>
+        <td class="num">${isOurs ? "–" : ours}</td><td class="num">${isFinite(best) ? (best > 0 ? `<span style="color:var(--up);font-weight:600">+${fmt(best)} P</span>` : `<span class="muted">${fmt(best)}</span>`) : "–"}</td></tr>`; }).join("")
+    + `</tbody></table><div class="empty" style="margin-top:6px">Team markets open at game hour 3, when every team without its own market also gets a free starter stall. Ours (0% fee) opens as soon as we reach level 2.</div>`
+    : `<div class="empty">No markets yet.</div>`;
+  // combined board
+  $("board").innerHTML = rows.length ? `<table><thead><tr><th>Market</th><th>Team</th><th>Gives</th><th>Wants</th><th class="num">For us</th></tr></thead><tbody>`
+    + rows.slice(0, 50).map(r => `<tr><td class="sec">${esc(vname(r.venue))}</td><td>${esc(nm(r.maker))}${r.mine ? " <span class='chip'>us</span>" : ""}</td><td>${esc(side(r.o.give, r.give))}</td><td>${esc(side(r.o.want, r.want))}</td>
+      <td class="num">${r.gain == null ? `<span class="muted">–</span>` : r.gain > 0 ? `<span style="color:var(--up);font-weight:600">✓ +${fmt(r.gain)}</span>` : `<span class="muted">${fmt(r.gain)}</span>`}</td></tr>`).join("") + `</tbody></table>`
+    : `<div class="empty">No offers on any market yet.</div>`;
+  // our offers grouped by market + live haggles
+  const byVenue = {}; for (const o of offers.filter(o => o.venue)) (byVenue[o.venue] ||= []).push(o);
+  const haggles = recs.filter(r => r.module === "trade" && r.action.startsWith("haggle")).slice(-8).reverse();
+  $("mine").innerHTML = (Object.keys(byVenue).length ? Object.entries(byVenue).map(([v, list]) => `<div class="sec" style="font-size:12px;font-weight:600;margin:8px 0 4px">${esc(vname(v))} · ${list.length}</div>`
+      + `<table><tbody>${list.map(o => `<tr><td>${esc(side(o.give, refsOf(o.give, d)))} → ${esc(side(o.want, refsOf(o.want, d)))}</td><td class="num muted">${esc(o.status)}</td></tr>`).join("")}</tbody></table>`).join("")
+      : `<div class="empty">No open listings.</div>`)
+    + `<h2 style="margin-top:18px">Haggles with other teams</h2>` + (haggles.length ? haggles.map(r => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--grid)"><span class="muted">${hm(new Date(r.ts * 1000))}</span> ${describe(r)}</div>`).join("") : `<div class="empty">None yet.</div>`);
 }
 
 // ---------- rivals ----------
@@ -794,6 +819,9 @@ function describe(r) {
     case "haggle.opened": return `Started haggling with ${esc(r.dealer)}: ${esc(Object.entries(r.topic || {}).map(([k, v]) => `${k} ${Object.values(v).join(" ")}`).join(", "))}, from ${r.plan?.lo} P, max ${r.plan?.hi} P`;
     case "haggle.adopted": return `Took over an open conversation with the dealer`;
     case "haggle.ended": return `Conversation ended: ${esc(r.status)}${r.reason ? ` (${esc(r.reason)})` : ""}`;
+    case "trade.haggle_opened": return `Started haggling with ${esc(r.maker)} on ${esc(r.venue)}: ${r.side} <b>${esc(r.ref)}</b> (posted ${r.posted} P, our limit ${r.our_limit} P)`;
+    case "trade.haggle_offer": return `Offered <b>${r.price} P</b> for ${esc(r.ref)} (${r.side}, their price ${r.posted} P)`;
+    case "trade.haggle_closed": return `Closed a haggle after ${r.rounds} offers${r.answered ? "" : " (no answer)"}`;
     case "trade.list_ask": return `Put spare <b>${esc(r.ref)}</b> up for ${r.price} P (worth ${r.our_value} to us)`;
     case "trade.list_bid": return `Offered <b>${r.price} P</b> for ${esc(r.ref)} (worth ${r.our_value} to us)`;
     case "trade.accept": case "trade.accept_team": return `✓ <b>Trade done</b>: +${r.gain} P of value for us`;
@@ -918,7 +946,7 @@ function strategyPlan(d, M) {
     ${row(deals >= 3, "Dealers", `Open at <b>${Math.round(S.haggle_open * 100)}%</b> of list, concede slowly over <b>${S.haggle_rounds}</b> rounds; never above what other teams typically pay; take her ask at once if it matches the best price anyone got.`, `${deals} deals · ${deals >= 3 ? "next dealer unlocked early" : `${3 - deals} more to unlock`}`)}
     ${row(trades.length > 0, "Trades", `Only trades that gain us <b>≥ ${S.trade_min_gain} P</b> at our values; list spares just under rival prices; bid low for Salamanca and Malasaña cards.`, trades.length ? `${trades.length} trades, +${fmt(trades.reduce((t, r) => t + r.gain, 0))} P` : "none yet")}
     ${row(true, "Duels", `Open far from our limit, settle within <b>${S.duel_rounds}</b> rounds, accept at <b>${Math.round(S.duel_accept * 100)}%</b> of our next offer; never cross our limit.`, nd ? `next ${until(wallFor(nd.at_hours, c, "duels"))}` : "–")}
-    ${row(!!venue, "Market", `Open <b>Mercado Trece</b> at <b>${S.venue_fee_bps / 100}%</b> fees as soon as we are level 2, run the smart broker, invite every team.`, venue ? "open" : me.level < 2 ? "needs level 2" : "opening…")}
+    ${row(!!venue, "Market", `Open <b>Mercado Trece</b> at <b>${S.venue_fee_bps / 100}%</b> fee (El Rastro: 5% + 1 P/card) as soon as we are level 2, run the smart broker, invite every team.`, venue ? "open" : me.level < 2 ? "needs level 2" : "opening…")}
   </tbody></table>`;
   const split = [["Negotiating", 30, sc.negotiating || 0, "var(--series-1)"], ["Market-making", 30, sc.market || 0, "var(--series-2)"], ["Judges", 40, null, "var(--neutral)"]];
   $("plan-split").innerHTML = `<svg viewBox="0 0 600 40" width="100%">${(() => { let x = 0, g = ""; for (const [n, w, v, col] of split) { const W = w * 6;
@@ -1068,7 +1096,7 @@ async function refresh() {
     if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
     servedAt = d.served_at;
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
-      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
+      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
     header(d);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;

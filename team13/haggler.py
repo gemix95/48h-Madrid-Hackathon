@@ -109,7 +109,7 @@ class Haggler:
             if floor >= book:
                 continue
             hi_ask = self._opening(stats.get(key), {"list_price": book}, side="sell")
-            return {"sell": {"asset": a["id"]}}, {"side": "sell", "key": key, "lo": floor, "hi": hi_ask,
+            return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": floor, "hi": hi_ask,
                                                    "list": book, "asset": a["id"], "ref": a["ref"]}
         for s in menu.get("sells", []):  # 3) buy single cards we want, cheaply
             if S["haggle_buy_cards"] and s.get("rarity") and cash > 15:

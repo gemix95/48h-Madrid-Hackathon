@@ -14,14 +14,18 @@ import threading
 
 from bazaar_sdk import BazaarError, Broker
 
-VENUE_NAME = "Mercado Trece · 0% fees"
-DESCRIPTION = ("Zero fees, fair midpoint matching, best pairs first. Built by Team 13 for everyone: "
-               "list your spares here and keep 100% of the price.")
-PITCH = ("Hola! Team 13 here. We just opened Mercado Trece: 0% fees (El Rastro takes 5% + 1 P per card) and fair "
-         "midpoint matching. List your spares there and keep the whole price. Venue id: {venue}.")
-ANNOUNCE = ["Mercado Trece is open: 0% fees, fair midpoint matching. Keep 100% of your price.",
-            "Selling spares? Mercado Trece charges nothing. El Rastro charges 5% + 1 P per card.",
-            "Mercado Trece: zero fees, every crossing pair matched at the fair middle, every tick."]
+VENUE_NAME = "Mercado Trece · {fee} fee"
+DESCRIPTION = ("Only {fee} fee, no per-card charge, fair midpoint matching, best pairs first. Built by Team 13 for "
+               "everyone: list your spares here and keep almost all of the price.")
+PITCH = ("Hola! Team 13 here. We just opened Mercado Trece: only {fee} fee and no per-card charge (El Rastro takes "
+         "5% + 1 P per card), with fair midpoint matching. List your spares there. Venue id: {venue}.")
+ANNOUNCE = ["Mercado Trece is open: {fee} fee, no per-card charge, fair midpoint matching.",
+            "Selling spares? Mercado Trece charges {fee}. El Rastro charges 5% + 1 P per card.",
+            "Mercado Trece: {fee} fee, every crossing pair matched at the fair middle, every tick."]
+
+
+def fee_text(bps) -> str:
+    return "0%" if not bps else f"{bps / 100:g}%"
 
 
 class Market:
@@ -54,8 +58,9 @@ class Market:
             return
         st["venue_try_tick"] = ctx.clock.get("tick", 0)
         try:
-            res = ctx.api.open_venue(VENUE_NAME, fee_bps=int(S["venue_fee_bps"]), fee_per_card=0,
-                                     rules={"mechanism": "board"}, description=DESCRIPTION)
+            ft = fee_text(int(S["venue_fee_bps"]))
+            res = ctx.api.open_venue(VENUE_NAME.format(fee=ft)[:40], fee_bps=int(S["venue_fee_bps"]), fee_per_card=0,
+                                     rules={"mechanism": "board"}, description=DESCRIPTION.format(fee=ft))
             st["venue"] = res.get("venue") or res.get("id")
             st["broker_key"] = res.get("broker_key")
             ctx.log("market", "opened", venue=st["venue"], fee_bps=int(S["venue_fee_bps"]))
@@ -75,7 +80,7 @@ class Market:
     # ------------------------------------------------------------------ marketing
     def announce(self, tick):
         ctx, st = self.ctx, self.ctx.state
-        text = ANNOUNCE[(st.get("announce_n", 0)) % len(ANNOUNCE)]
+        text = ANNOUNCE[(st.get("announce_n", 0)) % len(ANNOUNCE)].format(fee=fee_text(int(ctx.S["venue_fee_bps"])))
         try:
             Broker(ctx.raw.url, st["broker_key"]).announce(text)
             st["announce_tick"], st["announce_n"] = tick, st.get("announce_n", 0) + 1
@@ -107,10 +112,11 @@ class Market:
         if not target:
             return
         venue = st["venue"]
-        text = PITCH.format(venue=venue)
+        ft = fee_text(int(ctx.S["venue_fee_bps"]))
+        text = PITCH.format(venue=venue, fee=ft)
         if ctx.S.get("llm_negotiator", 1):
             situation = {"counterparty": f"team {target}", "goal": "invite them to list and trade on our new market",
-                         "facts": {"our_market": VENUE_NAME, "venue_id": venue, "fee": "0%",
+                         "facts": {"our_market": VENUE_NAME.format(fee=ft), "venue_id": venue, "fee": ft + " (no per-card charge)",
                                    "el_rastro_fee": "5% + 1 P per card", "matching": "fair midpoint, best pairs first"},
                          "instruction": "Write a short, friendly invitation. Only state the facts given. No price needed."}
             text, _, _ = ctx.speak(situation, (0, 0), (text, 0))

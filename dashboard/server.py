@@ -149,9 +149,19 @@ def agent_running():
 
 
 def poll():
-    intel_due = 0.0
+    intel_due = boards_due = 0.0
     while True:
         now = time.time()
+        if now >= boards_due and isinstance(cache.get("venues"), dict):  # every market's book, public reads
+            boards = {}
+            for v in cache["venues"].get("venues", []):
+                if v.get("status") == "open":
+                    data = get(f"/api/venues/{v['venue']}/offers", False)
+                    if "_error" not in data:
+                        boards[v["venue"]] = data.get("offers", [])
+            with lock:
+                cache["boards"] = boards
+            boards_due = now + 8
         if now >= intel_due:  # public feed, no key: our own copy for the Intel tab
             if isinstance(cache.get("catalog"), dict) and "sets" in cache["catalog"]:
                 INTEL.set_catalog(cache["catalog"])
