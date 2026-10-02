@@ -67,12 +67,15 @@ def poll() -> None:
         p = e.get("payload", {})
         if e["type"] in INTERESTING or e["type"].startswith(("level", "announce", "duel", "bench")):
             out(f"EVENT t{e['tick']} {e['type']}: {json.dumps(p)[:200]}")
-        elif e["type"] == "settlement" and p.get("persona") and "t13" not in p.get("parties", []):
-            items = [(i.get("ref") or i.get("kind")) for i in p.get("items", [])]
-            log("dealer_deal", p)
-            cash = p.get("cash") or p.get("price")
-            if cash is not None:
-                out(f"DEALER-DEAL {p.get('persona')} with {[x for x in p['parties'] if x != p['persona']]}: {items} @ {cash}")
+        elif e["type"] == "settlement":
+            log("settlement", p)
+            for i in p.get("items", []):
+                who = f"{i.get('frm')} -> {i.get('to')}"
+                if p.get("persona"):
+                    verb = "SOLD-TO-DEALER" if i.get("to") == p["persona"] else "BOUGHT-FROM-DEALER"
+                    out(f"{verb} {p['persona']} {who}: {i.get('ref') or i.get('kind')} @ {p.get('price')}")
+                else:
+                    out(f"TEAM-TRADE {p.get('venue')} {who}: {i.get('ref') or i.get('kind')} @ {p.get('price')} (fee {p.get('fee')})")
     if feed:
         state["feed_id"] = max(state["feed_id"], max(e["id"] for e in feed))
 

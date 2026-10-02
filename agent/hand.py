@@ -45,6 +45,20 @@ def main() -> None:
             r = b.say(int(args[0]), args[2], price=int(args[1]))
             log("say", thread=int(args[0]), price=int(args[1]), text=args[2], r=r)
             show(int(args[0]))
+        elif cmd == "sayw":  # say, then wait until the counterparty answers with a new offer or the thread ends
+            tid = int(args[0])
+            def theirs() -> tuple:
+                t = b.thread(tid)
+                return t["status"], sum(1 for o in t["standing_offers"] if o["maker"] != t["team"])
+            _, before = theirs()
+            r = b.say(tid, args[2], price=int(args[1]))
+            log("say", thread=tid, price=int(args[1]), text=args[2], r=r)
+            for _ in range(60):
+                status, n = theirs()
+                if status != "open" or n > before:
+                    break
+                time.sleep(5)
+            show(tid)
         elif cmd == "accept":
             r = b.accept(int(args[0]))
             log("accept", offer=int(args[0]), r=r)
