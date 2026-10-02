@@ -30,6 +30,7 @@ from haggler import Haggler
 from trader import Trader
 from guard import Guard
 from flipper import Flipper
+from flags import FlagHunter
 from values import Values
 from intel import Intel
 from learner import Learner
@@ -342,6 +343,7 @@ def main():
     modules.append(("guard", Guard(ctx)))  # last: undo anything this tick left open that loses value
     switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue",
               "guard": "enable_guard", "flipper": "enable_flipper"}
+    flagger = FlagHunter(ctx)  # proven bad faith in dealer messages to us: a correct flag scores
     ctx.log("agent", "start", dry=args.dry_run)
     last_tick, n = None, 0
     while True:
@@ -361,7 +363,7 @@ def main():
             ctx.tick_deadline = time.time() + 0.7 * float(ctx.clock.get("next_tick_in") or ctx.clock.get("tick_seconds") or 30)
             ctx.observe(full=(n % 20 == 0))
             n += 1
-            for extra in (ctx.watch_levels, ctx.maybe_flag, ctx.scan_manipulation):
+            for extra in (ctx.watch_levels, ctx.maybe_flag, ctx.scan_manipulation, flagger.step):
                 try:
                     extra()
                 except Exception as e:

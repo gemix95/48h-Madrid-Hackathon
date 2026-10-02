@@ -18,6 +18,9 @@ KNOBS = {
     "enable_venue": (1, 0, 1, 1, "Modules", "Open our market", "Open our own market as soon as we reach level 2."),
     "enable_guard": (1, 0, 1, 1, "Modules", "Guard", "Last each tick: cancel any open offer of ours that loses value at our private values or breaks a team cap."),
     "enable_flipper": (1, 0, 1, 1, "Modules", "Flipper", "Buy a card a team sells below another team's bid and sell into that bid (profit after both fees)."),
+    "auto_flag_proven": (1, 0, 1, 1, "Modules", "Flag proven bad faith", "Flag a dealer message when its own structured offer proves the words false (price or card code). A correct flag scores, a wrong one costs."),
+    "flag_bluffs": (0, 0, 1, 1, "Modules", "Also flag proven bluffs", "Flag a 'final' price the same dealer later beat in the same conversation. Off until we see how organisers score bluffs."),
+    "flag_catalog": (0, 0, 1, 1, "Modules", "Also flag catalog contradictions", "Flag a stated print run that contradicts the catalog."),
     "llm_negotiator": (1, 0, 1, 1, "Modules", "AI negotiator (Claude Opus 5.5)",
                        "Claude writes each message and picks the price inside the safe band the rules allow; "
                        "falls back to templates if the API is slow or unavailable."),
