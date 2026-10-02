@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Team 13 · The Bazaar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --series-2: #eb6834; --neutral: #c3c2b7;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --up: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --neutral: #4a4a46; --up: #0ca30c;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page);
+  color: var(--text-primary); min-height: 100vh; padding: 20px 24px 40px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-secondary); margin: 0 0 12px; }
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 3px 10px;
+  border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+.span-12 { grid-column: span 12; } .span-8 { grid-column: span 8; } .span-6 { grid-column: span 6; }
+.span-4 { grid-column: span 4; }
+@media (max-width: 1000px) { .span-8, .span-6, .span-4 { grid-column: span 12; } }
+.tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+@media (max-width: 800px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+.tile .label { font-size: 13px; color: var(--text-secondary); }
+.tile .value { font-size: 30px; font-weight: 600; margin-top: 4px; }
+.tile .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.delta-up { color: var(--up); } .delta-down { color: var(--critical); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--axis); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll { max-height: 360px; overflow: auto; }
+.thread { border-top: 1px solid var(--grid); padding-top: 12px; margin-top: 12px; }
+.thread:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+.thread-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+.thread-head strong { font-size: 15px; }
+.msgs { max-height: 220px; overflow: auto; font-size: 13px; display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.msg { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); max-width: 85%; }
+.msg.us { align-self: flex-end; }
+.msg .who { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.msg .price { font-weight: 600; font-variant-numeric: tabular-nums; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.meter-row { display: grid; grid-template-columns: 110px 1fr 70px; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 10px; }
+.meter { height: 10px; background: var(--grid); border-radius: 4px; overflow: hidden; }
+.meter > div { height: 100%; background: var(--series-1); border-radius: 0 4px 4px 0; }
+.empty { color: var(--muted); font-size: 13px; }
+.feed { font-size: 12px; max-height: 360px; overflow: auto; }
+.feed div { padding: 4px 0; border-bottom: 1px solid var(--grid); color: var(--text-secondary); }
+.feed .t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+.tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 10; }
+.err { color: var(--critical); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <header>
+    <h1 id="title">Team 13 · The Bazaar</h1>
+    <span class="pill" id="doors"><span class="dot"></span><span>…</span></span>
+    <span class="pill" id="tick">tick –</span>
+    <span class="pill" id="next">next tick –</span>
+    <span class="pill" id="updated">–</span>
+    <span class="err" id="err"></span>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="grid" style="margin-top:16px">
+    <section class="card span-8"><h2>Negotiations</h2><div id="threads"></div></section>
+    <section class="card span-4"><h2>Leaderboard · score</h2><div id="board"></div></section>
+
+    <section class="card span-6"><h2>Album pages</h2><div id="album"></div></section>
+    <section class="card span-6"><h2>Your set multipliers (private)</h2><div id="affinity"></div></section>
+
+    <section class="card span-8"><h2>Your cards</h2><div class="scroll" id="cards"></div></section>
+    <section class="card span-4"><h2>Live feed</h2><div class="feed" id="feed"></div></section>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = n => n == null ? "–" : (Math.round(n * 10) / 10).toLocaleString();
+const tip = $("tip");
+function showTip(e, html) { tip.innerHTML = html; tip.style.display = "block";
+  tip.style.left = Math.min(e.clientX + 12, innerWidth - 220) + "px"; tip.style.top = (e.clientY + 12) + "px"; }
+function hideTip() { tip.style.display = "none"; }
+
+let last = null, first = null, nextTickAt = null;
+const SET_NAMES = { LAV: "Lavapiés", MAL: "Malasaña", LAT: "La Latina", SAL: "Salamanca", RET: "El Retiro", CHA: "Chamberí" };
+
+function tiles(me) {
+  if (!first) first = me;
+  const d = (v, v0) => { const x = v - v0; if (!x) return "";
+    return `<span class="${x > 0 ? "delta-up" : "delta-down"}">${x > 0 ? "▲" : "▼"} ${fmt(Math.abs(x))}</span> since open`; };
+  const s = me.score || {};
+  const items = [
+    ["Cash", `${fmt(me.cash)} P`, d(me.cash, first.cash)],
+    ["Collection value", `${fmt(me.collection_value)} P`, d(me.collection_value, first.collection_value)],
+    ["Score", fmt(s.score), `negotiating ${fmt(s.negotiating)} · market ${fmt(s.market)}`],
+    ["Rank", s.rank ? `#${s.rank}` : "–", `${s.deals ?? 0} deals · level ${me.level}`],
+    ["Album", `${me.album?.filled ?? 0}/${me.album?.slots ?? 40}`, `${s.pages_complete ?? 0} pages complete`],
+  ];
+  $("tiles").innerHTML = items.map(([l, v, sub]) =>
+    `<div class="card tile"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${sub || "&nbsp;"}</div></div>`).join("");
+}
+
+// Pull every priced move out of a thread, in order: [{tick, who: "us"|"them", price, text}]
+function moves(th, myId) {
+  const out = [];
+  const mine = m => [m.from, m.author, m.sender, m.maker, m.side, m.team].some(v => v === myId || v === "team" || v === "us");
+  for (const m of th.messages || []) {
+    const p = m.price ?? m.offer?.price ?? m.offer?.want?.cash ?? m.offer?.give?.cash;
+    if (p != null) out.push({ tick: m.tick ?? m.created_tick ?? out.length, who: mine(m) ? "us" : "them", price: p, text: m.text });
+  }
+  if (!out.some(o => o.who === "them")) {  // fall back to the dealer's standing offers
+    for (const o of th.standing_offers || []) if (o.maker !== myId) {
+      const p = o.want?.cash ?? o.give?.cash; if (p != null) out.push({ tick: o.created_tick ?? o.tick ?? 0, who: "them", price: p, final: o.final });
+    }
+  }
+  return out.sort((a, b) => a.tick - b.tick);
+}
+
+function priceChart(mv, dealer) {
+  if (!mv.length) return `<div class="empty">No prices on the table yet: the dealer answers on the next tick.</div>`;
+  const W = 640, H = 200, L = 40, R = 90, T = 12, B = 26;
+  const ticks = mv.map(m => m.tick), prices = mv.map(m => m.price);
+  let x0 = Math.min(...ticks), x1 = Math.max(...ticks); if (x0 === x1) { x0 -= 1; x1 += 1; }
+  let y0 = Math.min(...prices), y1 = Math.max(...prices); const pad = Math.max(2, (y1 - y0) * 0.15); y0 = Math.max(0, y0 - pad); y1 += pad;
+  const X = t => L + (t - x0) / (x1 - x0) * (W - L - R), Y = p => T + (1 - (p - y0) / (y1 - y0)) * (H - T - B);
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const p = y0 + (y1 - y0) * i / 4, y = Y(p);
+    g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${Math.round(p)}</text>`; }
+  g += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--axis)"/>`;
+  g += `<text x="${L}" y="${H - 8}">tick ${Math.round(x0)}</text><text x="${W - R}" y="${H - 8}" text-anchor="end">tick ${Math.round(x1)}</text>`;
+  const series = [["us", "var(--series-1)", "Our offer"], ["them", "var(--series-2)", `${dealer}'s ask`]];
+  for (const [who, color, name] of series) {
+    const pts = mv.filter(m => m.who === who); if (!pts.length) continue;
+    const d = pts.map((m, i) => `${i ? "L" : "M"}${X(m.tick)},${Y(m.price)}`).join("");
+    g += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+    for (const m of pts) g += `<circle cx="${X(m.tick)}" cy="${Y(m.price)}" r="4.5" fill="${color}" stroke="var(--surface-1)" stroke-width="2"/>`;
+    const lastPt = pts[pts.length - 1];
+    g += `<text x="${X(lastPt.tick) + 10}" y="${Y(lastPt.price) + 4}" style="fill:var(--text-secondary)">${name} ${lastPt.price}${lastPt.final ? " (final)" : ""}</text>`;
+  }
+  // invisible hit targets, bigger than the marks
+  mv.forEach((m, i) => g += `<circle data-i="${i}" cx="${X(m.tick)}" cy="${Y(m.price)}" r="12" fill="transparent"/>`);
+  const legend = `<div class="legend">${series.map(([, c, n]) => `<span><i class="swatch" style="background:${c}"></i>${esc(n)}</span>`).join("")}</div>`;
+  return legend + `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Price over ticks">${g}</svg>`;
+}
+
+function threads(data) {
+  const me = data.me, list = data.threads?.threads || [];
+  if (!list.length) { $("threads").innerHTML = `<div class="empty">No conversations yet.</div>`; return; }
+  const sorted = [...list].sort((a, b) => (a.status === "open" ? -1 : 1) - (b.status === "open" ? -1 : 1) || b.id - a.id);
+  $("threads").innerHTML = sorted.slice(0, 4).map(th => {
+    const mv = moves(th, me.id);
+    const status = th.status === "deal" ? ["var(--good)", "✔ deal"] : th.status === "open" ? ["var(--series-1)", "● open"]
+      : ["var(--muted)", `✕ ${th.status}${th.closed_reason ? " · " + th.closed_reason : ""}`];
+    const topic = th.topic ? Object.entries(th.topic).map(([k, v]) => `${k} ${Object.values(v).join(" ")}`).join(", ") : "";
+    const msgs = (th.messages || []).map(m => {
+      const us = [m.from, m.author, m.sender, m.maker, m.side, m.team].some(v => v === me.id || v === "team" || v === "us");
+      const p = m.price ?? m.offer?.price;
+      return `<div class="msg ${us ? "us" : ""}"><div class="who"><i class="swatch" style="background:${us ? "var(--series-1)" : "var(--series-2)"}"></i>${us ? "Team 13" : esc(th.with)} · tick ${m.tick ?? "?"}${p != null ? ` · <span class="price">${p} P</span>` : ""}</div>${esc(m.text)}</div>`;
+    }).join("");
+    return `<div class="thread" data-th="${th.id}"><div class="thread-head"><strong>${esc(th.with)}</strong><span style="color:var(--text-secondary);font-size:13px">${esc(topic)}</span><span style="color:${status[0]};font-size:13px">${esc(status[1])}</span><span style="color:var(--muted);font-size:12px">thread #${th.id}</span></div>
+      ${priceChart(mv, th.with)}<div class="msgs">${msgs || `<div class="empty">Waiting for the first message…</div>`}</div></div>`;
+  }).join("");
+  // hover tooltips on chart points
+  for (const el of $("threads").querySelectorAll(".thread")) {
+    const th = list.find(t => t.id == el.dataset.th), mv = moves(th, me.id);
+    el.querySelectorAll("circle[data-i]").forEach(c => {
+      const m = mv[c.dataset.i];
+      c.addEventListener("mousemove", e => showTip(e, `<b>${m.who === "us" ? "Our offer" : th.with + "'s ask"}: ${m.price} P</b>${m.final ? " (final)" : ""}<br>tick ${m.tick}${m.text ? "<br>" + esc(m.text).slice(0, 140) : ""}`));
+      c.addEventListener("mouseleave", hideTip);
+    });
+    const box = el.querySelector(".msgs"); box.scrollTop = box.scrollHeight;
+  }
+}
+
+function hbars(rows, { max, ref, fmtV = fmt, highlight }) {
+  // rows: [{label, value, title}]
+  const W = 420, rowH = 22, L = 90, R = 50, H = rows.length * rowH + 6;
+  max = max ?? Math.max(1, ...rows.map(r => r.value));
+  const X = v => L + v / max * (W - L - R);
+  let g = "";
+  rows.forEach((r, i) => {
+    const y = i * rowH + 4, w = Math.max(0, X(r.value) - L);
+    const color = highlight ? (highlight(r) ? "var(--series-1)" : "var(--neutral)") : "var(--series-1)";
+    g += `<text x="${L - 8}" y="${y + 13}" text-anchor="end" style="fill:var(--text-secondary)">${esc(r.label)}</text>`;
+    g += `<path d="M${L},${y + 2} h${Math.max(0, w - 4)} a4,4 0 0 1 4,4 v6 a4,4 0 0 1 -4,4 h${-Math.max(0, w - 4)} z" fill="${color}"/>`;
+    g += `<text x="${L + w + 6}" y="${y + 13}" style="fill:var(--text-primary)">${fmtV(r.value)}</text>`;
+    g += `<rect data-i="${i}" x="0" y="${y}" width="${W}" height="${rowH}" fill="transparent"/>`;
+  });
+  if (ref != null) g += `<line x1="${X(ref)}" x2="${X(ref)}" y1="0" y2="${H}" stroke="var(--muted)" stroke-dasharray="3 3"/><text x="${X(ref) + 3}" y="${H - 2}">×${ref}</text>`;
+  g = `<line x1="${L}" x2="${L}" y1="0" y2="${H - 2}" stroke="var(--axis)"/>` + g;
+  return `<svg viewBox="0 0 ${W} ${H + 6}" width="100%">${g}</svg>`;
+}
+function bindRowTips(el, rows) {
+  el.querySelectorAll("rect[data-i]").forEach(r => {
+    r.addEventListener("mousemove", e => showTip(e, rows[r.dataset.i].title)); r.addEventListener("mouseleave", hideTip); });
+}
+
+function board(data) {
+  const teams = (data.leaderboard?.teams || []).slice().sort((a, b) => b.score - a.score || a.rank - b.rank);
+  const rows = teams.map(t => ({ label: t.name, value: t.score, id: t.team,
+    title: `<b>#${t.rank} ${esc(t.name)}</b><br>score ${fmt(t.score)}<br>album ${t.album_filled}/${t.album_slots} · ${t.deals} deals · level ${t.level}` }));
+  if (!rows.length) { $("board").innerHTML = `<div class="empty">No leaderboard yet.</div>`; return; }
+  $("board").innerHTML = `<div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Team 13</span><span><i class="swatch" style="background:var(--neutral)"></i>Other teams</span></div>`
+    + hbars(rows, { highlight: r => r.id === data.me.id, max: Math.max(1, ...rows.map(r => r.value)) })
+    + `<div class="empty" style="margin-top:6px">Public board refreshes every few minutes; your tile score is live.</div>`;
+  bindRowTips($("board"), rows);
+}
+
+function album(me) {
+  const pages = me.album?.pages || [];
+  $("album").innerHTML = pages.map(p => `<div class="meter-row"><span>${esc(p.name)}</span>
+    <div class="meter" title="${p.have} of ${p.of}"><div style="width:${p.have / p.of * 100}%"></div></div>
+    <span style="text-align:right;font-variant-numeric:tabular-nums">${p.have}/${p.of}${p.complete ? " ✔" : ""}</span></div>`).join("")
+    || `<div class="empty">No album yet.</div>`;
+}
+
+function affinity(me) {
+  const rows = Object.entries(me.affinity || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: SET_NAMES[k] || k, value: v,
+    title: `<b>${SET_NAMES[k] || k} (${k})</b><br>×${v}: ${v > 1 ? "worth more to you than to an average team: keep and buy" : v < 1 ? "worth less to you: good to trade away" : "neutral"}` }));
+  $("affinity").innerHTML = hbars(rows, { ref: 1, max: Math.max(2, ...rows.map(r => r.value)), fmtV: v => "×" + v })
+    + `<div class="empty" style="margin-top:6px">Dashed line = ×1. Above it, a set is worth more to you than to an average team.</div>`;
+  bindRowTips($("affinity"), rows);
+}
+
+function cards(me, offers) {
+  const listed = new Set((offers?.offers || []).flatMap(o => o.give?.assets || []));
+  const counts = {}; for (const a of me.assets) counts[a.ref] = (counts[a.ref] || 0) + 1;
+  const rows = [...me.assets].sort((a, b) => b.your_value - a.your_value);
+  $("cards").innerHTML = `<table><thead><tr><th>Card</th><th>Ref</th><th>Rarity</th><th class="num">Serial</th><th class="num">Your value</th><th>Note</th></tr></thead><tbody>`
+    + rows.map(a => `<tr><td>${esc(a.name)}</td><td>${esc(a.ref)}</td><td>${esc(a.kind === "pack" ? "pack" : a.rarity)}</td>
+      <td class="num">${a.serial != null ? `#${a.serial}/${a.print_run}` : ""}</td><td class="num">${fmt(a.your_value)} P</td>
+      <td style="color:var(--text-secondary)">${[counts[a.ref] > 1 ? "duplicate" : "", listed.has(a.id) ? "listed on market" : ""].filter(Boolean).join(" · ")}</td></tr>`).join("")
+    + `</tbody></table>`;
+}
+
+function feed(data) {
+  const ev = (data.feed?.events || []).slice().reverse();
+  const line = e => { const p = e.payload || {};
+    const bits = [p.team, p.with, p.price != null ? p.price + " P" : "", p.text ? `“${String(p.text).slice(0, 80)}”` : ""].filter(Boolean);
+    return `<div${p.team === data.me.id ? ' style="color:var(--text-primary);font-weight:500"' : ""}><span class="t">t${e.tick}</span>${esc(e.type)} ${esc(bits.join(" · "))}</div>`; };
+  $("feed").innerHTML = ev.map(line).join("") || `<div class="empty">Quiet.</div>`;
+}
+
+function header(data) {
+  const c = data.clock || {};
+  const open = c.doors === "open" && !c.paused;
+  const [color, label] = c.paused ? ["var(--warning)", "⏸ paused by organisers"] : open ? ["var(--good)", "● live"] : ["var(--muted)", `closed · opens ${c.next_name || ""}`];
+  $("doors").innerHTML = `<span class="dot" style="background:${color}"></span><span>${label} · ${esc(c.round_name || "")}</span>`;
+  $("tick").textContent = `tick ${c.tick ?? "–"} · ${c.tick_seconds ?? "–"} s`;
+  nextTickAt = c.next_tick_in != null ? Date.now() + c.next_tick_in * 1000 : null;
+  $("updated").textContent = "updated " + new Date().toLocaleTimeString();
+}
+setInterval(() => { if (nextTickAt != null) $("next").textContent = `next tick in ${Math.max(0, Math.round((nextTickAt - Date.now()) / 1000))} s`; }, 500);
+
+async function refresh() {
+  try {
+    const data = await (await fetch("/data")).json();
+    const errs = Object.entries(data).filter(([, v]) => v && v._error).map(([k, v]) => `${k}: ${v._error}`);
+    $("err").textContent = errs.length ? "⚠ " + errs.join(", ") : "";
+    if (data.me && !data.me._error) {
+      last = data; header(data); tiles(data.me); threads(data); album(data.me); affinity(data.me);
+      cards(data.me, data.offers); board(data); feed(data);
+    }
+  } catch (e) { $("err").textContent = "⚠ dashboard server unreachable"; }
+}
+refresh(); setInterval(refresh, 5000);
+</script>
+</body>
+</html>
