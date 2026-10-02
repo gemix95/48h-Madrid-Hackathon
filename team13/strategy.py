@@ -56,6 +56,11 @@ KNOBS = {
     "trade_all_markets": (1, 0, 1, 1, "Trading", "Trade on every market",
                           "Scan every market (El Rastro, starter stalls, team venues), value offers after each market's fee, "
                           "and spread our listings over the busiest, cheapest ones."),
+    "trade_seek_needed": (1, 0, 1, 1, "Trading", "Ask for cards we need",
+                          "When a card that completes a page (or is worth 60+ P to us) is not listed anywhere, ask the team that "
+                          "has it (seen in the public feed) with a structured offer that still leaves us most of its value."),
+    "seek_keep_cash": (100, 0, 300, 10, "Trading", "Cash we always keep when asking for a page completer (P)",
+                       "Completing a page is worth so much that it may use the market-bond reserve, but never below this."),
     "trade_haggles": (2, 0, 4, 1, "Trading", "Haggle with sellers (conversations at once)",
                       "Instead of paying a posted price, open a conversation with the seller (or buyer) and negotiate."),
     # duels

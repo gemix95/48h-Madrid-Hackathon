@@ -68,9 +68,14 @@ class Trader:
             return {"gain": None, "why": "unknown items"}
         if len(they_want) > 0 and any(v.held[r] == 0 for r in they_want):
             return {"gain": None, "why": "they want cards we do not hold"}
+        if any(self.protected(r) for r in they_want):
+            return {"gain": None, "why": "would break a page we are about to complete"}
         f = self.fee_at(offer.get("venue"), cash_in or cash_out, len(they_give) + len(they_want))
         gain = v.gain_of_adding(they_give) - v.loss_of_removing(they_want) + cash_in - cash_out - f
-        if cash_out + f > ctx.me["cash"] - ctx.reserve():
+        keep = ctx.reserve()
+        if they_give and any(v.gain_of_adding([r]) > v.book(r) * v.m(r) * 1.2 for r in they_give):
+            keep = min(keep, ctx.S.get("seek_keep_cash", 100))  # a page completer may use the bond reserve, not below this
+        if cash_out + f > ctx.me["cash"] - keep:
             return {"gain": None, "why": "cash reserved"}
         return {"gain": gain, "give": they_give, "want": they_want, "cash_in": cash_in, "cash_out": cash_out, "fee": f}
 
@@ -253,13 +258,15 @@ class Trader:
                 p_max = min(p_max, math.floor(free / (1 + bps / 10000)) - per)  # never promise cash we keep back
                 if 1 <= p_max < ask and p_max >= 0.5 * ask:
                     cands.append((value - ask, "buy", venue, maker, ref, ask, p_max, o))
-            elif len(w_refs) == 1 and give.get("cash") and not g_refs and v.held[w_refs[0]] > 0:  # they buy one card
+            elif len(w_refs) == 1 and give.get("cash") and not g_refs and v.held[w_refs[0]] > 0 and not self.protected(w_refs[0]):  # they buy one card
                 ref, bid = w_refs[0], give["cash"]
                 loss = v.loss_of_removing([ref])
                 bps, per = ctx.venue_fee(venue)
                 p_min = math.ceil(loss + S["trade_min_gain"] + per + bps * bid / 10000)
                 if bid < p_min <= 2 * bid:
                     cands.append((bid - loss, "sell", venue, maker, ref, bid, p_min, o))
+        if S.get("trade_seek_needed", 1):
+            cands += self.seek_candidates(busy, tried, tick)  # ranked with everything else: big page completers win
         for score, side, venue, maker, ref, posted, limit, o in sorted(cands, key=lambda c: -c[0]):
             if (maker, ref) in busy or tried.get(f"{maker}:{ref}", -99) > tick - 30:
                 continue
@@ -273,14 +280,63 @@ class Trader:
                 tried[f"{maker}:{ref}"] = tick
                 continue
             tid = str(th["id"])
-            first = (min(limit, math.floor(posted * 0.75)) if side == "buy" else max(limit, math.ceil(posted * 1.35)))
+            if o is None:  # asking a holder for a card they did not list: start just above what they paid
+                first = min(limit, max(1, math.ceil(posted * 1.05)))
+            else:
+                first = (min(limit, math.floor(posted * 0.75)) if side == "buy" else max(limit, math.ceil(posted * 1.35)))
             hag[tid] = {"side": side, "venue": venue, "maker": maker, "ref": ref, "posted": posted, "limit": limit,
                         "price": first, "round": 0, "opened": tick, "tick": -99, "assets": assets}
             ours.append(tid)
             tried[f"{maker}:{ref}"] = tick
-            ctx.log("trade", "haggle_opened", thread=tid, side=side, ref=ref, venue=venue, maker=maker, posted=posted, our_limit=limit)
+            ctx.log("trade", "haggle_opened", thread=tid, side=side, ref=ref, venue=venue, maker=maker, posted=posted, our_limit=limit,
+                    seek=o is None)
             self._haggle_say({"id": int(tid), "messages": []}, hag[tid])
             break  # one new conversation per tick
+
+    def protected(self, ref) -> bool:
+        """Our only copy of a card from a page that is 8/10 or more: never sell it, it is worth a page bonus soon."""
+        v = self.ctx.values
+        if v.held[ref] > 1 or ref not in v.cards or not v.cards[ref].get("page"):
+            return False
+        sid = v.cards[ref]["set"]
+        page = v.page_cards(sid)
+        return sum(1 for r in page if v.held[r] > 0) >= len(page) - 2
+
+    def seek_candidates(self, busy, tried, tick):
+        """Cards we need that nobody lists: ask a team the public feed shows recently received or listed one.
+        Page completers may use the market-bond reserve (never below seek_keep_cash); everything else may not."""
+        ctx, v, S = self.ctx, self.ctx.values, self.ctx.S
+        if not getattr(ctx, "intel", None):
+            return []
+        summ = ctx.intel.summary()
+        holders = {}
+        for l in summ.get("listings", []):
+            for a in (l.get("give") or {}).get("assets") or []:
+                if l.get("maker"):
+                    holders.setdefault(a.get("ref"), {})[l["maker"]] = (l["tick"], (l.get("want") or {}).get("cash"))
+        for e in ctx.intel.events.values():
+            if e.get("type") == "settlement":
+                for it in (e.get("payload") or {}).get("items", []):
+                    to = it.get("to") or ""
+                    if it.get("kind") == "card" and to[:1] == "t" and to[1:].isdigit():
+                        holders.setdefault(it["ref"], {})[to] = (e["tick"], e["payload"].get("price"))
+        out = []
+        for ref, gain in v.wishlist(limit=15):
+            base = v.book(ref) * v.m(ref)
+            completer = gain > base * 1.2
+            if not (completer or gain >= 60):
+                continue
+            keep = S.get("seek_keep_cash", 100) if completer else ctx.reserve()
+            cash_ok = ctx.me["cash"] - keep
+            limit = math.floor(min(gain * (0.6 if completer else 0.75), gain - 2 * S["trade_min_gain"], cash_ok))
+            for team, (seen, paid) in sorted(holders.get(ref, {}).items(), key=lambda x: -x[1][0]):
+                if team == ctx.me["id"] or (team, ref) in busy or tried.get(f"{team}:{ref}", -999) > tick - 120 or tick - seen > 240:
+                    continue
+                posted = paid or math.floor(v.book(ref) * 1.1)
+                if limit >= posted * 0.9 and limit >= 5:
+                    out.append((gain - posted, "buy", "rastro", team, ref, posted, limit, None))
+                break  # the most recent holder only
+        return out
 
     def _haggle_say(self, th, H):
         """Our next structured offer in a haggle: from an ambitious first price toward our limit over 4 rounds."""
@@ -406,7 +462,7 @@ class Trader:
         for a in v.spares():
             if len(asks) >= MAX_ASKS or budget <= 0 or open_total >= ctx.limit("max_open_offers_per_team", 30):
                 break
-            if a["id"] in locked or any(L.get("asset") == a["id"] for L in asks):
+            if a["id"] in locked or any(L.get("asset") == a["id"] for L in asks) or self.protected(a["ref"]):
                 continue
             loss = v.loss_of_removing([a["ref"]])
             book = v.book(a["ref"])
