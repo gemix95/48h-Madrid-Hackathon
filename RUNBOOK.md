@@ -94,3 +94,15 @@ venue fee, so post our price and let them accept.
 - A one-off script accepted the other side's offer, so we paid the 5 P fee. Post our price instead.
 - `agent/team_intel.py` read our own preferences right (likes SAL, MAL; dislikes LAT) without seeing our values:
   the same read on other teams tells us whom to trade with.
+
+## 6. El Chato (level 2): how he negotiates (from 10 threads on Friday)
+
+- **He mirrors the size of our step, nothing else.** "Six from you. Six from me." Small steps get mocked and earn
+  0 to 1 P ("Three points. That is your big move?"). Words, speed of payment and long messages do not move him.
+- **Openings are far above list:** rares 97 (list 77), uncommons 33 (list 26), silver pack 188 (list 150).
+  With step-for-step mirroring the deal lands near the **midpoint of the two openings**: to land at X, open at
+  about 2X minus his opening (for a rare at 97, open near 2 x 72 - 97 = 47 to land near 72).
+- Being "Carmen's friend" (straight dealing with Abuela) gives a warmer greeting, not a lower price.
+- Patience 0.35, memory 0.9, strictness 0.85: few rounds, steps of 5 to 6 P, no tricks, never repeat a price.
+  Walk away politely when the midpoint is above the cap ("That is our limit for tonight"): he remembers.
+- Friday: MAL-09 thread 195, we opened 58, he 97; walked at 74 vs 86 (midpoint 80 above our cap 75).
