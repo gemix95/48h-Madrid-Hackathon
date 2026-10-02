@@ -70,7 +70,14 @@ class Duels:
         decay = float(first(d, "decay", default=0.06) or 0.06)
 
         msgs = first(d, "messages", "history", default=[]) or []
-        mine = [m for m in msgs if first(m, "sender", "from", "by", "author", "side", default=None) in (me, "you", "us", role)]
+        rival_name = d.get("rival")
+
+        def from_us(m):
+            who = first(m, "sender", "from", "by", "author", "side", default=None)
+            if rival_name is not None and who is not None:
+                return who != rival_name  # live format: the rival signs with its alias ("Rival Rojo")
+            return who in (me, "you", "us", role)
+        mine = [m for m in msgs if from_us(m)]
         for m in msgs:  # the price sits in the message's structured offer, as in dealer threads
             o = m.get("offer") if isinstance(m.get("offer"), dict) else {}
             if m.get("price") is None and o:
@@ -98,7 +105,7 @@ class Duels:
 
         S = ctx.S
         ROUNDS = int(S["duel_rounds"])
-        k = len(mine)
+        k = max(len(mine), int(d.get("rounds") or 0) if d.get("your_offer") else 0)
         # anchor: far from our limit; if the rival has spoken, aim past the midpoint on our side
         # duel_anchor 2.0 -> a seller opens 60% above its cost, a buyer 37.5% below its value (always a real price)
         amb = 0.3 * S["duel_anchor"]
