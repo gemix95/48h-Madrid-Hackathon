@@ -681,6 +681,8 @@ class Haggler:
             c["deals"] += 1
             if plan.get("pack"):
                 c["packs"] += 1
+            if plan.get("side") == "sell" and price and hasattr(ctx, "record_income"):
+                ctx.record_income(price, plan.get("key"))  # widens this agent's 2-hour allowance
             sale = {"side": "sell", "ref": plan.get("ref"), "cost": plan.get("cost"),
                     "net": round(price - plan["cost"], 1)} if plan.get("side") == "sell" and price and plan.get("cost") is not None else {}
             ctx.log("haggle", "deal", thread=th["id"], price=price, list=plan.get("list"), rounds=plan["k"], key=plan["key"], **sale)

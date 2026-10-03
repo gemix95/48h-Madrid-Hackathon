@@ -22,7 +22,8 @@ One agent per person (one team key, scopes that never overlap), all set by envir
     AGENT_NAME=sergio            own state-<name>.json and agent-<name>.lock; every log line carries "agent": name
     AGENT_ROLE=haggler           modules (as above)
     AGENT_DEALERS=abuela,pilar   the only dealers this agent opens, talks to and trades with
-    AGENT_BUDGET_2H=40           most it spends per 2 game hours; when it runs out it buys nothing until the next window
+    AGENT_BUDGET_2H=40           margin call: per 2 game hours an agent may spend this plus what its own sales brought in;
+                                 when it runs out it buys nothing until the next window (selling always goes on)
     AGENT_SLOT=0 AGENT_SLOTS=3   the team's single accept per tick goes to the agent whose slot is tick % slots
     AGENT_KNOBS=enable_haggler=1,workshop_accumulate=0   this agent's own strategy knobs on top of strategy.json
 """
@@ -259,6 +260,17 @@ class Context:
     def spent_window(self):
         return self.state.setdefault("spent_2h", {}).get(self.window_key(), 0)
 
+    def earned_window(self):
+        return self.state.setdefault("earned_2h", {}).get(self.window_key(), 0)
+
+    def record_income(self, amount, what):
+        """Cash this agent's own sales brought in: it widens this agent's 2-hour allowance (AGENT_BUDGET_2H)."""
+        if amount and amount > 0:
+            e = self.state.setdefault("earned_2h", {})
+            e[self.window_key()] = e.get(self.window_key(), 0) + amount
+            self.log("money", "earned", amount=amount, what=what, window=self.window_key(), earned=e[self.window_key()],
+                     spent=self.spent_window())
+
     def budget_left(self):
         """What we may still spend today: the day budget minus what we spent, never below the cash we keep.
         With several agents on one key, AGENT_BUDGET caps this process's own daily spend (spent is per state.json)
@@ -268,8 +280,13 @@ class Context:
             day = min(day, self.agent_budget)
         left = min(day - self.spent_today(), self.me.get("cash", 0) - self.reserve())
         b2h = getattr(self, "budget_2h", None)
-        if b2h is not None:
-            left = min(left, b2h - self.spent_window())
+        if b2h is not None:  # margin call: the allowance plus this agent's own sales in the window, minus its buys
+            allowance = b2h + self.earned_window() - self.spent_window()
+            if allowance <= 0 and self.state.get("margin_call") != self.window_key():
+                self.state["margin_call"] = self.window_key()
+                self.log("money", "margin_call", window=self.window_key(), spent=self.spent_window(),
+                         earned=self.earned_window(), allowance=b2h)
+            left = min(left, allowance)
         return max(0, left)
 
     def record_spend(self, amount, what):

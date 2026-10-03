@@ -38,6 +38,10 @@ ctx.record_spend(30, "pack")
 results.append(check("after 30 P: 10 left", ctx.budget_left() == 10, ctx.budget_left()))
 ctx.record_spend(10, "card")
 results.append(check("spent: buys nothing more this window", ctx.budget_left() == 0, ctx.budget_left()))
+ctx.record_income(25, "sold LAV-04")
+results.append(check("margin call: own sales widen the allowance (25 P)", ctx.budget_left() == 25, ctx.budget_left()))
+ctx.record_spend(25, "pack")
+results.append(check("margin call logged once the allowance is gone", ctx.budget_left() == 0 and bool(ctx.state.get("margin_call"))))
 ctx.clock["t_hours"] = 10.1
 results.append(check("next window: 40 P again", ctx.budget_left() == 40, ctx.budget_left()))
 
