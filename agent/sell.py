@@ -2,12 +2,15 @@
 end, never below `--floor` P, at most `--rounds` price steps, then withdraw.
 
     cd team13 && source ../bazaar.env && python3 ../agent/sell.py MAL-09 --start 200 --floor 140 --rounds 8 --ticks 5
+    ... --to t10  also negotiates with that team in a thread: every step goes to it as a structured offer
     ... --dry     prints the schedule and what it would do, writes nothing
 
 The hard rules live in code, not in a prompt:
   - a price is never listed below the floor, and the floor must beat what giving the card up costs us at our private
     values (page bonus included) by at least 3 P;
   - the same public ask goes on El Rastro and on one free market whose owner is not a buyer we know is interested;
+    with --to, the same price also goes to that team in a thread (a free market that is not theirs), as an offer it can
+    accept from the thread; what the team writes back is only logged, never obeyed;
   - an offer addressed to us for this card is accepted only if its value to us, after that market's fee, is at least
     what the floor would have given us; offers that pay in cards are valued at our private values;
   - the card must still be in our hands before every step; when it leaves we cancel what is still open and stop;
@@ -32,6 +35,15 @@ from values import Values  # noqa: E402
 LOG = os.path.join(HERE, "..", "team13", "logs", "sell.jsonl")
 MIN_GAIN = 3          # P over the cost of giving the card up
 EXPONENT = 2.2        # Boulware: small steps first, big ones near the end (strategy knob haggle_curve)
+
+
+TEXTS = [
+    "Hola! Team 13 here. I can part with my MAL-09 for {p} P. The offer is attached, 0% fee on this market, settles next tick.",
+    "Thanks for your interest in MAL-09! New price: {p} P, offer attached. No fee on this market.",
+    "Hi again, I can do {p} P for the MAL-09. Offer attached, it settles on the next tick.",
+    "Still happy to sell the MAL-09, now at {p} P (offer attached, no fee here).",
+    "A step down for you: {p} P for MAL-09, offer attached. Free market, no commission.",
+]
 
 
 def log(**rec):
@@ -78,6 +90,7 @@ def main():
     ap.add_argument("--ticks", type=int, default=5, help="ticks each step lasts")
     ap.add_argument("--hold", type=int, default=1, help="extra steps at the floor before withdrawing")
     ap.add_argument("--avoid", default="t14,t10", help="teams that cannot take an ask on their own market")
+    ap.add_argument("--to", default="", help="team to negotiate with in a thread, besides the public asks")
     ap.add_argument("--dry", action="store_true")
     a = ap.parse_args()
     api = Bazaar(os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai"), os.environ["BAZAAR_KEY"], wait_on_tick=False)
@@ -102,7 +115,7 @@ def main():
         if not steps or p < steps[-1]:
             steps.append(p)
     steps += [a.floor] * a.hold
-    log(event="plan", ref=a.ref, asset=asset, cost=round(cost, 1), floor=a.floor, need_net=round(need, 1), venues=where,
+    log(event="plan", to=a.to or None, ref=a.ref, asset=asset, cost=round(cost, 1), floor=a.floor, need_net=round(need, 1), venues=where,
         steps=steps, ticks_per_step=a.ticks, minutes=round(len(steps) * a.ticks * 0.5, 1))
 
     def incoming():
@@ -127,6 +140,29 @@ def main():
     if a.dry:
         return
     open_offers, last_ticks, k, started = {}, None, 0, None
+    talk = {"id": None, "seen": set(), "venue": None}
+    if a.to:  # the thread runs on a free market the other team does not own (it could not accept there otherwise)
+        tv = free_venue(venues, api.leaderboard(), me_id, {a.to})
+        try:
+            talk["venue"] = tv["venue"]
+            talk["id"] = api.open_thread(a.to, venue=tv["venue"])["id"]
+            log(event="thread_opened", team=a.to, thread=talk["id"], venue=tv["venue"])
+        except (BazaarError, TypeError, KeyError) as e:
+            log(event="thread_refused", team=a.to, error=str(e)[:160])
+
+    def thread_say(p, tick):
+        text = TEXTS[k % len(TEXTS)].format(p=p)
+        try:
+            api.say(talk["id"], text, offer={"give": {"assets": [asset]}, "want": {"cash": p}})
+            log(event="thread_offer", tick=tick, step=k, price=p, thread=talk["id"])
+        except BazaarError as e:
+            log(event="thread_offer_refused", tick=tick, step=k, price=p, error=str(e)[:160])
+
+    def thread_replies(tick):
+        for m in api.thread(talk["id"]).get("messages", []):
+            if m.get("sender") != me_id and m.get("id") not in talk["seen"]:
+                talk["seen"].add(m.get("id"))
+                log(event="reply", tick=tick, team=m.get("sender"), text=str(m.get("text"))[:300], offer=m.get("offer"))
 
     def withdraw(why):
         for vid, oid in list(open_offers.items()):
@@ -135,6 +171,14 @@ def main():
             except BazaarError:
                 pass
             open_offers.pop(vid)
+        if talk["id"]:
+            try:
+                for o in api.thread(talk["id"]).get("standing_offers", []):
+                    if o.get("maker") == me_id and o.get("status") == "open":
+                        api.cancel(o["id"])
+                api.close_thread(talk["id"])
+            except BazaarError:
+                pass
         log(event="withdrawn", why=why)
 
     def stop(*_):
@@ -155,6 +199,8 @@ def main():
                 log(event="card_left", tick=tick, asset=asset)
                 withdraw("card left our hands: sold")
                 return
+            if talk["id"]:
+                thread_replies(tick)
             for x in incoming():
                 if x["ok"]:
                     api.accept(x["offer"], assets=[asset])
@@ -180,6 +226,8 @@ def main():
                         api.cancel(oid)
                     except BazaarError:
                         pass
+                if talk["id"]:
+                    thread_say(p, tick)
                 open_offers = fresh
                 started, k = tick, k + 1
         except BazaarError as e:
