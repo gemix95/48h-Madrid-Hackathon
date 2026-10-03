@@ -57,8 +57,36 @@ def _restore_longshots():
                 AUTO.longshot_ids.add(rec["r"]["offer"])
     except (OSError, ValueError):
         pass
-# the bots' own logs, so they only exist on the laptop that runs them: agent.py writes decisions.jsonl, agent/hand.py hand.jsonl
-INDEX = LogIndex({"agent": DECISIONS, "manual": HERE.parent / "logs" / "hand.jsonl"})
+# the bots' own logs, so they only exist where the bots run (the server): the three agents write decisions.jsonl,
+# agent/sell.py and agent/try_injection.py their own files, agent/hand.py hand.jsonl
+INDEX = LogIndex({"agent": DECISIONS, "manual": HERE.parent / "logs" / "hand.jsonl",
+                  "script": [HERE.parent / "team13" / "logs" / "sell.jsonl", HERE.parent / "team13" / "logs" / "injection.jsonl"]})
+# A laptop has no live agent log: set DASHBOARD_REMOTE=http://217.160.143.83 and DASHBOARD_REMOTE_PASSWORD (bazaar.env)
+# and this dashboard shows the server's answers (who sent each message, the agents' decisions, the guard) instead.
+REMOTE, REMOTE_PASSWORD = os.environ.get("DASHBOARD_REMOTE", "").rstrip("/"), os.environ.get("DASHBOARD_REMOTE_PASSWORD", "")
+remote_logs: dict = {}
+
+
+def logs_view() -> dict:
+    """Who sent each of our messages and what the agents decided, from the logs here (the server's own)."""
+    INDEX.refresh()
+    with lock:
+        threads, me_id = cache.get("threads"), (cache.get("me") or {}).get("id")
+    return {"origins": message_origins(INDEX, threads, me_id), "decisions": tail(DECISIONS), "guard": INDEX.recent_guard(),
+            "log_sources": INDEX.status(), "logs_from": "here"}
+
+
+def mirror_remote():
+    """Every 15 s: the server dashboard's /logs, kept in remote_logs (with when it arrived)."""
+    auth = "Basic " + base64.b64encode(f"team13:{REMOTE_PASSWORD}".encode()).decode()
+    while True:
+        try:
+            req = urllib.request.Request(REMOTE + "/logs", headers={"Authorization": auth})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                remote_logs.update(json.load(resp), at=time.time(), error=None)
+        except Exception as e:  # keep the last good copy; /data says how old it is
+            remote_logs["error"] = str(e)[:160]
+        time.sleep(15)
 
 
 def tail(path, n=150):
@@ -405,7 +433,7 @@ def board_loop():
     while True:
         try:
             data = board.build()
-            BOARD["html"], BOARD["json"] = board.render(data).encode(), json.dumps(data).encode()
+            BOARD["html"], BOARD["json"] = board.render(data).encode(), json.dumps(board.public(data)).encode()  # redacted: no other markets
         except Exception as e:
             print("board:", repr(e)[:200], flush=True)
         time.sleep(60)
@@ -453,8 +481,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._authorized():
             return
-        if self.path.startswith("/data"):
-            INDEX.refresh()
+        if self.path.startswith("/logs"):
+            self._send(200, "application/json", json.dumps(logs_view()).encode())
+        elif self.path.startswith("/data"):
+            logs = logs_view()
+            if REMOTE and remote_logs.get("at"):  # a laptop: the agents' logs are on the server
+                logs = {**{k: remote_logs.get(k) for k in ("origins", "decisions", "guard", "log_sources")},
+                        "logs_from": REMOTE, "logs_age": round(time.time() - remote_logs["at"]), "logs_error": remote_logs.get("error")}
             with lock:
                 try:  # what the agent is doing right now (its own state file; read-only)
                     st = json.loads(STATE.read_text())
@@ -480,10 +513,8 @@ class Handler(BaseHTTPRequestHandler):
                 except (OSError, ValueError):
                     duels_board = {}
                 body = json.dumps({**cache, "api_spend": api_spend(), "agent_state": agent_state, "council": council_view,
-                                   "history": history, "served_at": time.time(),
-                                   "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60),
-                                   "origins": message_origins(INDEX, cache.get("threads"), (cache.get("me") or {}).get("id")),
-                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard(), "swaps": swaps_payload(),
+                                   "history": history, "served_at": time.time(), "broker_log": tail(BROKER_LOG, 60),
+                                   **logs, "swaps": swaps_payload(),
                                    "announcements": announcements(), "duel_learn": duel_learn, "duels_board": duels_board,
                                    "workshop": workshop_view()}).encode()
             self._send(200, "application/json", body)
@@ -576,5 +607,7 @@ if __name__ == "__main__":
     _restore_longshots()
     threading.Thread(target=autosend, daemon=True).start()
     threading.Thread(target=board_loop, daemon=True).start()
-    print(f"Team 13 war room on http://localhost:{PORT}")
+    if REMOTE:
+        threading.Thread(target=mirror_remote, daemon=True).start()
+    print(f"Team 13 war room on http://localhost:{PORT}" + (f" (agents' logs from {REMOTE})" if REMOTE else ""))
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

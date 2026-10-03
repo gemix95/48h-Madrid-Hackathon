@@ -49,6 +49,7 @@ from trader import Trader
 from guard import Guard
 from loans import LoanDesk
 from matchmaker import Matchmaker
+from arbitrage import Arbitrage
 from workshop import Workshop
 from flipper import Flipper
 from wtb import Asker
@@ -532,8 +533,8 @@ def single_instance(label: str = "all"):
 # Several teammates may run an agent on the same key from different machines. The server cannot tell them apart,
 # so each agent owns a disjoint set of modules: two agents never haggle with the same dealer or hit the same offer.
 ROLES = {
-    "all": {"duels", "haggler", "venue", "trader", "flipper", "wtb", "tapas", "loans", "workshop", "matchmaker"},
-    "dealers": {"duels", "haggler", "matchmaker"},   # workshop runs on the market agent so two processes never double-craft
+    "all": {"duels", "haggler", "venue", "trader", "flipper", "wtb", "tapas", "loans", "workshop", "matchmaker", "arbitrage"},
+    "dealers": {"duels", "haggler", "matchmaker", "arbitrage"},   # workshop runs on the market agent so two processes never double-craft
     "market": {"venue", "trader", "flipper", "wtb", "tapas", "loans", "workshop"},
 }
 
@@ -586,13 +587,14 @@ def main():
              ("tapas", Tapas),  # El Menú: platters, public trueque, page-closer DMs (after trader so it sees the book)
              ("flipper", Flipper),  # buy below another team's bid, sell into it
              ("wtb", Asker),  # ask likely holders that do not collect a set for the cards we need
-             ("matchmaker", Matchmaker)]  # brings a buyer and a seller of one card to our market, anonymously
+             ("matchmaker", Matchmaker),  # brings a buyer and a seller of one card to our market, anonymously
+             ("arbitrage", Arbitrage)]  # buy from a dealer, sell at once into a team's bid, when both deals score
     modules = [(name, cls(ctx)) for name, cls in build if name in role]
     modules.append(("guard", Guard(ctx)))  # last: undo anything this tick left open that loses value
     switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue",
               "guard": "enable_guard", "flipper": "enable_flipper",
               "wtb": "enable_wtb", "tapas": "enable_tapas", "loans": "enable_loans",
-              "matchmaker": "enable_matchmaker", "workshop": "enable_workshop"}
+              "matchmaker": "enable_matchmaker", "arbitrage": "enable_arbitrage", "workshop": "enable_workshop"}
     ctx.solvency = Solvency(ctx)  # public-feed cash bounds: skip offers whose maker cannot pay
     flagger = FlagHunter(ctx)  # proven bad faith in dealer messages to us: a correct flag scores
     # El Consejo: a unique id for this agent (fixed until it restarts), then announce every deal we make

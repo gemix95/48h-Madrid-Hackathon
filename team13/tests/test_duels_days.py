@@ -97,5 +97,15 @@ c = Ctx(); Duels(c).play(duel("buyer", 100, 4.0, deadline=112, decay=0.1))
 p, d = c.said[-1]
 ok = d == 0 and p < 100
 print(f"short-clock buyer open: price {p} days {d} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(11)
+# 12) Saturday Duels II: API your_days_weight is positive for both roles; each day still costs the buyer
+#     (buyer 5629: limit 148, price 140, 10 days at 7.99 scored -60.8).
+c = Ctx(); Duels(c).play(duel("buyer", 148, 7.99))
+p, d = c.said[-1]
+print(f"buyer w=+7.99 opening: price {p} days {d} -> {'ok' if d == 0 else 'FAIL'}"); d == 0 or fails.append(12)
+c = Ctx(); Duels(c).play(duel("buyer", 148, 7.99, 140, 10, rounds=7, deadline=101))
+print(f"buyer rival 140 at day 10 (scores 8 - 79.9): accepted {bool(c.accepted)} -> {'ok' if not c.accepted else 'FAIL'}"); c.accepted and fails.append(12)
+c = Ctx(); Duels(c).play(duel("seller", 100, 2.0))
+p, d = c.said[-1]
+print(f"seller w=+2 opening: days {d} -> {'ok' if d == 10 else 'FAIL'}"); d == 10 or fails.append(12)
 print("ALL OK" if not fails else f"FAILED {fails}")
 sys.exit(1 if fails else 0)

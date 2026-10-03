@@ -1,6 +1,13 @@
 {
  "note": "Reserved for swap strategies: the agent and the dashboard's auto-swaps never sell, offer, swap, reward or burn these. Edit and push: the server picks it up within a minute.",
- "refs": [],
+ "refs": [
+  "LAT-03",
+  "LAV-01",
+  "LAV-02",
+  "LAV-03",
+  "LAV-04",
+  "RET-04"
+ ],
  "assets": [],
  "common_spares": true,
  "crafted": true

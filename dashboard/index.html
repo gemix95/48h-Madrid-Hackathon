@@ -176,6 +176,7 @@ tr.good td { background: color-mix(in srgb, var(--good) 11%, transparent); }
 .origin { font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 4px; cursor: help; white-space: nowrap; }
 .origin.agent { background: color-mix(in srgb, var(--series-1) 16%, transparent); color: var(--series-1); }
 .origin.manual { background: color-mix(in srgb, var(--series-3) 22%, transparent); color: var(--series-3); }
+.origin.script { background: color-mix(in srgb, var(--series-2) 18%, transparent); color: var(--series-2); }
 .origin.other { background: color-mix(in srgb, var(--warning) 35%, transparent); color: var(--text-primary); }
 .thr-tab.on { background: var(--surface-2); outline: 2px solid var(--hc); }
 .btn-s.on { background: var(--series-1); border-color: var(--series-1); color: #fff; }
@@ -2181,12 +2182,16 @@ function feed(d) {
 }
 
 // ---------- who did it: origin of our messages, and what the guard cancelled ----------
-// The bots' logs only exist on the laptop that runs them; without an agent log here the server sends no origins and we show none.
+// The bots' logs live on the server; a laptop dashboard reads its answers (DASHBOARD_REMOTE). With no live agent log
+// anywhere the server sends no origins and we show none. "agent:sergio" = the message is in that agent's log lines.
 const ORIGIN = { agent: ["🤖 agent", "Sent by team13/agent.py (found in its log)"], manual: ["✋ manual", "Sent by hand with agent/hand.py"],
-  other: ["⚠ not the agent", "No log on this laptop has this message: another program or another laptop sent it with our key"] };
+  script: ["📜 script", "Sent by a script on the server (agent/sell.py or agent/try_injection.py), found in its log"],
+  other: ["⚠ not ours", "No log of our agents or scripts on the server has this message: something else sent it with our key"] };
 function originBadge(d, m) {
   const o = d.origins?.[m.id];
-  return o ? ` <span class="origin ${o}" title="${ORIGIN[o][1]}">${ORIGIN[o][0]}</span>` : "";
+  if (!o) return "";
+  const [kind, who] = o.split(":"), [label, title] = ORIGIN[kind] || ORIGIN.other;
+  return ` <span class="origin ${kind}" title="${who ? `Sent by ${esc(who)}'s agent (bazaar-agent@${esc(who)} on the server, found in its log)` : title}">${who ? `🤖 ${esc(who)}` : label}</span>`;
 }
 const guardSide = x => Array.isArray(x) ? (x.length ? x.map(esc).join(", ") : "nothing") : (x ? `${x} P` : "nothing");
 const guardOffer = g => `we were giving <b>${guardSide(g.give)}</b> for <b>${guardSide(g.want)}</b>`;
