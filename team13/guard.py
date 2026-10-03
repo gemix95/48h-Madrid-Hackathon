@@ -8,6 +8,9 @@ An offer is cancelled when, at our values (page bonus and the near-complete page
   - it is a bid above the team's cap for that card (agent/caps.json), or
   - it is a bid for a card now worth less to us than the bid (a second copy once one bid filled).
 Packs and other non-card items are left alone (dealer pack haggles).
+Two kinds of offer are left alone on purpose: a dealer ladder sale (private values do not score there) and the
+dealer bid of an arbitrage pair, which is above our value by design because the card is resold at once into a
+team's open bid that pays more.
 """
 from __future__ import annotations
 
@@ -39,6 +42,7 @@ class Guard:
         caps = team_caps()
         plans = ctx.state.get("plans", {})
         repays = repay_offer_ids(ctx.state)
+        arb_thread = ((ctx.state.get("arb") or {}).get("active") or {}).get("thread")
         for o in offers:
             if o.get("maker") != ctx.me.get("id") or o.get("status", "open") != "open":
                 continue
@@ -48,6 +52,9 @@ class Guard:
                 continue  # a loan repayment: the borrower buys its collateral back at principal + interest
             if o.get("thread") and (plans.get(str(o["thread"])) or {}).get("ladder"):
                 continue  # a dealer ladder sale: private values only score in trades with teams
+            if arb_thread and o.get("thread") == arb_thread:
+                continue  # the arbitrage pair's dealer bid: it is meant to be above our value, because the same card
+                # goes straight into a team's open bid that pays more (team13/arbitrage.py scores the two deals together)
             g, w = o.get("give") or {}, o.get("want") or {}
             if any(not t.startswith("card:") for t in (g.get("types") or []) + (w.get("types") or [])):
                 continue

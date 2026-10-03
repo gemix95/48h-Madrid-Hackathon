@@ -39,6 +39,7 @@ DECISIONS = HERE.parent / "team13" / "logs" / "decisions.jsonl"
 BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 import council  # noqa: E402  (team13/council.py: El Consejo, the board where our agents post what they learnt)
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
+import arbview  # noqa: E402  (dashboard/arbview.py: data for the Arbitrage tab)
 import board  # noqa: E402  (dashboard/board.py: the public El Club board at /board)
 import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, and the one write the dashboard makes)
 from reserved import reserved_ids  # noqa: E402  (team13/reserved.py: cards kept for swap strategies)
@@ -73,7 +74,7 @@ def logs_view() -> dict:
     with lock:
         threads, me_id = cache.get("threads"), (cache.get("me") or {}).get("id")
     return {"origins": message_origins(INDEX, threads, me_id), "decisions": tail(DECISIONS), "guard": INDEX.recent_guard(),
-            "log_sources": INDEX.status(), "logs_from": "here"}
+            "log_sources": INDEX.status(), "logs_from": "here", "arbitrage": ARB["data"]}
 
 
 def mirror_remote():
@@ -109,6 +110,8 @@ def tail(path, n=150):
 ROUTES = {
     "me": ("/api/me", 3, True),
     "threads": ("/api/me/threads", 3, True),
+    # deals per dealer for the ladder: the plain thread list is a 50-thread window of mostly open ones
+    "threads_deal": ("/api/me/threads?status=deal", 60, True),
     "offers": ("/api/me/offers", 6, True),
     "duels": ("/api/duels", 6, True),
     "duels_done": ("/api/duels?done=true", 15, True),
@@ -426,6 +429,22 @@ def poll():
 
 
 BOARD = {"html": None, "json": None}
+ARB = {"data": None, "html": None}
+
+
+def arb_loop():
+    """Every minute: the Arbitrage tab's data (module state, live candidates with the module's own scoring, history)
+    and the same thing rendered as the standalone page at /arb."""
+    while True:
+        try:
+            with lock:
+                snap = {k: cache.get(k) for k in ("me", "catalog", "clock", "dealers", "venues", "threads", "threads_deal")}
+            data = arbview.compute(snap)
+            ARB["data"], ARB["html"] = data, arbview.render(data).encode()
+        except Exception as e:
+            ARB["data"], ARB["html"] = {"error": repr(e)[:200]}, None
+            print("arb:", repr(e)[:200], flush=True)
+        time.sleep(60)
 
 
 def board_loop():
@@ -485,9 +504,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, "application/json", json.dumps(logs_view()).encode())
         elif self.path.startswith("/data"):
             logs = logs_view()
-            if REMOTE and remote_logs.get("at"):  # a laptop: the agents' logs are on the server
-                logs = {**{k: remote_logs.get(k) for k in ("origins", "decisions", "guard", "log_sources")},
+            if REMOTE and remote_logs.get("at"):  # a laptop: the agents' logs, and the arbitrage module, are on the server
+                logs = {**{k: remote_logs.get(k) for k in ("origins", "decisions", "guard", "log_sources", "arbitrage")},
                         "logs_from": REMOTE, "logs_age": round(time.time() - remote_logs["at"]), "logs_error": remote_logs.get("error")}
+                logs["arbitrage"] = logs.get("arbitrage") or ARB["data"]
             with lock:
                 try:  # what the agent is doing right now (its own state file; read-only)
                     st = json.loads(STATE.read_text())
@@ -516,10 +536,13 @@ class Handler(BaseHTTPRequestHandler):
                                    "history": history, "served_at": time.time(), "broker_log": tail(BROKER_LOG, 60),
                                    **logs, "swaps": swaps_payload(),
                                    "announcements": announcements(), "duel_learn": duel_learn, "duels_board": duels_board,
-                                   "workshop": workshop_view()}).encode()
+                                   "workshop": workshop_view()}, default=str).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):
             self._send(200, "application/json", json.dumps(strategy.describe()).encode())
+        elif self.path.split("?")[0].rstrip("/") == "/arb":
+            body = ARB["html"] or b"<p>The arbitrage desk is being built, try again in a minute.</p>"
+            self._send(200, "text/html; charset=utf-8", body)
         elif self.path in ("/", "/index.html"):
             self._send(200, "text/html; charset=utf-8", PAGE.read_bytes())
         else:
@@ -607,6 +630,7 @@ if __name__ == "__main__":
     _restore_longshots()
     threading.Thread(target=autosend, daemon=True).start()
     threading.Thread(target=board_loop, daemon=True).start()
+    threading.Thread(target=arb_loop, daemon=True).start()
     if REMOTE:
         threading.Thread(target=mirror_remote, daemon=True).start()
     print(f"Team 13 war room on http://localhost:{PORT}" + (f" (agents' logs from {REMOTE})" if REMOTE else ""))

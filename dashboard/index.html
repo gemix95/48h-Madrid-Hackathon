@@ -470,7 +470,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
       <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a><a href="#ledger">Ledger</a>
       <a href="#duels">Duels<span class="pulse" id="duels-pulse" style="display:none">0</span></a>
       <a href="#album">Album</a><a href="#workshop">Workshop</a>
-      <a href="#market">Market</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a><a href="#council">Council</a>
+      <a href="#market">Market</a><a href="#arbitrage">Arbitrage</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a><a href="#council">Council</a>
     </nav>
   </header>
 
@@ -618,6 +618,22 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
         <div class="empty" style="margin:0 0 10px">Same rule for each row: <b>3 extra cards of that tier</b> → <b>1 random card of the next tier</b>. We pick the path with the best expected gain.</div>
         <div id="ws-ladder"></div>
       </section>
+    </div>
+  </main>
+
+  <main class="tab" id="tab-arbitrage">
+    <div class="grid">
+      <section class="card s12"><h2>Arbitrage <span class="hint">buy from a dealer, sell at once into a team's open bid, when both deals together score</span></h2>
+        <div class="empty" style="margin:0 0 8px">Score per pair (organisers' rule): <b>min(0, value to us − price paid) + min(50, bid − fee − value to us)</b>.
+        A dealer price above our value counts in full; a team-trade gain counts up to 50. This is <b>negotiating</b>, never market-making:
+        market-making only counts other teams trading on our venue, and we cannot trade on it ourselves.
+        The ladder is left out of the formula on purpose — it keeps the best three deals per dealer level and counts a missing one as zero,
+        so an arbitrage buy can only win ladder points, never cost them. The <i>Ladder</i> column says where those free points are.</div>
+        <div id="arb-blocker"></div>
+        <div class="kpis" id="arb-kpis"></div></section>
+      <section class="card s12"><h2>Now <span class="hint">the pair the agent is working on</span></h2><div id="arb-now"></div></section>
+      <section class="card s12"><h2>Candidates right now <span class="hint">every team bid a dealer could feed; green = the agent would take it</span></h2><div id="arb-cands"></div></section>
+      <section class="card s12"><h2>History <span class="hint">every attempt and how it ended</span></h2><div id="arb-hist"></div></section>
     </div>
   </main>
 
@@ -1117,6 +1133,41 @@ function packs(d, M) {
   $("bait").innerHTML = bait.length ? `<table><thead><tr><th>Card</th><th class="num">To us</th><th class="num">Book</th></tr></thead><tbody>`
     + bait.map(a => `<tr><td>${esc(a.name)} <span class="muted">${a.ref} #${a.serial}</span></td><td class="num">${fmt(a.your_value)}</td><td class="num">${a.book}</td></tr>`).join("")
     + `</tbody></table><div class="empty" style="margin-top:6px">Book value is a rough guide to what other teams might pay.</div>` : `<div class="empty">Nothing cheap to us.</div>`;
+}
+
+function arbTab(d) {
+  const A = d.arbitrage;
+  if (!A) { $("arb-kpis").innerHTML = `<div class="empty">Loading arbitrage\u2026</div>`; return; }
+  if (A.error && !A.history) { $("arb-kpis").innerHTML = `<div class="empty">${esc(A.error)}</div>`; return; }
+  const sold = (A.history || []).filter(r => r.outcome === "sold");
+  const gross = sold.reduce((s, r) => s + (r.bid_price || 0) - (r.paid || 0), 0);
+  const pts = sold.reduce((s, r) => s + (r.score || 0), 0);
+  const today = Object.values(A.done || {}).reduce((s, n) => s + n, 0);
+  const b = A.blocker;
+  $("arb-blocker").innerHTML = b
+    ? `<div class="empty" style="margin:0 0 8px;border-left:3px solid var(--critical);padding-left:10px"><b>Every pair dies the same way: ${esc(b.why)}</b>
+       \u2014 ${b.n} attempts in a row (ticks ${esc(b.since_tick)}\u2013${esc(b.last_tick)})${b.sold ? "" : ", none ever sold"}.</div>`
+    : "";
+  $("arb-kpis").innerHTML = [
+    ["Module", A.enabled ? "on" : "off", `agent ${esc(A.agent)} \u00b7 min score ${A.min_score}${A.ladder_slack ? ` (\u2212${A.ladder_slack} on a free ladder slot)` : ""} \u00b7 max ${A.max_per_day}/day`],
+    ["Pairs today", today, `of ${A.max_per_day}`],
+    ["Sold", sold.length, `${(A.history || []).length} attempts in the log`],
+    ["Cash", (gross >= 0 ? "+" : "") + gross + " P", "bid \u2212 paid, before fees"],
+    ["Score", (pts >= 0 ? "+" : "") + pts.toFixed(1), "formula, sold pairs"],
+  ].map(([l, v, sub]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${sub}</div></div>`).join("");
+  const a = A.active;
+  $("arb-now").innerHTML = a
+    ? `<b>${esc(a.ref)}</b> from <b>${esc(a.dealer)}</b> \u00b7 ${esc(a.phase)} \u00b7 our offer ${esc(a.price)} P \u00b7 cap ${esc(a.cap)} P \u00b7 team bid ${esc(a.bid_price)} P \u00b7 round ${esc(a.rounds)}`
+    : `<div class="empty">Idle: scanning every ${esc(A.scan_every)} ticks, last scan at tick ${esc(A.scan_tick)}${A.error ? " \u00b7 " + esc(A.error) : ""}</div>`;
+  const c = A.candidates || [];
+  const ladder = x => x.ladder_slot ? `<span style="color:var(--good)">free slot, L${esc(x.level)}</span>` : `${esc(x.dealer_deals)} deals`;
+  $("arb-cands").innerHTML = c.length ? `<table><thead><tr><th>Card</th><th>Dealer</th><th class="num">List</th><th>Team bid</th><th class="num">Value to us</th><th class="num">Our max</th><th class="num">Score at max</th><th class="num">Bid ticks left</th><th>Ladder</th><th>Verdict</th></tr></thead><tbody>`
+    + c.map(x => `<tr style="${x.go ? "background:rgba(31,122,77,.12)" : ""}"><td><b>${esc(x.ref)}</b></td><td>${esc(x.dealer)}</td><td class="num">${x.list}</td><td>${x.bid_price} P <span class="muted">${esc(x.venue_name)}</span></td><td class="num">${x.value}</td><td class="num">${x.go ? x.cap : "\u2013"}</td><td class="num"><b>${x.go ? x.score : "\u2013"}</b></td><td class="num">${x.ticks_left}</td><td>${ladder(x)}</td><td class="muted">${x.go ? "the agent would take it" : esc(x.why_not)}</td></tr>`).join("") + `</tbody></table>`
+    : `<div class="empty">No team bid that a dealer can feed right now.</div>`;
+  const h = A.history || [];
+  $("arb-hist").innerHTML = h.length ? `<table><thead><tr><th>Tick</th><th>Card</th><th>Dealer</th><th class="num">Paid</th><th class="num">Bid</th><th class="num">Expected</th><th class="num">Score</th><th>Outcome</th><th>Why</th></tr></thead><tbody>`
+    + h.slice(0, 40).map(r => `<tr><td>${r.tick ?? ""}</td><td><b>${esc(r.ref)}</b></td><td>${esc(r.dealer)}</td><td class="num">${r.paid ?? "\u2013"}</td><td class="num">${r.bid_price ?? ""}</td><td class="num">${r.expected ?? ""}</td><td class="num">${r.score ?? "\u2013"}</td><td>${esc(r.outcome)}</td><td class="muted">${esc(r.blocked_by || r.note || "")}</td></tr>`).join("") + `</tbody></table>`
+    : `<div class="empty">No attempts yet.</div>`;
 }
 
 function workshopTab(d) {
@@ -2865,7 +2916,7 @@ async function refresh() {
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
-      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => workshopTab(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d), () => ledgerTab(d)];
+      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => workshopTab(d), () => arbTab(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d), () => ledgerTab(d)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable — open http://localhost:8765"; }
 }

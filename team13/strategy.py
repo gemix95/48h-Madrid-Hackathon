@@ -31,6 +31,10 @@ KNOBS = {
                          "Buy from a dealer and sell at once into a team's bid when both deals together score."),
     "arb_min_score": (8, 1, 50, 1, "Trading", "Arbitrage: least score per pair", "min(0, value - price paid) + min(50, bid - fee - value)."),
     "arb_max_per_day": (6, 0, 30, 1, "Trading", "Arbitrage: pairs per day", "A cap while we learn how dealers and bidders behave."),
+    "arb_ladder_slack": (0, 0, 20, 1, "Trading", "Arbitrage: ladder slack at an empty dealer",
+                         "P off the least score when the dealer's best three still has an empty slot. The ladder keeps "
+                         "the best three deals per level and counts a missing one as zero, so a deal there is free "
+                         "points and can never cost us; 0 keeps arbitrage on the trade value alone."),
     "enable_matchmaker": (0, 0, 1, 1, "Modules", "Matchmaker for our market",
                           "Invite a team with a spare and a team bidding for the same card to our market, never naming either. Server only."),
     "enable_loans": (1, 0, 1, 1, "Modules", "Loan desk", "Cash against a card we would gladly own; requests come from agent/lend.py."),

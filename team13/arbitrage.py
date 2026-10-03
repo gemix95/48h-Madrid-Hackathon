@@ -6,6 +6,10 @@ Scoring (organisers' slide, Sat 20:25): a deal = value it adds to our collection
   - selling to a team: a gain counts up to 50, a loss in full.
 So for a buy at P and a sale into a bid B (we accept it, so we pay that market's fee f):
   score(P) = min(0, V - P) + min(50, B - f - V)        (B - f - V < 0 counts in full too)
+The ladder is deliberately left out of score(P): it keeps the best three deals per dealer level and counts a
+missing one as zero, so a fourth, worse deal is simply ignored and an arbitrage buy can never cost us ladder points.
+It can only win them, and most at a dealer we have never closed with. arb_ladder_slack (0 by default) is how many
+P off arb_min_score that is worth at a dealer whose best three still has an empty slot.
 We take a pair only when score(P) >= arb_min_score at the highest price we would pay, the bid lives long enough
 for a short haggle, and the cash left keeps the reserve. The bid is re-checked before we buy and we sell into it as
 soon as the card arrives. One pair at a time; never a dealer another of our agents is talking to.
@@ -41,15 +45,29 @@ def max_price(V: float, net_in: float, min_score: float) -> int | None:
     return math.floor(V + team_part - min_score)  # above V every extra P is a full loss
 
 
+LADDER_BEST = 3        # the ladder keeps the best three deals per dealer level, a missing one scores zero
+
+
+def dealer_deals(ctx, did) -> int:
+    """Deals our team has closed with this dealer. ctx.threads is the recent window (50 threads, mostly open ones),
+    so counting deals in it reads far too low: use ctx.deal_threads, /api/me/threads?status=deal, when it is there."""
+    threads = getattr(ctx, "deal_threads", None)
+    threads = threads if threads is not None else (getattr(ctx, "threads", None) or [])
+    return sum(1 for t in threads
+               if t.get("kind") == "persona" and t.get("with") == did and t.get("status") == "deal")
+
+
 def fee(price, venue) -> int:
     return math.ceil((venue.get("fee_bps") or 0) * price / 10000) + (venue.get("fee_per_card") or 0)
 
 
-def candidates(ctx, venues, boards, makers, dealers, min_score) -> list:
+def candidates(ctx, venues, boards, makers, dealers, min_score, ladder_slack=0) -> list:
     """[(score at our max price, plan)] best first, from open team bids and dealer menus."""
     v, me = ctx.values, ctx.me.get("id")
-    sells = [(d["id"], s["rarity"], s.get("sets"), s["list_price"]) for d in dealers if d.get("status") == "active"
+    sells = [(d["id"], s["rarity"], s.get("sets"), s["list_price"], d.get("level")) for d in dealers if d.get("status") == "active"
              and d["id"] in (ctx.me.get("unlocked") or []) for s in (d.get("menu") or {}).get("sells", []) if s.get("rarity")]
+    # an empty best-three slot at a dealer is free ladder points: that pair may pay a little more for the card
+    closed = {did: dealer_deals(ctx, did) for did, *_ in sells}
     by_id = {x["venue"]: x for x in venues}
     out = []
     for vid, offers in boards.items():
@@ -68,18 +86,23 @@ def candidates(ctx, venues, boards, makers, dealers, min_score) -> list:
                 continue
             c = v.cards[ref]
             V, net_in = v.gain_of_adding([ref]), B - fee(B, ven)
-            pmax = max_price(V, net_in, min_score)
-            if pmax is None:
-                continue
-            for did, rar, sets, L in sells:
+            if max_price(V, net_in, min_score - ladder_slack) is None:
+                continue  # no dealer price can make this bid pay, however empty its ladder is
+            for did, rar, sets, L, level in sells:
                 if rar != c.get("rarity") or (isinstance(sets, list) and c["set"] not in sets):
+                    continue
+                slot = closed.get(did, 0) < LADDER_BEST
+                bar = min_score - (ladder_slack if slot else 0)
+                pmax = max_price(V, net_in, bar)
+                if pmax is None:
                     continue
                 cap = min(pmax, L)  # never above the dealer's list price
                 start = math.floor(L * START_SHARE)
                 if cap < start:
                     continue
                 plan = {"ref": ref, "dealer": did, "bid": o["id"], "bid_price": B, "bid_venue": vid, "net_in": net_in,
-                        "value": round(V, 1), "list": L, "cap": cap, "price": start}
+                        "value": round(V, 1), "list": L, "cap": cap, "price": start, "level": level,
+                        "dealer_deals": closed.get(did, 0), "ladder_slot": slot, "bar": round(bar, 1)}
                 out.append((round(score(V, cap, net_in), 1), plan))
     return sorted(out, key=lambda x: -x[0])
 
@@ -119,12 +142,15 @@ class Arbitrage:
                         o = (json.loads(line).get("payload") or {}).get("offer") or {}
                         makers[o.get("id")] = o.get("maker")
             dealers = ctx.dealers or ctx.public_get("/api/dealers").get("personas", [])
+            if S.get("arb_ladder_slack", 0):  # one keyed read per scan, only when an empty ladder slot may move the bar
+                ctx.deal_threads = ctx.raw.my_threads(status="deal").get("threads", [])
         except Exception as e:
             ctx.log("arb", "scan_failed", error=repr(e)[:160])
             return
         busy = {t.get("with") for t in ctx.threads if t.get("kind") == "persona" and t.get("status") == "open"}
         reserve = ctx.reserve()
-        for sc, plan in candidates(ctx, venues, boards, makers, dealers, S.get("arb_min_score", 8)):
+        for sc, plan in candidates(ctx, venues, boards, makers, dealers, S.get("arb_min_score", 8),
+                                   S.get("arb_ladder_slack", 0)):
             if plan["dealer"] in busy or ctx.me.get("cash", 0) - plan["cap"] < reserve:
                 continue
             try:
@@ -135,7 +161,9 @@ class Arbitrage:
             plan.update(thread=th["id"], rounds=0, last_tick=tick, phase="haggle", held_before=ctx.values.held[plan["ref"]], score=sc)
             ctx.api.say(th["id"], f"Buenas. I'm after {plan['ref']}. {plan['price']} primas, cash ready.", price=plan["price"])
             st["active"] = plan
-            ctx.log("arb", "start", **{k: plan[k] for k in ("ref", "dealer", "bid", "bid_price", "value", "cap", "price", "score")})
+            ctx.log("arb", "start", thread=th["id"],
+                    **{k: plan[k] for k in ("ref", "dealer", "bid", "bid_price", "value", "cap", "price", "score",
+                                            "level", "dealer_deals", "ladder_slot", "bar")})
             return
 
     def _progress(self, st, a, tick):
