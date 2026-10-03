@@ -81,7 +81,8 @@ def main():
                 elif not on:
                     fired.discard(name)
 
-            snap = {v["venue"]: (v["status"], v["fee_bps"], v.get("fee_per_card")) for v in venues if v["venue"] != ours_id}
+            snap = {v["venue"]: (v["status"], v["fee_bps"], v.get("fee_per_card")) for v in venues
+                    if v["venue"] != ours_id and not v.get("starter")}  # free starter stalls never change our decision
             if rivals is not None and snap != rivals:
                 emit("rivals", changes={k: snap.get(k) for k in set(snap) | set(rivals) if snap.get(k) != rivals.get(k)})
             rivals = snap
