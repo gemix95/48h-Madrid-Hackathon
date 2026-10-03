@@ -32,7 +32,7 @@ A local process would trade as the same team. `pkill -f agent.py` then `pgrep -f
 - Pull it every 15 s and push every note at once. Without this, each laptop has its own board and agents step on each
   other's deals. The agent, the tuner (`council.py run`) and the dashboard do it by themselves;
   `python3 team13/council.py sync` does it on demand. Each process writes its own file, so pushes never conflict.
-- Notes keep the current notation. `author` is the module (haggler, trader, duels, flipper, ...) or `tuner`. Every note
+- Notes keep the current notation. `author` is the module (haggler, trader, duels, arbitrage, ...) or `tuner`. Every note
   also says who wrote it:
   - `agent` is the market agent's unique id: a famous businessperson's surname picked at start (Rockefeller, Fugger, ...).
     It stays the same until that agent restarts.
