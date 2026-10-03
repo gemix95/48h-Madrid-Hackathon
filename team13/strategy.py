@@ -24,6 +24,8 @@ KNOBS = {
     "enable_guard": (1, 0, 1, 1, "Modules", "Guard", "Last each tick: cancel any open offer of ours that loses value at our private values or breaks a team cap."),
     "enable_flipper": (1, 0, 1, 1, "Modules", "Flipper", "Buy a card a team sells below another team's bid and sell into that bid (profit after both fees)."),
     "enable_wtb": (1, 0, 1, 1, "Modules", "Want-to-buy asks", "Direct offers to teams that probably hold a card we need and do not collect its set."),
+    "enable_matchmaker": (0, 0, 1, 1, "Modules", "Matchmaker for our market",
+                          "Invite a team with a spare and a team bidding for the same card to our market, never naming either. Server only."),
     "enable_loans": (1, 0, 1, 1, "Modules", "Loan desk", "Cash against a card we would gladly own; requests come from agent/lend.py."),
     "enable_workshop": (1, 0, 1, 1, "Modules", "Workshop",
                         "Three duplicate copies of one rarity become one card of the next. The pull is luck and "
