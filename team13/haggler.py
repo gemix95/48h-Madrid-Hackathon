@@ -134,6 +134,11 @@ class Haggler:
         rtf = L.model.get("rounds_to_final") if L and getattr(L, "model", None) else None
         return max(2, round(rtf) - 1) if rtf else int(self.ctx.S["haggle_rounds"])
 
+    def _may_sell(self, ref: str) -> bool:
+        """AGENT_SELL: the cards this agent may sell (refs or set ids, e.g. "LAV" or "LAV-04,SAL"); empty = any."""
+        allowed = [x.strip().upper() for x in os.environ.get("AGENT_SELL", "").split(",") if x.strip()]
+        return not allowed or any(ref.upper() == x or ref.upper().startswith(x + "-") for x in allowed)
+
     def _sell_floor(self, ref: str) -> int:
         """Least price for selling one copy of `ref`: what giving it up costs us at our private values (page bonus and
         the near-complete page option included) plus sell_min_gain. Nothing may sell below it."""
@@ -208,7 +213,7 @@ class Haggler:
         hold_spares = accum or not S["haggle_sell_spares"]
         spare_pool = [] if hold_spares else ctx.values.spares(reserve=int(S.get("workshop_spares", 0)))
         for a in spare_pool:  # 2) sell a spare above the workshop reserve, never below its value to us
-            if a.get("rarity") not in buys or a["id"] in ctx.locked_assets():
+            if a.get("rarity") not in buys or a["id"] in ctx.locked_assets() or not self._may_sell(a["ref"]):
                 continue
             key = f"{dealer['id']}:sell:{a['rarity']}"
             if key in unsupported:
@@ -329,7 +334,7 @@ class Haggler:
             if a.get("kind") != "card" or a.get("rarity") not in buys or a.get("rarity") not in ("uncommon", "rare"):
                 continue
             card = v.cards.get(a["ref"]) or {}
-            if a["id"] in locked or a["id"] in from_teams or not card.get("page"):
+            if a["id"] in locked or a["id"] in from_teams or not card.get("page") or not self._may_sell(a["ref"]):
                 continue
             page = v.page_cards(card["set"])
             if sum(1 for r in page if v.held[r] > 0) == len(page) - 1:
