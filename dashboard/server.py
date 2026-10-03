@@ -362,7 +362,7 @@ class Handler(BaseHTTPRequestHandler):
                     council_state = json.loads(council.STATE.read_text())
                 except (OSError, ValueError):
                     council_state = {}
-                council_view = {"notes": tail(council.BOARD, 200), "state": council_state,
+                council_view = {"notes": council.read(n=200), "state": council_state,
                                 "rules": {k: {"metric": m, "low": lo, "high": hi, "safe": council.SAFE[k]}
                                           for k, (m, lo, hi, _) in council.RULES.items()},
                                 "trial_ticks": council.TRIAL_TICKS, "cooldown_ticks": council.COOLDOWN_TICKS,
@@ -456,6 +456,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     INDEX.refresh()  # read the logs written so far once, before the first page load
     threading.Thread(target=poll, daemon=True).start()
+    council.start_sync()  # the shared board (council branch): pulled every 15 s, so every laptop sees every agent's notes
     threading.Thread(target=listen, daemon=True).start()
     threading.Thread(target=advise, daemon=True).start()
     threading.Thread(target=autosend, daemon=True).start()

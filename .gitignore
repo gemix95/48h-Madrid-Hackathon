@@ -10,6 +10,9 @@ team13/logs/*
 !team13/logs/council.jsonl
 !team13/logs/council_state.json
 /logs/
+/.council/
+/.council-spool/
+/.council.lock
 feed_events.jsonl
 dashboard/.password
 .venv/

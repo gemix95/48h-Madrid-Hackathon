@@ -2,11 +2,18 @@
 
     ../.venv/bin/python council.py run                      # digest + tune every cycle (no team key needed)
     ../.venv/bin/python council.py run --dry                 # post lessons, propose changes, never touch strategy.json
-    ../.venv/bin/python council.py post trader "LAT commons sell at 8 P on v02"   # any agent or teammate can post
+    ../.venv/bin/python council.py post "Rival t04 opens Abuela at 18 P"   # a human (or anything not trading): Admin
     ../.venv/bin/python council.py read [topic]              # the latest notes
+    ../.venv/bin/python council.py sync                      # pull + push the shared board now
 
-Every note goes to logs/council.jsonl: {ts, tick, author, topic, lesson, evidence}. Authors are the agent's modules
-(digested from logs/decisions.jsonl and the public feed), the tuner itself, or anyone posting by hand.
+One board for every laptop: the `council` branch, checked out at ../.council (created on first use). Every process
+pulls it every 15 s and pushes each note at once; each process writes its own file (notes/<who>@<host>.jsonl), so
+two laptops never edit the same lines and a pull never conflicts. Notes wait in ../.council-spool until pushed.
+
+A note: {ts, tick, author, topic, lesson, evidence, agent, role, host}. author is the module (haggler, trader, ...),
+"tuner", or "Admin" for a human or anything not trading in the market. agent is the market agent's unique id: a
+famous businessperson's surname picked at start (one nobody used in the last day), fixed until that agent restarts;
+role is its AGENT_ROLE. Agents announce the deals they open, close and walk away from, so the others don't step on them.
 
 The tuner reads only logs, so it never writes with the team key and never needs an agent restart: it changes one
 knob per cycle in strategy.json (which the agent re-reads every tick), one step at a time, inside the knob's range,
@@ -15,10 +22,18 @@ then judges the change after a trial and reverts it if the metric did not move t
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
+import os
+import random
+import re
+import socket
 import statistics
+import subprocess
+import threading
 import time
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from pathlib import Path
 
 import strategy
@@ -30,6 +45,21 @@ STATE = LOGS / "council_state.json"
 DECISIONS = LOGS / "decisions.jsonl"
 FEED = LOGS / "feed_events.jsonl"
 ME = "t13"
+
+REPO = HERE.parent
+BOARD_DIR = REPO / ".council"        # git worktree of the shared `council` branch
+NOTES = BOARD_DIR / "notes"
+SPOOL = REPO / ".council-spool"      # this laptop's notes not pushed yet (outside the worktree: git never touches it)
+LOCK = REPO / ".council.lock"
+BRANCH = "council"
+REFSPEC = f"+refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}"  # explicit: works in single-branch or shallow clones
+PULL_SECONDS = 15
+HOST = re.sub(r"[^A-Za-z0-9-]", "", socket.gethostname().split(".")[0]) or "host"
+NAMES = ["Rockefeller", "Carnegie", "Vanderbilt", "Morgan", "Ford", "Fugger", "Medici", "Rothschild", "Astor", "Mellon",
+         "Hearst", "Edison", "Disney", "Chanel", "Lauder", "Walton", "Kroc", "Hilton", "Hughes", "Jobs", "Onassis",
+         "Ferrari", "Kamprad", "Morita", "Honda", "Matsushita", "Strauss", "Wedgwood", "Agnelli", "Mitsui", "Tata",
+         "Krupp", "Siemens", "Nobel", "Guggenheim", "Pulitzer", "Getty", "Hershey", "Ortega", "Gucci"]
+WHO = {"writer": "admin", "agent": None, "role": None}  # who this process posts as (identify())
 
 WINDOW = 120          # ticks of history each metric looks at (~1 game hour on Saturday)
 CYCLE_SECONDS = 600   # one digest + at most one strategy change every 10 minutes
@@ -46,20 +76,171 @@ SAFE = {"trade_ask_start": (0.95, 1.3), "trade_bid_start": (0.45, 0.8)}  # tight
 
 
 # ---------------------------------------------------------------- the board
-def post(author: str, topic: str, lesson: str, evidence: dict | None = None, tick: int | None = None) -> dict:
-    LOGS.mkdir(exist_ok=True)
+def post(author: str, topic: str, lesson: str, evidence: dict | None = None, tick: int | None = None,
+         agent: str | None = None) -> dict:
     note = {"ts": round(time.time(), 1), "tick": tick, "author": author, "topic": topic, "lesson": lesson,
-            "evidence": evidence or {}}
-    with BOARD.open("a") as f:
+            "evidence": evidence or {}, "agent": agent or WHO["agent"], "role": WHO["role"], "host": HOST}
+    SPOOL.mkdir(exist_ok=True)
+    with (SPOOL / f"{WHO['writer']}@{HOST}.jsonl").open("a") as f:
         f.write(json.dumps(note, default=str) + "\n")
+    _kick.set()  # push it now (the sync thread, or the next sync() call)
     return note
 
 
 def read(topic: str | None = None, n: int = 30) -> list:
-    if not BOARD.exists():
-        return []
-    notes = [json.loads(line) for line in BOARD.read_text().splitlines() if line.strip()]
-    return [x for x in notes if topic in (None, x.get("topic"), x.get("author"))][-n:]
+    """The latest notes from every laptop (the board), this laptop's unpushed ones, and the old main-branch file."""
+    files = [BOARD] + sorted(NOTES.glob("*.jsonl")) + sorted(SPOOL.glob("*.jsonl")) + sorted(SPOOL.glob("*.sending"))
+    seen, notes = set(), []
+    for path in files:
+        for x in _jsonl(path):
+            if not isinstance(x, dict):
+                continue
+            key = (x.get("ts"), x.get("author"), x.get("topic"), x.get("lesson"))
+            if key not in seen:
+                seen.add(key)
+                notes.append(x)
+    notes.sort(key=lambda x: x.get("ts") or 0)
+    return [x for x in notes if topic in (None, x.get("topic"), x.get("author"), x.get("agent"))][-n:]
+
+
+# ---------------------------------------------------------------- sharing it between laptops (git)
+_kick = threading.Event()
+
+
+def _git(*args, cwd=BOARD_DIR, timeout=30):
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}  # a background push must fail, never wait for a password
+    try:
+        return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return subprocess.CompletedProcess(args, 1, "", str(e))
+
+
+@contextmanager
+def _locked():
+    """One git user of the board at a time on this laptop (agent, tuner, dashboard and hand posts share it)."""
+    with LOCK.open("a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def ensure() -> bool:
+    """Check out the `council` branch at ../.council the first time (any laptop, any git version)."""
+    if (BOARD_DIR / ".git").exists():
+        return True
+    with _locked():
+        if (BOARD_DIR / ".git").exists():
+            return True
+        _git("fetch", "-q", "origin", REFSPEC, cwd=REPO)
+        r = _git("worktree", "add", "-q", "-B", BRANCH, str(BOARD_DIR), f"origin/{BRANCH}", cwd=REPO)
+        return r.returncode == 0
+
+
+def sync(pull_only: bool = False) -> bool:
+    """Move this laptop's spooled notes into the board, commit, pull (rebase), push. False when git failed."""
+    if not ensure():
+        return False
+    with _locked():
+        NOTES.mkdir(exist_ok=True)
+        for path in sorted(SPOOL.glob("*.jsonl")) + sorted(SPOOL.glob("*.sending")):
+            sending = path if path.suffix == ".sending" else path.with_suffix(".sending")
+            if path != sending:
+                os.replace(path, sending)  # writers start a fresh spool file meanwhile
+            with (NOTES / sending.with_suffix(".jsonl").name).open("a") as out:
+                out.write(sending.read_text())
+            sending.unlink()
+        _git("add", "-A", "notes")
+        if _git("diff", "--cached", "--quiet").returncode:
+            _git("-c", "user.name=El Consejo", "-c", "user.email=council@team13.local", "commit", "-q", "-m",
+                 f"{WHO['agent'] or WHO['writer']}@{HOST}: notes")
+        ok = True
+        for _ in range(3):
+            if _git("fetch", "-q", "origin", REFSPEC).returncode:
+                ok = False  # offline: the notes stay committed here and go out with the next sync
+                break
+            if _git("rebase", "-q", f"origin/{BRANCH}").returncode:
+                _git("rebase", "--abort")  # cannot happen with one file per writer; never leave the board half-merged
+                ok = False
+                break
+            ahead = _git("rev-list", "--count", f"origin/{BRANCH}..HEAD").stdout.strip()
+            if pull_only or ahead in ("", "0"):
+                break
+            ok = _git("push", "-q", "origin", f"HEAD:{BRANCH}").returncode == 0
+            if ok:
+                break
+        return ok
+
+
+def start_sync(every: float = PULL_SECONDS) -> threading.Thread:
+    """Background: pull every `every` seconds, push as soon as a note is posted."""
+    def loop():
+        while True:
+            _kick.clear()
+            try:
+                sync()
+            except Exception:  # the board must never take anything down
+                pass
+            _kick.wait(every)
+    t = threading.Thread(target=loop, name="council-sync", daemon=True)
+    t.start()
+    return t
+
+
+def identify(role: str) -> str:
+    """A market agent's unique id: a famous businessperson nobody on the board used in the last day. Fixed for the
+    life of the process (a restart picks a new one)."""
+    try:
+        sync(pull_only=True)
+    except Exception:
+        pass
+    used = {x.get("agent") for x in read(n=10 ** 6) if time.time() - (x.get("ts") or 0) < 86400}
+    free = [n for n in NAMES if n not in used]
+    name = random.choice(free) if free else f"{random.choice(NAMES)}-{random.randint(10, 99)}"
+    WHO.update(writer=name, agent=name, role=role)
+    return name
+
+
+def local_agent() -> str | None:
+    """The id of the agent on this laptop (from its start line), for the notes the tuner writes about it."""
+    for r in reversed(_jsonl(DECISIONS, 400_000)):
+        if r.get("module") == "agent" and r.get("action") == "start":
+            return r.get("agent_id")
+    return None
+
+
+def _item(key: str) -> str:
+    return (key or "").split(":")[-1].replace("_", " ")
+
+
+def announce(rec: dict, dealer_names: dict | None = None) -> None:
+    """Post the deals a market agent opens, closes or walks away from (called for every decision it logs)."""
+    m, a, t = rec.get("module"), rec.get("action"), rec.get("tick")
+    who = lambda d: (dealer_names or {}).get(d, d)  # noqa: E731
+    if m == "haggle" and a == "opened":
+        p = rec.get("plan") or {}
+        post("haggler", "deal", f"Negotiating with {who(rec.get('dealer'))}: {p.get('side', 'buy')} {_item(p.get('key'))}, "
+             f"opening {p.get('lo')} P, cap {p.get('hi')} P.", {"dealer": rec.get("dealer"), "key": p.get("key"),
+                                                               "lo": p.get("lo"), "hi": p.get("hi")}, tick=t)
+    elif m == "haggle" and a == "deal":
+        d = (rec.get("key") or "").split(":")[0]
+        post("haggler", "deal", f"Deal with {who(d)}: {_item(rec.get('key'))} for {rec.get('price')} P after "
+             f"{rec.get('rounds')} offers.", {"key": rec.get("key"), "price": rec.get("price"), "thread": rec.get("thread")}, tick=t)
+    elif m == "haggle" and a == "ended":
+        d = (rec.get("key") or "").split(":")[0]
+        post("haggler", "deal", f"No deal with {who(d)} on {_item(rec.get('key'))} ({rec.get('reason') or rec.get('status')}).",
+             {"key": rec.get("key"), "thread": rec.get("thread")}, tick=t)
+    elif m == "trade" and a == "accept":
+        post("trader", "deal", f"Took offer {rec.get('offer')} on {rec.get('venue')}: +{rec.get('gain')} P of value.",
+             {"offer": rec.get("offer"), "venue": rec.get("venue"), "gain": rec.get("gain")}, tick=t)
+    elif m == "duel" and a == "accept":
+        post("duels", "deal", f"Duel {rec.get('duel')} settled at {rec.get('price')} P, {rec.get('days')} days.",
+             {"duel": rec.get("duel"), "price": rec.get("price")}, tick=t)
+    elif m == "flip" and a in ("buy", "sell"):
+        txt = (f"Flip: bought {rec.get('ref')} at {rec.get('price')} P to sell to {rec.get('target_team')} at {rec.get('target_bid')} P."
+               if a == "buy" else f"Flip: sold {rec.get('ref')} to {rec.get('buyer')} for {rec.get('price')} P.")
+        post("flipper", "deal", txt, {"ref": rec.get("ref"), "price": rec.get("price")}, tick=t)
 
 
 def _jsonl(path: Path, tail_bytes: int = 4_000_000) -> list:
@@ -155,7 +336,8 @@ def digest(m: dict) -> list:
     if m["crashes"]:
         notes.append(("agent", "health", "Crashes logged by: " + ", ".join(f"{k} ({n})" for k, n in m["crashes"].items()) + ".",
                       {"crashes": dict(m["crashes"])}))
-    return [post(a, top, txt, ev, tick=t) for a, top, txt, ev in notes]
+    agent = local_agent()
+    return [post(a, top, txt, ev, tick=t, agent=agent) for a, top, txt, ev in notes]
 
 
 # ---------------------------------------------------------------- the tuner
@@ -220,6 +402,9 @@ def tune(m: dict, apply: bool) -> None:
 
 
 def run(apply: bool, once: bool = False):
+    WHO.update(writer="tuner", role="tuner")
+    if not once:
+        start_sync()
     post("tuner", "health", f"Council started ({'tuning live' if apply else 'dry run: proposals only'}).")
     while True:
         try:
@@ -229,6 +414,7 @@ def run(apply: bool, once: bool = False):
         except Exception as e:  # the board must never take anything down
             post("tuner", "health", f"Council cycle failed: {e!r}"[:300])
         if once:
+            sync()
             return
         time.sleep(CYCLE_SECONDS)
 
@@ -239,17 +425,22 @@ if __name__ == "__main__":
     r = sub.add_parser("run")
     r.add_argument("--dry", action="store_true")
     r.add_argument("--once", action="store_true")
-    p = sub.add_parser("post")
-    p.add_argument("author")
+    p = sub.add_parser("post", help='post "lesson" as Admin (a human, or anything not trading in the market)')
     p.add_argument("lesson")
     p.add_argument("--topic", default="note")
     q = sub.add_parser("read")
     q.add_argument("topic", nargs="?")
+    sub.add_parser("sync")
     a = ap.parse_args()
     if a.cmd == "run":
         run(apply=not a.dry, once=a.once)
     elif a.cmd == "post":
-        print(json.dumps(post(a.author, a.topic, a.lesson)))
+        print(json.dumps(post("Admin", a.topic, a.lesson)))
+        print("pushed" if sync() else "saved here; pushes on the next sync")
+    elif a.cmd == "sync":
+        print("synced" if sync() else "sync failed (offline, or no council branch on origin)")
     else:
+        sync(pull_only=True)
         for x in read(a.topic):
-            print(f"[{x.get('tick')}] {x['author']}/{x['topic']}: {x['lesson']}")
+            who = " · ".join(v for v in (x.get("agent"), x.get("role")) if v)
+            print(f"[{x.get('tick')}] {x['author']}/{x['topic']}{f' ({who})' if who else ''}: {x['lesson']}")

@@ -1752,7 +1752,9 @@ function intelTab(d, M) {
 }
 
 // ---------- council ----------
-const COUNCIL_ICON = { trader: "💱", haggler: "🤝", market: "🏪", guard: "🛡", agent: "⚙️", tuner: "🎛", wtb: "🔎", duels: "⚔️" };
+const COUNCIL_ICON = { trader: "💱", haggler: "🤝", market: "🏪", guard: "🛡", agent: "⚙️", tuner: "🎛", wtb: "🔎", duels: "⚔️", flipper: "🔁", Admin: "👤" };
+// which agent a note is from (its unique id, fixed until it restarts) and its role; the tuner's notes are about one
+const councilWho = n => n.role === "tuner" ? (n.agent ? ` · about ${esc(n.agent)}` : "") : n.agent ? ` · ${esc(n.agent)}${n.role ? ` (${esc(n.role)})` : ""}` : "";
 const KNOB_NAME = { trade_ask_start: "Spare asking price (× book)", trade_bid_start: "Opening bid (× book)" };
 const METRIC_NAME = { ask_sell_through: "of our listed spares sold", bid_fill: "of our bids filled" };
 let councilFilter = "all";
@@ -1760,13 +1762,13 @@ function councilTab(d) {
   const C = d.council || {}, notes = C.notes || [], st = C.state || {}, rules = C.rules || {};
   const pct = x => x == null ? "–" : `${Math.round(x * 100)}%`;
   const ago = ts => { const m = Math.round((Date.now() / 1000 - ts) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)}h ${m % 60}m ago`; };
-  const last = notes[notes.length - 1];
+  const rounds = notes.filter(n => n.role === "tuner" || (!n.host && n.author !== "Admin")), last = rounds[rounds.length - 1];
   const tick = d.clock?.tick ?? 0;
   const running = last && Date.now() / 1000 - last.ts < (C.cycle_seconds || 600) * 2;
   $("council-head").innerHTML = notes.length
     ? `<div class="sec" style="font-size:13px;line-height:1.5"><span class="dot" style="display:inline-block;background:${running ? "var(--good)" : "var(--critical)"}"></span>
-       ${running ? "Running" : "No recent round: is <code>council.py run</code> up?"} · ${notes.length} notes · last round ${ago(last.ts)} · a new round every ${Math.round((C.cycle_seconds || 600) / 60)} min.
-       Post your own: <code>../.venv/bin/python council.py post &lt;author&gt; "lesson"</code></div>`
+       ${running ? "Running" : "No recent round: is <code>council.py run</code> up?"} · ${notes.length} notes from every laptop${last ? ` · last round ${ago(last.ts)}` : ""} · a new round every ${Math.round((C.cycle_seconds || 600) / 60)} min.
+       Post as Admin: <code>python3 council.py post "lesson"</code></div>`
     : `<div class="empty">No notes yet. Start it from team13/: <code>../.venv/bin/python council.py run</code></div>`;
   // self-tuning: current value, latest metric vs target band, running trial or cooldown
   const latestEv = topic => [...notes].reverse().find(n => n.author === "trader" && n.topic === topic)?.evidence || {};
@@ -1795,16 +1797,16 @@ function councilTab(d) {
     || `<div class="muted" style="font-size:12px;margin-top:6px">No strategy changes yet.</div>`);
   // latest note per author/topic from the newest round
   const seen = new Set(), latest = [];
-  for (const n of [...notes].reverse()) { const key = n.author + "/" + n.topic; if (n.author === "tuner" || seen.has(key)) continue; seen.add(key); latest.push(n); }
+  for (const n of [...notes].reverse()) { const key = n.author + "/" + n.topic + "/" + (n.agent || ""); if (n.author === "tuner" || seen.has(key)) continue; seen.add(key); latest.push(n); }
   $("council-latest").innerHTML = latest.slice(0, 10).map(n => `<div class="lesson"><b>${COUNCIL_ICON[n.author] || "📝"} ${esc(n.author)}</b>
-    <span class="muted" style="font-size:11px">${esc(n.topic)} · tick ${n.tick ?? "–"} · ${ago(n.ts)}</span><br>${esc(n.lesson)}</div>`).join("")
+    <span class="muted" style="font-size:11px">${esc(n.topic)} · tick ${n.tick ?? "–"} · ${ago(n.ts)}${councilWho(n)}</span><br>${esc(n.lesson)}</div>`).join("")
     || `<div class="empty">Waiting for the first round…</div>`;
   const authors = ["all", ...new Set(notes.map(n => n.author))];
   $("council-filter").innerHTML = authors.map(a => `<button class="btn ${a === councilFilter ? "on" : ""}" data-a="${esc(a)}">${a === "all" ? "All" : (COUNCIL_ICON[a] || "📝") + " " + esc(a)}</button>`).join("");
   $("council-filter").querySelectorAll("[data-a]").forEach(b => b.onclick = () => { councilFilter = b.dataset.a; councilTab(d); });
   $("council-notes").innerHTML = [...notes].reverse().filter(n => councilFilter === "all" || n.author === councilFilter).slice(0, 150).map(n =>
     `<div class="ev"><div class="tm">${hm(new Date(n.ts * 1000))}</div><div class="ic">${COUNCIL_ICON[n.author] || "📝"}</div>
-     <div><b>${esc(n.author)}</b> <span class="muted" style="font-size:11px">${esc(n.topic)}${n.tick != null ? ` · tick ${n.tick}` : ""}</span><div>${esc(n.lesson)}</div></div></div>`).join("")
+     <div><b>${esc(n.author)}</b> <span class="muted" style="font-size:11px">${esc(n.topic)}${n.tick != null ? ` · tick ${n.tick}` : ""}${councilWho(n)}</span><div>${esc(n.lesson)}</div></div></div>`).join("")
     || `<div class="empty">Nothing here yet.</div>`;
 }
 

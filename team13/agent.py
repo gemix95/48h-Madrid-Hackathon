@@ -44,6 +44,7 @@ from values import Values
 from intel import Intel
 from learner import Learner
 from negotiator import Negotiator
+import council
 import strategy
 
 HERE = Path(__file__).parent
@@ -114,6 +115,7 @@ class Context:
         self.learner = Learner()
         self.llm = Negotiator(log=self.log)
         self.agent_budget = None  # AGENT_BUDGET: this process's daily spend cap when teammates run agents too
+        self.announce = None  # posts the deals we open/close to El Consejo, so teammates' agents don't step on them
 
     # ---------------------------------------------------------------- logging & state
     def log(self, module, action, **detail):
@@ -123,6 +125,11 @@ class Context:
         line = json.dumps(rec, default=str)
         self._logf.write(line + "\n")
         print(line[:300], flush=True)
+        if self.announce:
+            try:
+                self.announce(rec)
+            except Exception:  # the board must never stop a tick
+                pass
 
     def save(self):
         tmp = STATE.with_suffix(".tmp")
@@ -425,7 +432,15 @@ def main():
               "wtb": "enable_wtb"}
     ctx.solvency = Solvency(ctx)  # public-feed cash bounds: skip offers whose maker cannot pay
     flagger = FlagHunter(ctx)  # proven bad faith in dealer messages to us: a correct flag scores
-    ctx.log("agent", "start", dry=args.dry_run, role=sorted(role), agent_budget=args.budget)
+    # El Consejo: a unique id for this agent (fixed until it restarts), then announce every deal we make
+    agent_id = None if args.dry_run else council.identify(args.role)
+    ctx.log("agent", "start", dry=args.dry_run, role=sorted(role), agent_budget=args.budget, agent_id=agent_id)
+    if agent_id:
+        council.start_sync()
+        council.post("agent", "joined", f"{agent_id} started on {council.HOST}: role {args.role} ({', '.join(sorted(role))})"
+                     + (f", budget {args.budget} P/day." if args.budget else "."))
+        ctx.announce = lambda rec: council.announce(rec, {d.get("id"): (d.get("name") or d.get("id", "")).split()[0]
+                                                          for d in ctx.dealers})
     flags = bool(role & {"duels", "haggler"})  # one flagger per team: the agent that talks to dealers
     last_tick, n = None, 0
     while True:
