@@ -44,6 +44,12 @@ KNOBS = {
                       "More rounds = slower concessions. Abuela is patient (85%)."),
     "haggle_curve": (2.2, 1.0, 4.0, 0.1, "Dealers", "Concession curve",
                      "1 = steady steps; higher = tiny steps first, bigger near the cap (Boulware)."),
+    "buy_value_margin": (0.1, 0.0, 0.5, 0.05, "Dealers", "Safety margin under our value",
+                         "Never pay more than (1 - this) x what the item is worth to us, final offers included. "
+                         "A pack's worth is an estimate (its contents are luck), so keep a margin."),
+    "buy_open_margin": (0.4, 0.1, 0.8, 0.05, "Dealers", "First offer under our value",
+                        "Open at (1 - this) x our value (lower if the list-price rule opens lower), then concede "
+                        "Boulware-style up to the cap, reaching it at the round this dealer usually names its final."),
     "haggle_buy_packs": (1, 0, 1, 1, "Dealers", "Buy packs", "Packs: 3 per hour from Abuela."),
     "haggle_sell_spares": (1, 0, 1, 1, "Dealers", "Sell spares to dealers", "Sell duplicates/low-value cards to dealers."),
     "haggle_buy_cards": (1, 0, 1, 1, "Dealers", "Buy single cards", "Buy cards we value most (Salamanca, Malasaña)."),

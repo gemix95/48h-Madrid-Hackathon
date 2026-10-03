@@ -166,6 +166,7 @@ tr.good td { background: color-mix(in srgb, var(--good) 11%, transparent); }
 .thr-tab { --hc: var(--muted); flex: none; min-width: 104px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; font: inherit; font-size: 13px;
   padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); border-top: 3px solid var(--hc); background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
 .thr-tab span { font-size: 11px; color: var(--muted); } .thr-tab em { font-style: normal; font-size: 11px; font-weight: 700; color: var(--hc); }
+.est { color: #8b5cf6; font-weight: 700; cursor: help; border-bottom: 1px dotted currentColor; }
 .thr-what { display: inline-flex; align-items: center; gap: 4px; } .thr-what svg { width: 11px; height: 11px; }
 .result { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px; margin-bottom: 10px; font-size: 14px;
   background: color-mix(in srgb, var(--rc) 14%, transparent); border: 1px solid color-mix(in srgb, var(--rc) 45%, transparent); }
@@ -862,7 +863,8 @@ function priceChart(mv, refs) {
   let g = "";
   for (let i = 0; i <= 4; i++) { const p = y0 + (y1 - y0) * i / 4; g += `<line x1="${L}" x2="${W - R}" y1="${Y(p)}" y2="${Y(p)}" stroke="var(--grid)"/><text x="${L - 6}" y="${Y(p) + 4}" text-anchor="end">${Math.round(p)}</text>`; }
   g += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--axis)"/><text x="${L}" y="${H - 6}">tick ${Math.round(x0)}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">tick ${Math.round(x1)}</text>`;
-  for (const r of refs) g += `<line x1="${L}" x2="${W - R}" y1="${Y(r.v)}" y2="${Y(r.v)}" stroke="${r.col || "var(--muted)"}" stroke-width="${r.col ? 2 : 1}" stroke-dasharray="${r.col ? "none" : "4 4"}"/><text x="${W - R + 6}" y="${Y(r.v) + 4}" style="${r.col ? `fill:${r.col};font-weight:700` : ""}">${r.label} ${fmt(r.v, 0)}</text>`;
+  for (const r of refs) { const col = r.est ? "#8b5cf6" : r.col;
+    g += `<line x1="${L}" x2="${W - R}" y1="${Y(r.v)}" y2="${Y(r.v)}" stroke="${col || "var(--muted)"}" stroke-width="${r.col ? 2 : 1}" stroke-dasharray="${r.col ? "none" : "4 4"}"/><text x="${W - R + 6}" y="${Y(r.v) + 4}" style="${col ? `fill:${col};font-weight:700` : ""}${r.est ? ";cursor:help" : ""}"${r.est ? ' data-tip="worth"' : ""}>${r.label} ${fmt(r.v, 0)}${r.est ? "?" : ""}</text>`; }
   const series = [["us", "var(--series-1)"], ["them", "var(--series-2)"]];
   for (const [who, color] of series) {
     const pts = mv.filter(m => m.who === who); if (!pts.length) continue;
@@ -893,14 +895,26 @@ function dealInfo(th, d, M) {
   const offers = [...(th.messages || []).map(m => m.offer), ...(th.standing_offers || [])].filter(Boolean);
   const done = offers.find(o => o.status === "settled" || o.status === "accepted");
   const price = done ? (done.give?.cash || done.want?.cash || null) : null;
-  let worth = null;
-  if (w.pack && d.catalog) worth = M.packEV(d.catalog.packs.find(p => p.id === w.pack) || { slots: [] });
-  else if (c) { const n = (M.held[c.id] || []).length, k = side === "buy" && th.status === "deal" ? Math.max(0, n - 1) : n;
-    worth = c.book * (M.aff[c.set] ?? 1) * M.marg[Math.min(k, M.marg.length - 1)]; }
+  // worth: exact when the game reports it (a card we hold), an estimate otherwise (a pack, or a card that left us)
+  let worth = null, est = false, why = "";
+  const held = c ? d.me.assets.filter(a => a.ref === c.id && a.your_value != null) : [];
+  if (w.pack && d.catalog) {
+    const pack = d.catalog.packs.find(p => p.id === w.pack) || { slots: [] };
+    const avg = r => { const cs = M.cards.filter(x => x.released && !x.hidden && x.rarity === r); return cs.length ? cs.reduce((t, x) => t + M.nextVal(x), 0) / cs.length : 0; };
+    const slots = pack.slots.map(sl => Object.entries(sl).map(([r, p]) => `${p < 1 ? `${Math.round(p * 100)}% ` : ""}${r} ≈ ${fmt(avg(r), 1)} P`).join(" or ")).join("<br>+ ");
+    worth = M.packEV(pack); est = true;
+    why = `<b>Estimate: ${fmt(worth, 1)} P</b><br>Nobody knows what a pack holds, so this is its expected value: the average card each slot can give, at our values today (our neighbourhood multipliers; a card we already hold counts 25%, a third copy 10%).<br>${slots}<br><span class="muted">Page bonus not included. It drops as we collect more duplicates. The game reports no pack value before you own one; what comes out is luck and does not score.</span>`;
+  } else if (c && side === "buy" && th.status === "deal" && held.length) {
+    worth = Math.min(...held.map(a => a.your_value));   // the game's own value of the copy this deal added
+  } else if (c) {
+    const n = (M.held[c.id] || []).length, k = side === "buy" && th.status === "deal" ? Math.max(0, n - 1) : n;
+    worth = c.book * (M.aff[c.set] ?? 1) * M.marg[Math.min(k, M.marg.length - 1)]; est = true;
+    why = `<b>Estimate: ${fmt(worth, 1)} P</b><br>The game only reports the value of cards we hold. This one: book ${c.book} P × our ${esc(c.setName)} multiplier ×${M.aff[c.set] ?? 1} × copy factor ${M.marg[Math.min(k, M.marg.length - 1)]} (${k ? "a copy we already had" : "first copy"}).<br><span class="muted">Page bonus not included.</span>`;
+  }
   const gain = price != null && worth != null ? (side === "sell" ? price - worth : worth - price) : null;
   const col = c ? (d.catalog?.rarities?.[c.rarity]?.color || RARITY_COLOR[c.rarity]) : null;
   const what = c ? `<span class="thr-what"><span style="color:${col}">${emblem(c.rarity)}</span>${esc(c.setName)}</span>` : `<span class="thr-what">${w.pack ? "pack" : esc(th.item || "")}</span>`;
-  return { side, c, price, worth, gain, what, name: c?.name || (w.pack ? "a pack" : th.item || "item") };
+  return { side, c, price, worth, est, why, gain, what, name: c?.name || (w.pack ? "a pack" : th.item || "item") };
 }
 // how "hot" a conversation is: FINAL offer > small gap > haggling > no reply > closed
 function heat(th, myId) {
@@ -932,7 +946,7 @@ function threads(d, M) {
     const ev = want?.pack && d.catalog ? M.packEV(d.catalog.packs.find(p => p.id === want.pack) || { slots: [] }) : null;
     const x = dealInfo(th, d, M);
     const refs = [entry?.opening_ask && { v: entry.opening_ask, label: "opening ask" }, entry?.list_price && { v: entry.list_price, label: "list price" },
-      x.worth != null && { v: x.worth, label: "worth to us" }, th.status === "deal" && x.price != null && { v: x.price, label: "✓ deal", col: "var(--good)" }].filter(Boolean);
+      x.worth != null && { v: x.worth, label: "worth to us", est: x.est }, th.status === "deal" && x.price != null && { v: x.price, label: "✓ deal", col: "var(--good)" }].filter(Boolean);
     const st = th.status === "deal" ? ["var(--good)", "✓ deal"] : th.status === "open" ? ["var(--series-1)", "● open"] : ["var(--muted)", `✕ ${th.status}${th.closed_reason ? " · " + th.closed_reason : ""}`];
     const us = mv.filter(m => m.who === "us"), them = mv.filter(m => m.who === "them");
     const spread = us.length && them.length ? Math.abs(them[them.length - 1].price - us[us.length - 1].price) : null;
@@ -942,7 +956,7 @@ function threads(d, M) {
     const gd = (d.guard || []).find(g => g.thread === th.id);
     const verb = x.side === "sell" ? "Sell" : "Buy", prep = x.side === "sell" ? "to" : "from", lastThem = them[them.length - 1];
     const subject = Object.keys(th.topic || {}).length ? `${verb} ${esc(x.name)} ${prep} ${esc(th.with)}` : `Chat with ${esc(th.with)}`;
-    const gainTxt = x.gain != null ? ` <span class="muted">worth ≈ ${fmt(x.worth, 0)} P to us →</span> <b style="color:${x.gain >= 0 ? "var(--up)" : "var(--critical)"}">${x.gain >= 0 ? "+" : ""}${fmt(x.gain, 0)} P</b>` : "";
+    const gainTxt = x.gain != null ? ` ${x.est ? `<span class="est" data-tip="worth">worth ≈ ${fmt(x.worth, 0)}? P to us</span> <span class="muted">→</span>` : `<span class="muted">worth ${fmt(x.worth, 0)} P to us →</span>`} <b style="color:${x.gain >= 0 ? "var(--up)" : "var(--critical)"}">${x.gain >= 0 ? "+" : ""}${fmt(x.gain, 0)} P</b>` : "";
     const result = th.status === "deal"
       ? `<div class="result" style="--rc:var(--good)"><b class="big" style="color:var(--up)">✓ ${x.side === "sell" ? "Sold" : "Bought"} ${esc(x.name)}${x.price != null ? ` for ${x.price} P` : ""}</b> ${x.what} <span class="muted">${prep} ${esc(th.with)}</span>${gainTxt}</div>`
       : th.status !== "open"
@@ -956,7 +970,7 @@ function threads(d, M) {
   }).join("");
   for (const el of $("threads").querySelectorAll(".thread")) {
     const th = list.find(t => t.id == el.dataset.th), mv = moves(th, me.id);
-    bindTips(el, i => { const m = mv[i]; return `<b>${m.who === "us" ? "Our offer" : esc(th.with) + "'s ask"}: ${m.price} P</b>${m.final ? " · FINAL" : ""}<br>tick ${m.tick}${m.text ? "<br>" + esc(m.text).slice(0, 160) : ""}`; });
+    bindTips(el, i => { if (i === "worth") return dealInfo(th, d, M).why; const m = mv[i]; return `<b>${m.who === "us" ? "Our offer" : esc(th.with) + "'s ask"}: ${m.price} P</b>${m.final ? " · FINAL" : ""}<br>tick ${m.tick}${m.text ? "<br>" + esc(m.text).slice(0, 160) : ""}`; });
     const box = el.querySelector(".msgs"); box.scrollTop = box.scrollHeight;
   }
 }

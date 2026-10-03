@@ -8,11 +8,15 @@ Strategy, from the rules and the kickoff deck:
 - A final offer ("final": true) is take-it-or-walk: we take it when it is inside our cap.
 - If the dealer's standing ask is already at or below what we would offer next, we take it instead of overpaying.
 - After every conversation we remember the outcome per dealer and item, and open the next one lower if we did well.
+- Never pay more than the item is worth to us: open buy_open_margin under our value (lower if the list-price rule
+  opens lower) and concede Boulware-style up to (1 - buy_value_margin) of it, reaching that cap at the round this
+  dealer usually names its final. A pack's worth is an expectation (we cannot know what it holds), hence the margin.
 """
 from __future__ import annotations
 
 import math
 import random
+import statistics
 
 from bazaar_sdk import BazaarError
 
@@ -61,6 +65,23 @@ class Haggler:
     def _hour(self) -> int:
         return int(self.ctx.clock.get("t_hours", 0))
 
+    def _value_band(self, worth: float):
+        """(first offer, most we pay) from what the item is worth to us."""
+        S = self.ctx.S
+        return (max(1, math.floor(worth * (1 - S.get("buy_open_margin", 0.4)))),
+                max(0, math.floor(worth * (1 - S.get("buy_value_margin", 0.1)))))
+
+    def _rounds(self, dealer_id: str) -> int:
+        """How many offers of ours a conversation with this dealer usually takes before it names its final: our own
+        deals with it, else every team's conversations (learner), else the haggle_rounds knob."""
+        rs = [r for k, st in self.ctx.state.get("dealer_stats", {}).items() if k.startswith(f"{dealer_id}:")
+              for r in st.get("rounds", []) if r]
+        if len(rs) >= 3:
+            return max(2, round(statistics.mean(rs)))
+        L = getattr(self.ctx, "learner", None)
+        rtf = L.model.get("rounds_to_final") if L and getattr(L, "model", None) else None
+        return max(2, round(rtf)) if rtf else int(self.ctx.S["haggle_rounds"])
+
     def _counts(self, dealer: str) -> dict:
         h = self.ctx.state.setdefault("dealer_hours", {}).setdefault(dealer, {})
         return h.setdefault(str(self._hour()), {"packs": 0, "deals": 0, "opened": 0})
@@ -90,12 +111,12 @@ class Haggler:
                         if ctx.values.cards[ref]["rarity"] == s["rarity"] and (best is None or gain > best[2]):
                             best = (s, ref, gain)
             # the welcome price is ~70% of list: a bargain worth more than the per-item cap, but never past today's budget
-            if best and best[0].get("list_price", 99) * 0.75 <= min(cash, ctx.budget_left()):
+            if best and best[0].get("list_price", 99) * 0.75 <= min(cash, ctx.budget_left(), self._value_band(best[2])[1]):
                 s, ref, gain = best
                 return {"buy": {"card": ref}}, {"side": "buy", "key": f"{dealer['id']}:buy:{s['rarity']}", "lo": 1,
                                                 "hi": min(math.floor(s["list_price"] * S["haggle_cap"]), ctx.budget_left(),
-                                                          math.floor(gain - S["trade_min_gain"])), "list": s["list_price"],
-                                                "ref": ref, "beginner": True}
+                                                          math.floor(gain - S["trade_min_gain"]), self._value_band(gain)[1]),
+                                                "list": s["list_price"], "ref": ref, "beginner": True, "worth": round(gain, 1)}
 
         S = ctx.S
         buys_today = ctx.state.setdefault("dealer_buys", {}).get(f"{ctx.day_key()}:{dealer['id']}", 0)
@@ -106,15 +127,21 @@ class Haggler:
                 key = f"{dealer['id']}:buy:{s['pack']}"
                 hi = min(math.floor((s.get("list_price") or s.get("opening_ask", 30)) * S["haggle_cap"]), cash, item_cap)
                 pack = next((p for p in (getattr(ctx, "catalog", None) or {}).get("packs", []) if p["id"] == s["pack"]), None)
+                worth = ctx.values.pack_ev(pack) if pack else 0.0  # expected value at our values: the contents are luck
+                v_lo, v_hi = self._value_band(worth)
                 if pack:  # not worth it for us above its value: don't buy, move on
-                    hi = min(hi, math.floor(ctx.values.pack_ev(pack) - S["trade_min_gain"]))
+                    hi = min(hi, math.floor(worth - S["trade_min_gain"]), v_hi)
                 if (s.get("list_price") or 0) * 0.6 > item_cap:
                     continue  # too expensive for the ladder: the same capture is available on cheaper items
                 if hi < 5 or key in unsupported:
                     continue
-                lo = self._opening(stats.get(key), s, side="buy")
-                return {"buy": {"pack": s["pack"]}}, {"side": "buy", "key": key, "lo": lo, "hi": hi, "pack": s["pack"],
-                                                       "list": s.get("list_price"), "opening": s.get("opening_ask")}
+                best_any = (intel.advice(dealer["id"], f"buy:pack:{s['pack']}") or {}).get("best") if intel else None
+                if best_any is not None and hi < best_any:
+                    continue  # no team has ever got one this cheap: don't spend the dealer's patience on it
+                lo = min(self._opening(stats.get(key), s, side="buy"), v_lo)
+                return {"buy": {"pack": s["pack"]}}, {"side": "buy", "key": key, "lo": min(lo, hi), "hi": hi, "pack": s["pack"],
+                                                       "list": s.get("list_price"), "opening": s.get("opening_ask"),
+                                                       "worth": round(worth, 1), "rounds": self._rounds(dealer["id"])}
         buys = {b.get("rarity") for b in menu.get("buys", [])}
         for a in ctx.values.spares() if S["haggle_sell_spares"] else []:  # 2) sell a spare, never below its value to us
             if a.get("rarity") not in buys or a["id"] in ctx.locked_assets():
@@ -146,12 +173,14 @@ class Haggler:
                     key = f"{dealer['id']}:buy:{s['rarity']}"
                     if key in unsupported:
                         break
-                    hi = min(math.floor(s.get("list_price", 10) * S["haggle_cap"]), cash, math.floor(gain - S["trade_min_gain"]), item_cap)
+                    v_lo, v_hi = self._value_band(gain)
+                    hi = min(math.floor(s.get("list_price", 10) * S["haggle_cap"]), cash, math.floor(gain - S["trade_min_gain"]), v_hi, item_cap)
                     if hi < 3:
                         break
-                    lo = self._opening(stats.get(key), s, side="buy")
+                    lo = min(self._opening(stats.get(key), s, side="buy"), v_lo)
                     return {"buy": {"card": ref}}, {"side": "buy", "key": key, "lo": min(lo, hi), "hi": hi,
-                                                    "list": s.get("list_price"), "ref": ref}
+                                                    "list": s.get("list_price"), "ref": ref, "worth": round(gain, 1),
+                                                    "rounds": self._rounds(dealer["id"])}
         return None
 
     def _ladder_card(self, dealer, buys):
@@ -191,6 +220,8 @@ class Haggler:
             if ratio is not None:
                 opening = (ctx.intel.advice(dealer_id, cls) or {}).get("opening") or plan.get("opening") or (plan.get("list") or 10) * 1.15
                 plan["lo"] = max(1, min(plan["hi"] - 1, math.floor(ratio * opening)))
+                if plan.get("worth"):  # the learned first offer may not open above our value-based opening
+                    plan["lo"] = min(plan["lo"], self._value_band(plan["worth"])[0])
                 plan.update(arm=arm, cls=cls, learned_first=ratio, final_max_r=L.model.get("final_max_vs_opening"),
                             lessons=L.model.get("lessons"))
         adv = ctx.intel.advice(dealer_id, cls)
@@ -350,7 +381,7 @@ class Haggler:
         buy = plan["side"] == "buy"
         if buy:
             S = self.ctx.S
-            p = math.floor(boulware(lo, hi, k, int(S["haggle_rounds"]), S["haggle_curve"]))
+            p = math.floor(boulware(lo, hi, k, int(plan.get("rounds") or S["haggle_rounds"]), S["haggle_curve"]))
             if offers:
                 p = max(p, offers[-1] + 1)  # always a new price
             asks = plan.get("asks") or []
