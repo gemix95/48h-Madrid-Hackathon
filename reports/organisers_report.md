@@ -1,6 +1,6 @@
-# The Bazaar: observations from Team 13 (Friday 2 Oct)
+# The Bazaar: observations from Team 13 (Friday 2 and Saturday 3 Oct)
 
-**From:** Team 13 · **For:** the Causa Prima organisers · **Date:** Saturday 3 Oct, before opening
+**From:** Team 13 · **For:** the Causa Prima organisers · **Date:** Saturday 3 Oct, evening (every item re-checked at ~21:10)
 
 We found these while playing normally on Friday. Nothing here came from probing the server: every item comes from
 the public feed (3,757 public events collected from tick 0), our own team's API responses, ordinary public reads
@@ -13,13 +13,15 @@ on purpose, tell us the scope and we will stay inside it.
 | # | Finding | Kind | Who it affects |
 |---|---|---|---|
 | 1 | A venue's name can advertise a fee it no longer charges, or no longer advertise one it does | market integrity | every team choosing a market |
-| 2 | Offers inside threads expire after 2 ticks; this is not documented | undocumented behaviour | every agent, deals silently lost |
+| 2 | Offers inside threads expire after a few ticks (2 on Friday, 4 now); this is not documented | undocumented behaviour | every agent, deals silently lost |
 | 3 | A settlement's `price` is the total for all its items, not per item | undocumented behaviour | anyone analysing the feed |
 | 4 | `/api/feed` returns at most 500 events whatever `limit` asks for | docs vs behaviour | late joiners, analytics |
 | 5 | The duel payload has no `id` (it is `duel`); the SDK names the field `deadline` but the payload says `deadline_tick` | docs vs behaviour | every agent built from the SDK |
 | 6 | `/api/levels` uses `state`, `/api/dealers` uses `status` for the same idea | consistency | agent authors |
 | 7 | Friday's first Market Test was scheduled at game hour 3.0, after the 23:00 close | schedule | market-making scores |
-| 8 | How "a negotiated deal" is counted for level unlocks is unclear | question | level unlocks |
+| 8 | Early level unlocks skipped Team 13 twice despite 6 and 12 Pilar deals | possible counter bug | Team 13, maybe others |
+| 9 | Flag verdicts are not visible anywhere | transparency | every team that flags |
+| 10 | `/api/venues` lags several ticks behind venue open/close events | consistency | agents choosing a market |
 
 ## Details
 
@@ -31,16 +33,20 @@ on purpose, tell us the scope and we will stay inside it.
 - **Why it matters.** It works the other way too: a venue could open as "zero fee", attract listings, then raise
   the fee after the notice while its name keeps saying "zero fee". Fee words in names are free text, so a name can
   misstate the fee.
+- **Re-checked Saturday 21:10.** No open venue misstates its fee right now (we reopened ours under a new name),
+  but the mechanism is unchanged: names stay free text and cannot be edited.
 - **Suggestion.** Show the live fee next to every venue name on the big screen and in `/api/venues`, or forbid fee
   words in names, or let the owner rename together with a fee change.
 
-### 2. Thread offers expire after 2 ticks
+### 2. Thread offers expire after a few ticks
 
 - **What we saw.** In dealer threads and team-to-team threads, a structured offer's `expires_tick` is
   `created_tick + 2`, for example offer 926 in thread 119 (created tick 66, expired tick 68). Team agents that
   answer on their own schedule never see it: our swap offers to two teams expired unanswered.
 - **Docs.** RULES and README describe `expires_in_ticks` (default 40) for board offers only; the 2-tick life of
   thread offers is not mentioned. On Saturday, with 30 s ticks, that is 60 s, and 30 s on Sunday.
+- **Re-checked Saturday 21:10.** Thread offers now live 4 ticks (`expires_tick - created_tick` = 4 on our latest
+  threads), so it changed during the game; still nothing in the docs.
 - **Suggestion.** Document it (or make it `expires_in_ticks`-configurable for team threads).
 
 ### 3. `settlement.price` is the total for the whole settlement
@@ -75,12 +81,29 @@ on purpose, tell us the scope and we will stay inside it.
   at 21:41, so hour 3.0 fell at about 23:20, after the 23:00 close. Fine if intended; worth a line on the screen,
   since market-making is 30 points and teams prepared brokers for it.
 
-### 8. Question: what counts as a negotiated deal for unlocks?
+### 8. Early unlocks skipped Team 13 (possible counter bug)
 
-- RULES: "a deal at the dealer's opening price does not count, a negotiated one does". Unlock events say, for
-  example, "3 deals with abuela". From the public feed we could not match every unlocking team to three deals that
-  closed below Abuela's first ask, but our matching of settlements to threads is approximate, so this is a question,
-  not a finding. Does a deal count when Abuela's fixed "made for beginners" price is accepted after some talk?
+- **What we saw.** Los Pícaros opened early at tick 761 for t01, t03, t05, t08, t10 ("3 deals with pilar") and t02,
+  t04, t09, t16 ("2 deals with pilar"). Don Ernesto opened early at tick 971 for t01, t02, t15 (3 deals), t03 (4),
+  t05, t10, t14 (5), t08 (8). Team 13 had **6** settlements with Doña Pilar before tick 761 (ticks 326-610) and **12**
+  before tick 971, all negotiated over several rounds, yet both opened to us only with "open to everyone now"
+  (ticks 881 and 1091). The counter also looks off the other way: in the public feed t14 had one Pilar settlement
+  by tick 971 and was credited with "5 deals with pilar".
+- **Question.** Which deals does the unlock counter take? If ours were excluded on purpose (opening-price deals?),
+  a line in `/api/dealers` → `unlock` would help; if not, could you check Team 13's counter?
+
+### 9. Flag verdicts are not visible
+
+- **What we saw.** We flagged two Los Pícaros messages (8233: price called final at 10 P, then 11 P offered in the
+  same thread; 8411: we asked for LAV-09 and the structured offer gave LAV-07). No feed event, no API route and no
+  score adjustment shows whether a flag was upheld, and `GET /api/flags` does not exist.
+- **Suggestion.** A `flag.resolved` event, or the verdict in `/api/me` (`score.adjustments` exists but stays empty).
+
+### 10. `/api/venues` lags behind venue events
+
+- **What we saw.** `venue.opened v22` appeared in the feed at tick 763, but `v22` was missing from `/api/venues` for
+  about 7 ticks, while `v03` was still listed as `closing` after its `venue.closed` (refund 250) event. An agent that
+  picks markets from `/api/venues` misses a new market for minutes.
 
 ## What we did not see
 
