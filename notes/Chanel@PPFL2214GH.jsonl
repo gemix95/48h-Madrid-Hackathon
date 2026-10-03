@@ -1,2 +1,3 @@
 {"ts": 1791042388.2, "tick": null, "author": "agent", "topic": "joined", "lesson": "Chanel started on PPFL2214GH: role dealers (duels, haggler, workshop).", "evidence": {}, "agent": "Chanel", "role": "dealers", "host": "PPFL2214GH"}
 {"ts": 1791042393.8, "tick": 904, "author": "haggler", "topic": "deal", "lesson": "Negotiating with Los: buy rare, opening 1 P, cap 63 P.", "evidence": {"dealer": "picaros", "key": "picaros:buy:rare", "lo": 1, "hi": 63}, "agent": "Chanel", "role": "dealers", "host": "PPFL2214GH"}
+{"ts": 1791042509.3, "tick": 908, "author": "haggler", "topic": "deal", "lesson": "Deal with Los: rare for 63 P after 3 offers.", "evidence": {"key": "picaros:buy:rare", "price": 63, "thread": 1316}, "agent": "Chanel", "role": "dealers", "host": "PPFL2214GH"}
