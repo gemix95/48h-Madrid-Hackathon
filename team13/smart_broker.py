@@ -1,19 +1,18 @@
-"""Team 13's broker for our venue, built to beat the free stall on the Market Test.
+"""Team 13's broker for our venue. Market-making is 30 points: Market Test efficiency, plus value other teams
+create by trading on our book.
 
     source ../bazaar.env && python3 smart_broker.py     # reads the broker key from state.json (or BROKER_KEY)
 
-The Market Test scores the share of the possible gains (between TRUE limits) we realise. The stall crosses every
-quote pair the moment it crosses. That loses value in two ways:
-  1. it pairs an extra-marginal trader (a seller whose true cost is above the market price, a buyer whose value is
-     below it) with someone who could have traded with a better partner a few ticks later;
-  2. it never knows who is about to leave.
-Bench traders shade their quotes away from hidden limits and most relax them as patience runs out, so we:
-  - track every bench offer's quote over time and estimate its limit (quote minus learned shading);
-  - compute the efficient set per run on the estimates and match intramarginal pairs as soon as they cross;
-  - let extra-marginal pairs trade only late in the session, or when a trader looks about to leave;
-  - fall back to the stall's plan on errors, and always union leftover stall crosses (stall_floor), so we never
-    score below half bench points by construction; fee_blocked events tell market.py to force 0% fee.
-Real offers on our venue are crossed card by card exactly like the starter (lowest ask vs highest bid covering fee).
+What the board actually did (Saturday session 1): the free stall and every broker that crossed like it sit on one
+score, and the teams above that (t12 El Duende, t05's stall, t06) are the ones where OTHER teams settled trades.
+We scored last: the broker matched two bench pairs at tick 204 and then was not running for the rest of the
+16-tick session, while the fee was still 1% (a 1 P fee blocks a thin cross the 0% stall takes).
+
+The live plan is therefore the stall's own cross, for every tick, at whatever fee the book currently has:
+lowest ask against highest bid, midpoint, walked down until the buyer can pay the fee. Pairing "smarter" first
+and then filling leftovers scores below that floor, because the first match consumes the trader the stall would
+have given a better partner. Real offers are crossed the same way, card by card, so a bid and an ask that meet
+on our book settle here instead of on a rival's venue.
 """
 from __future__ import annotations
 
@@ -158,7 +157,10 @@ PROBES_PER_TICK = 3     # match attempts per tick on pairs whose quotes do not c
 PROBE_GIVEUP = 6        # refusals with no acceptance at all: the server checks quotes, stop probing
 PROBE_MIN_AGE = 2       # a trader is probed once it has quoted this many ticks (its shading is learned) ...
 PROBE_AFTER = 0.5       # ... or once this share of the session has passed (sim: beats the stall with and without arrivals)
-_probe = {"on": True, "accepted": 0, "refused": 0, "tries": {}}
+# Off on purpose. A probe matches a pair whose quotes do not cross. The server has not been seen to accept
+# that, and a wrong accept consumes a trader the stall still needed. Turn on only after a refused-or-accepted
+# check on a live book.
+_probe = {"on": False, "accepted": 0, "refused": 0, "tries": {}}
 
 
 def probe_plan(tracker, used, fee, tick, max_n=PROBES_PER_TICK):
@@ -205,6 +207,15 @@ def _bench_quotes(book):
         elif (o.get("give") or {}).get("cash"):
             bids[o["id"]] = o["give"]["cash"]
     return asks, bids
+
+
+def live_bench_plan(book, fee):
+    """Every quote-crossing bench pair, stall order, price the buyer can pay after the fee.
+
+    This is the whole Market Test plan. It is what the free auto stall does, which is the floor under the
+    teams tied at the top. Anything that matches a different pair first can land below that floor.
+    """
+    return stall_floor(book, [], fee)
 
 
 def stall_floor(book, plan, fee):
@@ -296,9 +307,11 @@ def refresh_session_ticks(url):
 
 
 def run(url, key):
-    """The broker loop. The agent starts it in a thread as soon as our venue is open (market.py)."""
+    """The broker loop. A standalone process (screen team13-broker) holds the lock; the agent's thread starts
+    this only when that process is not running."""
     broker, tracker, seen = Broker(url, key), Tracker(), None
-    log(event="start")
+    last_beat = 0.0
+    log(event="start", plan="stall")
     while True:
         try:
             refresh_session_ticks(url)
@@ -315,41 +328,36 @@ def run(url, key):
             if now != seen:
                 seen = now
                 try:
-                    plan = smart_bench_plan(book, tracker, tick, fee)
-                    plan = stall_floor(book, plan, fee)  # never below the free stall
-                except Exception as e:  # never worse than the stall
-                    log(event="smart_plan_failed", error=repr(e))
+                    plan = live_bench_plan(book, fee)
+                except Exception as e:  # a bug here must still cross whatever the stall would
+                    log(event="plan_failed", error=repr(e))
                     plan = starter_plans.bench_plan(book)
                 if fee_bps or per_card:
                     log_fee_blocks(book, fee)
                 plan += starter_plans.public_plan(book)
-                if bench and tick % 4 == 0:
-                    log(event="book", tick=tick, bench=len(bench), sample=bench[:2], keys=sorted(book),
+                if bench:
+                    log(event="plan", tick=tick, bench=len(bench), matches=len(plan),
                         fee_bps=fee_bps, fee_per_card=per_card)
-                if bench:  # every quote change: how bench traders arrive, relax and leave (to calibrate the plan)
                     log(event="bench_book", tick=tick,
                         offers=[[o["id"], "ask" if (o.get("want") or {}).get("cash") else "bid",
                                  (o.get("want") or {}).get("cash") or (o.get("give") or {}).get("cash"),
                                  o.get("expires_tick")] for o in bench])
+                elif book.get("offers"):
+                    log(event="plan", tick=tick, bench=0, offers=len(book.get("offers") or []), matches=len(plan))
                 for sell, buy, price in plan:
                     try:
                         broker.match(sell, buy, price)
                         log(event="match", tick=tick, sell=sell, buy=buy, price=price)
                     except BazaarError as e:
-                        log(event="match_refused", tick=tick, sell=sell, buy=buy, price=price, error=str(e))
-                if bench:
-                    used = {oid for s, b, _ in plan for oid in (s, b)}
-                    for sell, buy, price in probe_plan(tracker, used, fee, tick):
-                        try:
-                            broker.match(sell, buy, price)
-                            probe_result(sell, buy, True)
-                            log(event="probe_match", tick=tick, sell=sell, buy=buy, price=price)
-                        except BazaarError as e:
-                            probe_result(sell, buy, False, str(e))
-                            log(event="probe_refused", tick=tick, sell=sell, buy=buy, price=price, error=str(e)[:200])
+                        log(event="match_refused", tick=tick, sell=sell, buy=buy, price=price, error=str(e)[:200])
+            elif time.time() - last_beat >= 30:
+                last_beat = time.time()
+                log(event="heartbeat", tick=tick, fee_bps=fee_bps, offers=len(book.get("offers") or []))
         except BazaarError as e:
-            log(event="read_failed", error=str(e))
-        time.sleep(1.0)
+            log(event="read_failed", error=str(e)[:200])
+        except Exception as e:  # keep the loop up: a dead broker scores 0 for the rest of the session
+            log(event="loop_error", error=repr(e)[:200])
+        time.sleep(0.5)
 
 
 if __name__ == "__main__":

@@ -22,19 +22,23 @@ DESCRIPTION = ("Madrid's top-tier market: {fee} fee, no per-card charge, a smart
                "pairs first. Built by the team leading the board.")
 # FOMO, but only true claims: fee comparison, matching every tick, first come first matched, no per-card charge
 BRAND = "El Club"          # what we call v03 everywhere; the listed name stays "Mercado Trece · 1% fee" until we reopen
-PITCH = ("Hola! Team 13 here — welcome to El Club ({venue}, listed as 'Mercado Trece'). {fee} fee, no per-card charge "
-         "(El Rastro takes 5% + 1 P per card). Smart broker matches every tick, best pairs first; earliest offers get "
-         "matched first. Join El Club and keep the primas.")
+PITCH = ("Hola! Team 13 — El Club ({venue}, listed as 'Mercado Trece'). {fee} fee and 0 P per card; the '1%' in the "
+         "name is stale (an open market cannot be renamed). Post the card you are missing as a bid, or a spare as an "
+         "ask or a swap, with venue {venue}. Your duplicate may be the last piece of someone else's page. Our broker "
+         "crosses every tick. El Rastro takes 5% + 1 P per card.")
 ANNOUNCE = [
-    "El Club ({venue}, listed as 'Mercado Trece') is {fee}, no per-card charge — the '1%' in the listed name is out of "
-    "date (open markets can't be renamed). El Rastro takes 5% + 1 P per card.",
-    "Still on El Rastro? 5% + 1 P per card vs El Club ({venue}) at {fee}. Same cards, more primas left.",
-    "El Club ({venue}) matches every tick, best pairs first. First come, first matched — get on the book.",
-    "Leading team, zero cut: El Club ({venue}) is {fee}, no per-card fee. Where Madrid trades.",
-    "Card-for-card swaps at El Club ({venue}): no per-card charge, {fee} fee on cash legs. Are you in?",
+    "El Club ({venue}, listed as 'Mercado Trece'): {fee} fee, 0 P per card. The '1%' in the name is stale. Post the "
+    "card you are missing, or a spare. Your duplicate may be the last piece of another page. Broker crosses every tick. "
+    "El Rastro takes 5% + 1 P per card.",
+    "La última pieza is on El Club ({venue}): {fee}, no per-card charge. Bid for the card you need, ask or swap a spare. "
+    "We cross every tick. El Rastro is 5% + 1 P per card.",
+    "El Club ({venue}) is {fee} and stays there. Post venue={venue}: bids for missing cards, asks and swaps for spares. "
+    "Best bid meets best ask every tick.",
+    "Still paying El Rastro 5% + 1 P per card? El Club ({venue}) is {fee}, 0 P per card. List the card you are missing.",
+    "Card-for-card swaps and cash bids both clear on El Club ({venue}): {fee} fee, no per-card charge, crossed every tick.",
 ]
-PRE_TEST = ("Market Test soon: list at El Club ({venue}, 'Mercado Trece') now — {fee} fee, smart broker, matched every "
-            "tick. Don't leave liquidity on El Rastro.")
+PRE_TEST = ("Market Test soon — and the book is open now. El Club ({venue}, 'Mercado Trece') is {fee}, 0 P per card. "
+            "Post the card you are missing or a spare; we cross every tick. El Rastro takes 5% + 1 P per card.")
 # appended to announcements only while we still have a spare to give and rewards left today (a true claim)
 REWARD_PITCH = (" Club welcome: your first trade at El Club today earns a private offer of one of our spare "
                 "commons at {price} P on El Rastro (they trade at 8-10 P).")

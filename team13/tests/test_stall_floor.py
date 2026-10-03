@@ -34,6 +34,21 @@ def test_fee_blocks_thin_pair():
     print("fee_block OK: thin pair needs 0% fee")
 
 
+def test_live_plan_is_the_stall():
+    """The plan we send must be the stall's pairs, not a reordering that consumes the best buyer first."""
+    book = {"bench_offers": [
+        {"id": "b1-0", "want": {"cash": 40}, "give": {"cash": 0}},
+        {"id": "b1-1", "want": {"cash": 0}, "give": {"cash": 50}},
+        {"id": "b1-2", "want": {"cash": 45}, "give": {"cash": 0}},
+        {"id": "b1-3", "want": {"cash": 0}, "give": {"cash": 80}},
+    ]}
+    live = [(s, b) for s, b, _ in sb.live_bench_plan(book, lambda p: 0)]
+    stall = [(s, b) for s, b, _ in sb.stall_floor(book, [], lambda p: 0)]
+    assert live == stall == [("b1-0", "b1-3"), ("b1-2", "b1-1")], live
+    print("live plan OK: same pairs as the stall, same order")
+
+
 if __name__ == "__main__":
     test_stall_floor_adds_skipped_cross()
     test_fee_blocks_thin_pair()
+    test_live_plan_is_the_stall()
