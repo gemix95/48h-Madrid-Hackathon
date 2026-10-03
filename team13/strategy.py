@@ -95,8 +95,10 @@ KNOBS = {
                     "Take the rival's offer when it gives us this share of what our next offer would."),
     # market
     "venue_fee_bps": (0, 0, 1000, 25, "Market", "Our market fee (bps)",
-                      "0 = free (Saturday default). Fees never score; a positive fee blocks thin Market Test pairs. "
-                      "El Rastro is 5% + 1 P/card — FOMO copy and invites use this live value. Safety drops to 0% if a test match is fee-blocked."),
+                      "0 = free (Saturday default). Fees never score and a positive fee blocks thin Market Test pairs "
+                      "(ceil(bps*price/10000) on every match). El Duende / El Rastro Express are at 0%; Team 6 at 0.5%; "
+                      "El Rastro is 5% + 1 P/card — FOMO copy and invites use this live value. "
+                      "Safety: if a bench match is refused or fee-blocked, or a Market Test is upcoming, the agent forces 0%."),
     "day_budget": (120, 20, 400, 10, "Money", "Buying budget per game day (P)",
                    "Most we spend on dealer purchases, bids and posted offers per day (Friday, Saturday, Sunday each get "
                    "their own). Page completers are exempt. The ladder scores how well we buy, not how much."),
