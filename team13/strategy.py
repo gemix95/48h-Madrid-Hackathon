@@ -165,7 +165,7 @@ KNOBS = {
                     "Sell up to 3 cards we value least (never from a complete or 8/10 page) to fill the level's best-three."),
     "reserve_cash": (270, 0, 400, 10, "Market", "Cash kept for the market bond (P)",
                      "The bond is 250 + 20. Set 0 to spend everything on deals."),
-    "cashback_on": (1, 0, 1, 1, "Market", "Cashback on El Club",
+    "cashback_on": (0, 0, 1, 1, "Market", "Cashback on El Club",
                     "Each side of every trade between two teams on our market gets cashback_p P back, as a cash offer it accepts."),
     "cashback_p": (1, 1, 5, 1, "Market", "Cashback per side (P)", "Buyer and seller alike, net of the fee of the market it is paid on."),
     "cashback_day_cap": (20, 0, 100, 1, "Market", "Cashback budget per day (P)", "Cashback accepted plus cashback offers still open."),
