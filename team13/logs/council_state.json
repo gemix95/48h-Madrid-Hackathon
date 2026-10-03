@@ -1,0 +1,10 @@
+{
+ "trial": {
+  "knob": "trade_ask_start",
+  "old": 1.05,
+  "new": 1.0,
+  "tick": 318,
+  "before": 0.08333333333333333
+ },
+ "touched": {}
+}

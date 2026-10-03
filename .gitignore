@@ -6,8 +6,10 @@ __pycache__/
 history.json
 team13/state.json
 team13/state.tmp
-team13/logs/
-logs/
+team13/logs/*
+!team13/logs/council.jsonl
+!team13/logs/council_state.json
+/logs/
 feed_events.jsonl
 dashboard/.password
 .venv/
