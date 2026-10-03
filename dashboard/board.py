@@ -278,10 +278,56 @@ def _status(c):
     return '<span class="pill">Buyer waiting</span>' if c["buyers"] else '<span class="pill">For sale</span>'
 
 
+def public_vid():
+    """Our market's id, from the last build (the auction endpoint needs it)."""
+    return _LAST.get("vid")
+
+
+_LAST = {}
+
+
+def _auctions_html(data, vid):
+    """Open lots on our market: reserve, best bid so far, bids, ticks left, and a ready bid call."""
+    try:
+        import auctions
+        lots = [l for l in auctions.load().values() if l.get("status") == "open"]
+    except Exception:
+        lots = []
+    tick = data.get("tick") or 0
+    cards = {c["ref"]: c for c in data["cards"]}
+    rows = []
+    for lot in sorted(lots, key=lambda l: l["end"]):
+        c = cards.get(lot["ref"]) or {"ref": lot["ref"], "name": lot["ref"]}
+        bids = sorted((x["price"] for x in (c.get("bids") or []) if x.get("ours") and x["price"] >= lot["reserve"]), reverse=True)
+        best = bids[0] if bids else None
+        step = max(lot["reserve"], (best + 1) if best else lot["reserve"])
+        body = f'{{"venue":"{vid}","give":{{"cash":{step}}},"want":{{"cards":["{lot["ref"]}"]}}}}'
+        text = (f"El Club auction on {vid}: {lot['ref']} ({c.get('name') or lot['ref']}), reserve {lot['reserve']} P, ends at tick {lot['end']}.\n\n"
+                + _curl(body) +
+                f"\n\nBid what the card is worth to you: the highest bid wins and pays the second-highest bid + 1 "
+                f"(never below the reserve, never above its own bid). Raise by posting a higher bid; cancel any time before the end.")
+        rows.append(f'<tr><td class="cardcell"><div class="thumb" data-card="{html.escape(lot["ref"])}"></div><div class="cardtxt">'
+                    f'<b>{html.escape(lot["ref"])}</b><div>{html.escape(str(c.get("name") or ""))}</div></div></td>'
+                    f'<td><div class="price">{lot["reserve"]} P</div><div class="dim small">reserve</div></td>'
+                    f'<td><div class="price">{(str(best) + " P") if best else "–"}</div><div class="dim small">{len(bids)} bid{"s" if len(bids) != 1 else ""}</div></td>'
+                    f'<td><div class="price">{max(0, lot["end"] - tick)}</div><div class="dim small">ticks left</div></td>'
+                    f'<td>{_button(text, "Bid in 1 click")}</td></tr>')
+    table = (f'<div class="wrap"><table class="deck"><thead><tr><th>Lot</th><th>Reserve</th><th>Best bid</th><th>Ends</th><th></th></tr></thead>'
+             f'<tbody>{"".join(rows)}</tbody></table></div>') if rows else '<div class="box dim">No lot right now. Be the first: auction a card below.</div>'
+    how_ask = _curl(f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":RESERVE}},"expires_in_ticks":34}}')
+    how_reg = f'curl "http://217.160.143.83/board/auction?offer=OFFER_ID&ticks=30"'
+    how = (f"Auction a card on {vid}: two calls.\n\n1) Put it up, with your reserve price (the least you accept):\n"
+           f"{how_ask}\n\n2) Make it a lot for 30 ticks (OFFER_ID = the id step 1 returned):\n{how_reg}\n\n"
+           f"Teams that collect the set hear about it; on the last tick the highest bid wins at the second-highest + 1.")
+    return (f'<h2 id="auctions">Live auctions <span class="dim" style="font-weight:400;font-size:14px">· on {vid}: the highest bid wins, pays the second bid + 1</span></h2>'
+            f'{table}<div style="margin:8px 0 18px">{_button(how, "Auction your card in 2 calls")}</div>')
+
+
 def render(data: dict) -> str:
     pub = public(data)
     ov = pub.get("our_venue") or {}
     vid = html.escape(ov.get("venue", "v24"))
+    _LAST["vid"] = ov.get("venue")
     deadline = pub["deadline"]
     live = sum(1 for c in pub["cards"] if c["state"] != "quiet")
 
@@ -391,6 +437,7 @@ Selling something nobody bids for? We ask the teams that collect its set.</div>
 </div>
 
 <h2>Every card in the Bazaar <span class="dim" style="font-weight:400;font-size:14px">· {live} have a price now · no price? bid first, on {vid}</span></h2>
+{_auctions_html(data, vid)}
 <nav class="setnav">{setnav()}</nav>
 <div id="deck">{deck()}</div>
 

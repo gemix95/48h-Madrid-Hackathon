@@ -40,6 +40,7 @@ BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 import council  # noqa: E402  (team13/council.py: El Consejo, the board where our agents post what they learnt)
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
 import arbview  # noqa: E402  (dashboard/arbview.py: data for the Arbitrage tab)
+import auctions  # noqa: E402  (team13/auctions.py: lots on our market)
 import board  # noqa: E402  (dashboard/board.py: the public El Club board at /board)
 import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, and the one write the dashboard makes)
 from reserved import reserved_ids  # noqa: E402  (team13/reserved.py: cards kept for swap strategies)
@@ -470,6 +471,25 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json" if path.endswith(".json") else "text/css")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+        if path == "/board/auction":  # register an ask resting on our market as a lot (public, validated)
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            try:
+                offer, ticks = int(q.get("offer", ["0"])[0]), int(q.get("ticks", ["30"])[0])
+                vid = ((board.public_vid() if hasattr(board, "public_vid") else None) or "v24")
+                book = board._get(f"/api/venues/{vid}/offers").get("offers", [])
+                tick = board._get("/api/clock").get("tick", 0)
+                res = auctions.register(offer, book, tick, ticks)
+            except Exception as e:
+                res = {"error": repr(e)[:160]}
+            body = json.dumps(res).encode()
+            self.send_response(400 if "error" in res else 200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
             return True

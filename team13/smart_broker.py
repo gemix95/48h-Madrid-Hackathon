@@ -24,6 +24,15 @@ from pathlib import Path
 
 from bazaar_sdk import BazaarError, Broker
 import starter_plans
+try:
+    import auctions  # a copy next to the broker, when the deploy puts one there
+except ImportError:  # otherwise the app's copy: the deploy updates /home/bazaar/app on every push
+    import sys as _sys
+    _sys.path.append("/home/bazaar/app/team13")
+    try:
+        import auctions
+    except ImportError:
+        auctions = None
 
 HERE = Path(__file__).parent
 LOG = HERE / "logs" / "broker.jsonl"
@@ -335,6 +344,11 @@ def run(url, key):
                 if fee_bps or per_card:
                     log_fee_blocks(book, fee)
                 plan += starter_plans.public_plan(book)
+                if auctions is not None:  # lots wait for their last tick, then go to the best bid (second price + 1)
+                    try:
+                        plan = auctions.broker_plan(plan, book.get("offers") or [], tick)
+                    except Exception as e:
+                        log(event="auction_error", error=repr(e)[:200])
                 if bench:
                     log(event="plan", tick=tick, bench=len(bench), matches=len(plan),
                         fee_bps=fee_bps, fee_per_card=per_card)

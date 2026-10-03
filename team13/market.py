@@ -488,7 +488,17 @@ class Market:
         cashback = self.cashback_active()
         recent = st.setdefault("pitched", {})
         pairs = [p for p in self.blocked_crosses() if tick - recent.get(p[1], -999) >= 60]  # one pitch per card an hour
-        if pairs:
+        lots = []
+        try:
+            import auctions
+            lots = sorted((l for l in auctions.load().values() if l.get("status") == "open"), key=lambda l: l["end"])
+        except Exception:
+            pass
+        if lots:
+            l = lots[0]
+            text = (f"AUCTION on {venue}: {l['ref']}, reserve {l['reserve']} P, ends at tick {l['end']}. Bid on {venue}: "
+                    f"the highest bid wins at the second bid + 1. Live: http://217.160.143.83/board#auctions")
+        elif pairs:
             where, ref, ask, bid = pairs[0][:4]
             text = MATCH_PITCH.format(ref=ref, ask=ask, bid=bid, where=where, venue=venue, brand=BRAND)
             recent[ref] = tick
