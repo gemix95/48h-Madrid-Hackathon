@@ -30,6 +30,7 @@ AUTO_DELAY = 30  # seconds a swap that clears the auto bar counts down on the ta
 AUTO_GAP = 30  # at most one automatic send every 30 s
 AUTO_MAX_OPEN = 8  # open swaps of ours (any source) at which nothing sends itself
 AUTO_COOLDOWN = 600  # seconds before the same team is asked for the same card again
+OFFER_LIMIT = 30  # the game refuses a 31st open offer (too_many_offers)
 TEAM = re.compile(r"^t\d+$")
 _recent: dict = {}  # (team, card, asset) -> time of the last post, so a double click cannot post twice
 
@@ -92,13 +93,14 @@ def last_seen(events: list) -> dict:
     return seen
 
 
-def pick_venue(venues: list, me_id: str, leaderboard=None):
-    """Cheapest open market that is not ours (self_venue forbids ours); the side that accepts pays its fee. Among the
-    equally cheap, the one whose owner scores least: a deal on a team's market counts toward its market-making."""
+def pick_venue(venues: list, me_id: str, leaderboard=None, to=None):
+    """Cheapest open market that is not ours (self_venue forbids ours) and not the addressee's (the game refuses a direct
+    offer to the owner of the market it is posted on, also with self_venue); the side that accepts pays its fee. Among
+    the equally cheap, the one whose owner scores least: a deal on a team's market counts toward its market-making."""
     score = {t["team"]: t.get("score") or 0 for t in (leaderboard or {}).get("teams", [])}
     best = None
     for v in venues or []:
-        if v.get("status", "open") != "open" or v.get("owner") == me_id:
+        if v.get("status", "open") != "open" or v.get("owner") in (me_id, to):
             continue
         cost = (v.get("fee_bps", 500), v.get("fee_per_card", 1), score.get(v.get("owner"), 0))
         if best is None or cost < best[0]:
@@ -206,6 +208,8 @@ class Auto:
             return "we already ask for this card"
         if any(r["asset"] in [a["id"] for a in (o.get("give") or {}).get("assets") or []] for o in mine if swap_offer(o)):
             return "that spare is already in a swap"
+        if len(mine) >= OFFER_LIMIT:
+            return f"the game's limit of {OFFER_LIMIT} open offers"
         if waiting(offers, me_id) >= AUTO_MAX_OPEN:
             return f"{AUTO_MAX_OPEN} swaps already waiting"
         if now - self.tried.get((r["team"], r["want"]), -1e9) < AUTO_COOLDOWN:
@@ -286,8 +290,11 @@ def deals(me: dict, events: list, offers: list) -> dict:
 
 
 def view(me: dict, catalog: dict, events: list, leaderboard, offers: list, venues: list, min_gain: float, now_tick: int) -> dict:
-    v = pick_venue(venues, me.get("id"), leaderboard)
-    return {"opportunities": opportunities(me, catalog, events, leaderboard, offers, min_gain, now_tick), "deals": deals(me, events, offers),
+    v, opps = pick_venue(venues, me.get("id"), leaderboard), opportunities(me, catalog, events, leaderboard, offers, min_gain, now_tick)
+    for r in opps:  # the market a swap really goes to differs from the default only when the default is the addressee's own
+        rv = pick_venue(venues, me.get("id"), leaderboard, r["team"])
+        r["via"] = rv["name"] if rv and v and rv["venue"] != v["venue"] else None
+    return {"opportunities": opps, "deals": deals(me, events, offers),
             "venue": v and {"id": v["venue"], "name": v.get("name"), "fee_bps": v.get("fee_bps", 0), "fee_per_card": v.get("fee_per_card", 0)},
             "min_gain": min_gain, "tick": now_tick}
 
@@ -312,7 +319,7 @@ def post_swap(post, now: float, me: dict, catalog: dict, offers: list, venues: l
                 [a["id"] for a in (o.get("give") or {}).get("assets") or []] and want in wanted_refs(o.get("want") or {})), None)
     if dup or now - _recent.get((team, want, asset), -1e9) < 60:
         return {"ok": False, "error": f"already offered{f' (#{dup})' if dup else ' a moment ago'}"}
-    venue = pick_venue(venues, me.get("id"), leaderboard)
+    venue = pick_venue(venues, me.get("id"), leaderboard, team)
     if not venue:
         return {"ok": False, "error": "no open market other than ours"}
     _recent[(team, want, asset)] = now

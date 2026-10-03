@@ -1036,7 +1036,7 @@ function swaps(d, M) {
           <td>${cardTag(r.give, d, M)}${r.listed.length ? `<div class="muted" style="font-size:11px">also for sale for cash (#${r.listed.join(", #")})</div>` : ""}</td>
           <td class="num" title="card +${fmt(r.gain)} P, spare −${fmt(r.loss)} P"><b style="color:var(--up)">+${fmt(r.ours)}</b></td>
           <td class="num" title="our estimate of what the other team gains"><b style="color:${r.both ? "var(--up)" : "var(--critical)"}">${r.theirs > 0 ? "+" : ""}${fmt(r.theirs)}</b></td>
-          <td class="num">${autoCell(r)}<button class="btn-s" ${v ? "" : "disabled"} onclick="offerSwap('${esc(r.team)}','${esc(r.want)}',${Number(r.asset)})">Offer swap</button></td></tr>`).join("") + `</tbody></table>`
+          <td class="num">${autoCell(r)}${r.via ? `<div class="muted" style="font-size:11px;margin-bottom:4px">via ${esc(r.via)}</div>` : ""}<button class="btn-s" ${v ? "" : "disabled"} onclick="offerSwap('${esc(r.team)}','${esc(r.want)}',${Number(r.asset)})">Offer swap</button></td></tr>`).join("") + `</tbody></table>`
         : `<div class="empty">${NEG.mode === "both" ? `No swap that both sides would likely accept right now. "Only good for us" lists the ones that only help us.` : "Nothing else to propose right now."}</div>`)
       + `<div class="empty" style="margin-top:6px"><b>Us</b> = what the card is worth to us minus what the spare costs us (exact, at our values). <b>Them</b> = our estimate for the other team from the sets it keeps or dumps in the public feed: a guess. We cannot see other teams' cards: holders come from the deals, gifts and listings we saw.</div>`;
   } else {
