@@ -23,7 +23,7 @@ from pathlib import Path
 from bazaar_sdk import BazaarError, Broker
 from venues import safe_markets
 
-VENUE_NAME = "El Club · Where Madrid Trades"      # chosen by the team; used only when (re)opening (an open market cannot be renamed)
+VENUE_NAME = "El Club · 0% fee · matched every tick"      # chosen by the team; used only when (re)opening (an open market cannot be renamed)
 DESCRIPTION = ("Madrid's top-tier market: {fee} fee, no per-card charge, a smart broker matching every tick, best "
                "pairs first. Built by the team leading the board.")
 # FOMO and loss aversion, but only true claims: fee comparison, matching every tick, 0 P per card, swaps cost nothing.
@@ -44,8 +44,7 @@ ANNOUNCE = [
     "matched every tick.",
     "Every tick you wait, another team gets the card you need. El Club ({venue}) pairs the best bid with the best ask each "
     "tick. {fee} fee.",
-    "{fee} FEE. 0 P PER CARD. Matched every tick. (The '1%' in the listed name is stale: markets cannot be renamed.) "
-    "El Club, {venue}.",
+    "{fee} FEE. 0 P PER CARD. Matched every tick. El Club, {venue}: list a spare or bid for the card you miss.",
     "Do the maths on your next trade: El Rastro takes 5% + 1 P a card, El Club ({venue}) takes {fee} and 0 P. Same card, "
     "same price, more primas for you.",
     "Swap, don't sell: card-for-card swaps cost nothing on El Club ({venue}): {fee} fee, 0 P per card, settled next tick. "
@@ -54,7 +53,7 @@ ANNOUNCE = [
     "No waiting for a seller to find you.",
 ]
 ANNOUNCE_MAX = 240           # the server cuts an announcement here
-PRE_TEST = ("Market Test soon — and the book is open now. El Club ({venue}, 'Mercado Trece') is {fee}, 0 P per card. "
+PRE_TEST = ("Market Test soon — and the book is open now. El Club ({venue}) is {fee}, 0 P per card. "
             "Post the card you are missing or a spare; we cross every tick. El Rastro takes 5% + 1 P per card.")
 # appended to announcements only while we still have a spare to give and rewards left today (a true claim)
 REWARD_PITCH = (" Club welcome: your first trade at El Club today earns a private offer of one of our spare "
