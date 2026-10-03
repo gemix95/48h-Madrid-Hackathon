@@ -362,7 +362,7 @@ footer{{margin-top:24px;font-size:13px}}
 .meet{{margin:4px 0 2px;font-size:13px}}
 h3{{font-size:15px;margin:20px 0 6px;color:var(--gold)}}
 
-.pill.quietpill{{color:var(--dim)}}.hero{{font-size:20px;line-height:1.35;margin:8px 0 6px;max-width:820px}}
+.pill.quietpill{{color:var(--dim)}}.hero{{font-size:20px;line-height:1.35;margin:8px 0 6px;max-width:820px}}.hero2{{font-size:15px;margin:0 0 6px;max-width:820px}}
 button.toggle{{float:right;font:inherit;font-size:12px;padding:3px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--dim);cursor:pointer}}
 td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 :root{{--font-display:"Big Shoulders Display",system-ui,sans-serif;--font-sans:Manrope,system-ui,sans-serif;--color-gold:#e0b45a;--color-muted:#9a958a;--color-base:#1b0c22}}
@@ -381,6 +381,8 @@ button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}
 <h1>El Club Board</h1>
 <div class="hero">Find the card you need at the <b>best price in the Bazaar</b> and buy it in one click.
 Got a spare? <b>Sell it fast</b> to the best buyer.</div>
+<div class="hero2">Not for sale anywhere? <b>Bid on {vid}</b>: we ask the teams that hold the card, without naming you.
+Selling something nobody bids for? We ask the teams that collect its set.</div>
 <div class="dim">Prices from all {pub["markets"]} markets · tick <span id="tick">{pub["tick"]}</span> · updated <span id="upd">{when}</span> · live, every 15 s</div>
 <div class="steps">
 <div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim"><b>Buy</b> shows the cheapest seller in the Bazaar, <b>Sell</b> the best buyer.</span></div>

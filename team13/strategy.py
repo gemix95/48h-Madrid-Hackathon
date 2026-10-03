@@ -40,6 +40,8 @@ KNOBS = {
     "announce_board": (0, 0, 1, 1, "Market", "Announce the El Club Board on the big screen",
                        "Off: the board's line is skipped in the announcement rotation, so rival agents are not handed "
                        "the link while we are still building it. Turn it on when we announce the board ourselves."),
+    "enable_concierge": (0, 0, 1, 1, "Modules", "Concierge for our market",
+                         "A bid or ask on our market with no counterparty: ask likely holders (bid) or collectors (ask), never naming the maker."),
     "enable_matchmaker": (0, 0, 1, 1, "Modules", "Matchmaker for our market",
                           "Invite a team with a spare and a team bidding for the same card to our market, never naming either. Server only."),
     "enable_loans": (1, 0, 1, 1, "Modules", "Loan desk", "Cash against a card we would gladly own; requests come from agent/lend.py."),
