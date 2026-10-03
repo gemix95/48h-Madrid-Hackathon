@@ -94,8 +94,30 @@ class Values:
         return self.PAGE_OPTION.get(missing, 0.0) * self.page_bonus_rate * self.page_value(set_id)
 
     # ---------------------------------------------------------------- helpers for strategies
+    # Hard dumps (Saturday plan): El Retiro ×0.7, La Latina ×0.5. Soft: Chamberí ×0.9.
+    DUMP_HARD = 0.7
+
+    def dump_tier(self, ref: str) -> str:
+        """How eagerly we should sell this card: hard / extra / soft / keep.
+
+        hard  = first copy from a dump neighbourhood (RET, LAT)
+        extra = 2nd/3rd copy of anything (×0.25 / ×0.1)
+        soft  = first copy from a mild underweight set (CHA)
+        keep  = collect set — do not list the last copy
+        """
+        if ref not in self.cards:
+            return "keep"
+        if self.held[ref] >= 2:
+            return "extra"
+        m = self.m(ref)
+        if m <= self.DUMP_HARD:
+            return "hard"
+        if m < 1.0:
+            return "soft"
+        return "keep"
+
     def spares(self) -> list:
-        """Assets we could give away cheaply: extra copies first, then cards of sets we value least."""
+        """Assets we could give away cheaply: dump sets and extras first (hard → extra → soft)."""
         by_ref: dict = {}
         for a in sorted(self.assets, key=lambda a: a.get("serial", 0)):
             by_ref.setdefault(a["ref"], []).append(a)
@@ -106,7 +128,14 @@ class Values:
         for ref, copies in by_ref.items():
             if self.cards.get(ref, {}).get("set") in low and copies[0] not in out:
                 out.append(copies[0])
-        return out
+        rank = {"hard": 0, "extra": 1, "soft": 2, "keep": 9}
+
+        def key(a):
+            tier = self.dump_tier(a["ref"])
+            # Within a tier: lowest private-value loss first (clears faster), then higher serial.
+            return (rank.get(tier, 9), self.loss_of_removing([a["ref"]]), -a.get("serial", 0))
+
+        return sorted(out, key=key)
 
     def wishlist(self, limit: int = 12) -> list:
         """Released cards we lack, ranked by what one copy would be worth to us (page completion included)."""
