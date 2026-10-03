@@ -17,13 +17,27 @@ from pathlib import Path
 
 HITS = Path(os.environ.get("BOARD_HITS", Path(__file__).resolve().parent.parent / "team13" / "logs" / "board_hits.jsonl"))
 EVENTS = {"view", "click", "copy"}
-SALT = secrets.token_hex(16)  # new at every restart: the hashes cannot be matched to anything outside this process
+SALTS = HITS.with_name("board_salts.json")  # one random salt per day, kept on the server only (never served)
 _lock = threading.Lock()
+
+
+def _salt(day: str) -> str:
+    """Today's salt. Kept in a file so a restart (every deploy restarts the dashboard) does not count the same visitor
+    twice; only the last two days are kept, so an old hash cannot be recomputed."""
+    try:
+        salts = json.loads(SALTS.read_text())
+    except (OSError, ValueError):
+        salts = {}
+    if day not in salts:
+        salts = {d: v for d, v in salts.items() if d >= time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))}
+        salts[day] = secrets.token_hex(16)
+        SALTS.write_text(json.dumps(salts))
+    return salts[day]
 
 
 def _who(ip: str, ua: str) -> str:
     day = time.strftime("%Y-%m-%d")
-    return hashlib.sha256(f"{SALT}|{day}|{ip}|{ua}".encode()).hexdigest()[:12]
+    return hashlib.sha256(f"{_salt(day)}|{day}|{ip}|{ua}".encode()).hexdigest()[:12]
 
 
 def record(q: dict, ip: str, ua: str) -> bool:
@@ -31,12 +45,16 @@ def record(q: dict, ip: str, ua: str) -> bool:
     ev = q.get("e")
     if ev not in EVENTS:
         return False
-    rec = {"ts": round(time.time(), 1), "e": ev, "v": _who(ip, ua),
+    if ev == "view" and q.get("auto") == "1":
+        return False  # the page's own 10-minute reload of an open tab is not a new view
+    rec = {"ts": round(time.time(), 1), "e": ev, "v": None,
            "phone": q.get("m") == "1", "ref": str(q.get("ref") or "")[:12] or None,
            "side": q.get("side") if q.get("side") in ("buy", "sell", "lot", "auction") else None,
            "label": str(q.get("l") or "")[:24] or None}
-    with _lock, open(HITS, "a") as f:
-        f.write(json.dumps(rec) + "\n")
+    with _lock:
+        rec["v"] = _who(ip, ua)
+        with open(HITS, "a") as f:
+            f.write(json.dumps(rec) + "\n")
     return True
 
 

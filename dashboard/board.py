@@ -563,8 +563,9 @@ in. Read it before you run it: there is nothing in it but your own offer.</li>
 let busyUntil = 0;
 document.querySelectorAll("a.howlink").forEach(a => a.addEventListener("click", () => {{ document.getElementById("how").open = true; }}));
 const PHONE = matchMedia("(max-width:640px)").matches ? "1" : "0";
-function ping(e, b) {{
+function ping(e, b, auto) {{
   const q = new URLSearchParams({{e, m: PHONE}});
+  if (auto === "1") q.set("auto", "1");
   const td = b && b.closest("td"), side = td && td.dataset.side;
   const ref = td && (td.dataset.ref || td.closest("tr")?.querySelector("[data-card]")?.dataset.card);
   if (ref) q.set("ref", ref);
@@ -572,7 +573,9 @@ function ping(e, b) {{
   if (b) q.set("l", b.textContent.trim());
   try {{ navigator.sendBeacon("/board/ping?" + q); }} catch (err) {{}}
 }}
-ping("view");
+let autoReload = "0";
+try {{ autoReload = sessionStorage.getItem("autoReload") || "0"; sessionStorage.removeItem("autoReload"); }} catch (e) {{}}
+ping("view", null, autoReload);
 async function copyOut(box, text) {{
   ping("copy", box.previousElementSibling);
   const pre = box.querySelector("pre"), lbl = box.querySelector(".lbl");
@@ -637,5 +640,8 @@ async function refresh() {{
   }} catch (e) {{}}
 }}
 setInterval(refresh, 15000);
-setInterval(() => {{ if (Date.now() > busyUntil && !getSelection().toString()) location.reload(); }}, 600000);
+setInterval(() => {{ if (Date.now() > busyUntil && !getSelection().toString()) {{
+  try {{ sessionStorage.setItem("autoReload", "1"); }} catch (e) {{}}
+  location.reload();
+}} }}, 600000);
 </script></body></html>"""
