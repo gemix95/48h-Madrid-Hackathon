@@ -102,6 +102,8 @@ def pick_venue(venues: list, me_id: str, leaderboard=None, to=None):
     for v in venues or []:
         if v.get("status", "open") != "open" or v.get("owner") in (me_id, to):
             continue
+        if v.get("venue") != "rastro" and score.get(v.get("owner"), 0) > score.get(me_id, 0) - 6:
+            continue  # a close rival's market: a trade there scores for them
         cost = (v.get("fee_bps", 500), v.get("fee_per_card", 1), score.get(v.get("owner"), 0))
         if best is None or cost < best[0]:
             best = (cost, v)

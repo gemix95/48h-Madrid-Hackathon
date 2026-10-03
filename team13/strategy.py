@@ -60,6 +60,8 @@ KNOBS = {
     "haggle_sell_spares": (1, 0, 1, 1, "Dealers", "Sell spares to dealers", "Sell duplicates/low-value cards to dealers."),
     "haggle_buy_cards": (1, 0, 1, 1, "Dealers", "Buy single cards", "Buy cards we value most (Salamanca, Malasaña)."),
     # trading
+    "rival_margin": (6, 0, 30, 1, "Trading", "Post only on markets of teams this far behind us (points)",
+                     "A trade on a team's market scores for its owner; below this margin we post on El Rastro instead."),
     "wtb_price_share": (0.9, 0.5, 1.3, 0.05, "Trading", "Want-to-buy price (x book)",
                         "Never above our value minus the minimum gain, a team cap or free cash; never below 0.6 x book."),
     "wtb_swaps": (1, 0, 1, 1, "Trading", "Want-to-buy by swap when short of cash",

@@ -20,6 +20,7 @@ import sys
 
 from bazaar_sdk import BazaarError
 from trader import team_caps
+from venues import safe_markets
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agent"))
 from ledger import build  # noqa: E402
@@ -33,16 +34,10 @@ class Asker:
     def __init__(self, ctx):
         self.ctx = ctx
 
-    def _venue(self):
-        """Cheapest open market for the seller (it accepts, so it pays the fee), never our own."""
-        best = None
-        for v in getattr(self.ctx, "venues", None) or []:
-            if v.get("venue") == self.ctx.state.get("venue") or v.get("status", "open") != "open":
-                continue
-            cost = (v.get("fee_bps", 500), v.get("fee_per_card", 1))
-            if best is None or cost < best[0]:
-                best = (cost, v["venue"])
-        return best[1] if best else "rastro"
+    def _venue(self, to=None):
+        """Cheapest market owned by a team well behind us (never ours, never the addressee's), else El Rastro:
+        a trade on a close rival's market scores for that rival (venues.safe_markets)."""
+        return safe_markets(self.ctx, to)[0]
 
     def _active(self, events, now):
         """Teams that did something themselves lately (deals, messages, listings, threads); a level the server
@@ -178,7 +173,7 @@ class Asker:
         if not plan:
             return
         ref, team, price, assets = plan[0]
-        venue = self._venue()
+        venue = self._venue(team)
         give = {}
         if price:
             give["cash"] = price

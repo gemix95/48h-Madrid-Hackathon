@@ -12,6 +12,7 @@ import math
 import os
 
 from bazaar_sdk import BazaarError
+from venues import safe_markets
 
 MIN_GAIN = 3.0          # P of private value an accepted trade must create for us
 RASTRO_BPS, RASTRO_PER_CARD = 500, 1
@@ -641,7 +642,7 @@ class Trader:
         ctx = self.ctx
         if not ctx.S.get("trade_all_markets", 1) or not getattr(ctx, "venues", None):
             return ["rastro"]
-        scored = []
+        scored, allowed = [], set(safe_markets(ctx))
         for v in ctx.venues:
             if v["venue"] == ctx.state.get("venue") or v.get("status") != "open":
                 continue
@@ -649,6 +650,8 @@ class Trader:
                 continue
             if ctx.state.get("venue_blocked", {}).get(v["venue"], -1) > ctx.clock.get("tick", 0):
                 continue  # not trading yet (team markets open at game hour 3)
+            if v["venue"] not in allowed:
+                continue  # a close rival's market: our trade there would score for them (venues.safe_markets)
             activity = 1 + (v.get("trades") or 0) + (v.get("traders") or 0) + 0.5 * len(ctx.boards.get(v["venue"], []))
             net = 1 - (v.get("fee_bps") or 0) / 10000
             scored.append((activity * net, v["venue"]))
