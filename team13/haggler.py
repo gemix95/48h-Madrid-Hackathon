@@ -416,6 +416,9 @@ class Haggler:
     def step(self):
         ctx = self.ctx
         dealers = [d for d in ctx.dealers if d.get("status") == "active" and d.get("id") in ctx.me.get("unlocked", [])]
+        scope = getattr(ctx, "dealer_scope", None)
+        if scope:  # AGENT_DEALERS: this agent opens, talks to and trades only with its own dealers
+            dealers = [d for d in dealers if d.get("id") in scope]
         open_threads = {t["with"]: t for t in ctx.threads if t.get("kind") == "persona" and t["status"] == "open"}
         for d in dealers:
             th = open_threads.get(d["id"])

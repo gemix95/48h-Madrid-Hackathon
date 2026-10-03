@@ -17,6 +17,13 @@ Modules, in priority order each tick (one accept per team per tick is shared bet
   market   open our own market at 0% fees as soon as we reach level 2, run the smart broker, invite every team
 
 Every decision is appended to logs/decisions.jsonl; the dashboard shows it live.
+
+One agent per person (one team key, scopes that never overlap), all set by environment:
+    AGENT_NAME=sergio            own state-<name>.json and agent-<name>.lock; every log line carries "agent": name
+    AGENT_ROLE=haggler           modules (as above)
+    AGENT_DEALERS=abuela,pilar   the only dealers this agent opens, talks to and trades with
+    AGENT_BUDGET_2H=40           most it spends per 2 game hours; when it runs out it buys nothing until the next window
+    AGENT_SLOT=0 AGENT_SLOTS=3   the team's single accept per tick goes to the agent whose slot is tick % slots
 """
 from __future__ import annotations
 
@@ -58,6 +65,9 @@ VENUE_BOND = 270
 
 
 def role_label(role_str: str) -> str:
+    name = os.environ.get("AGENT_NAME", "").strip().lower()
+    if name:  # one agent per person: its own state file and lock
+        return "".join(ch for ch in name if ch.isalnum() or ch in "-_") or "custom"
     r = (role_str or "all").strip().lower()
     return r if r in ("all", "dealers", "market") else "custom"
 
@@ -68,8 +78,21 @@ def state_path_for(role_str: str) -> Path:
 
 
 def seed_split_state(label: str, spath: Path) -> None:
-    """First run of dealers+market on one laptop: copy the old monolithic state.json into each role file."""
-    if spath.exists() or label == "all" or not STATE.exists():
+    """First run of dealers+market on one laptop: copy the old monolithic state.json into each role file.
+    A named agent (AGENT_NAME) starts from everything the team knew: state.json, then the market and dealers files."""
+    if spath.exists() or label == "all":
+        return
+    if os.environ.get("AGENT_NAME", "").strip():
+        merged = {}
+        for f in (STATE, HERE / "state-market.json", HERE / "state-dealers.json"):
+            try:
+                merged.update(json.loads(f.read_text()))
+            except (OSError, ValueError):
+                pass
+        if merged:
+            spath.write_text(json.dumps(merged, indent=1, default=str))
+        return
+    if not STATE.exists():
         return
     try:
         old = json.loads(STATE.read_text())
@@ -136,6 +159,10 @@ class Context:
         self._state_path = state_path or STATE
         self.state = json.loads(self._state_path.read_text()) if self._state_path.exists() else {}
         self.agent_id = None
+        self.name = os.environ.get("AGENT_NAME", "").strip().lower() or None
+        self.dealer_scope = {d.strip() for d in os.environ.get("AGENT_DEALERS", "").split(",") if d.strip()} or None
+        self.budget_2h = int(os.environ["AGENT_BUDGET_2H"]) if os.environ.get("AGENT_BUDGET_2H") else None
+        self.slot = (int(os.environ.get("AGENT_SLOT", 0)), max(1, int(os.environ.get("AGENT_SLOTS", 1))))
         self.api = OwnedApi(DryApi(api, self.log) if dry else api, self)
         self.raw = api
         self.shared = False  # True when AGENT_ROLE splits the modules with teammates' agents
@@ -154,6 +181,8 @@ class Context:
     # ---------------------------------------------------------------- logging & state
     def log(self, module, action, **detail):
         rec = {"ts": round(time.time(), 1), "tick": self.clock.get("tick"), "module": module, "action": action, **detail}
+        if self.name:
+            rec["agent"] = self.name
         # browsers reject bare Infinity/NaN, so non-finite numbers (a protected card's loss) are logged as null
         rec = {k: None if isinstance(v, float) and not math.isfinite(v) else v for k, v in rec.items()}
         line = json.dumps(rec, default=str)
@@ -178,8 +207,15 @@ class Context:
     def accepts_left(self, kind="team"):
         return self._accepts.get(kind, 0) > 0
 
+    def my_accept_tick(self) -> bool:
+        """With several agents on one key, the team's single accept per tick belongs to one of them in turn."""
+        slot, slots = self.slot
+        return slots == 1 or (self.clock.get("tick") or 0) % slots == slot
+
     def take_accept(self, kind="team"):
         if self._accepts.get(kind, 0) <= 0:
+            return False
+        if kind == "team" and not self.my_accept_tick():
             return False
         self._accepts[kind] -= 1
         return True
@@ -198,18 +234,32 @@ class Context:
     def spent_today(self):
         return self.state.setdefault("spent", {}).get(self.day_key(), 0)
 
+    def window_key(self):
+        """The 2-game-hour window we are in (AGENT_BUDGET_2H counts per window)."""
+        return f"{self.day_key()}:{int(float(self.clock.get('t_hours') or 0) // 2)}"
+
+    def spent_window(self):
+        return self.state.setdefault("spent_2h", {}).get(self.window_key(), 0)
+
     def budget_left(self):
         """What we may still spend today: the day budget minus what we spent, never below the cash we keep.
-        With several agents on one key, AGENT_BUDGET caps this process's own daily spend (spent is per state.json)."""
+        With several agents on one key, AGENT_BUDGET caps this process's own daily spend (spent is per state.json)
+        and AGENT_BUDGET_2H its spend per 2-hour window: once it is used up this agent buys nothing until the next."""
         day = self.S.get("day_budget", 120)
         if self.agent_budget is not None:
             day = min(day, self.agent_budget)
-        return max(0, min(day - self.spent_today(), self.me.get("cash", 0) - self.reserve()))
+        left = min(day - self.spent_today(), self.me.get("cash", 0) - self.reserve())
+        b2h = getattr(self, "budget_2h", None)
+        if b2h is not None:
+            left = min(left, b2h - self.spent_window())
+        return max(0, left)
 
     def record_spend(self, amount, what):
         if amount and amount > 0:
             sp = self.state.setdefault("spent", {})
             sp[self.day_key()] = sp.get(self.day_key(), 0) + amount
+            w = self.state.setdefault("spent_2h", {})
+            w[self.window_key()] = w.get(self.window_key(), 0) + amount
             self.log("money", "spent", amount=amount, what=what, today=sp[self.day_key()], budget=self.S.get("day_budget", 120))
 
     def owns(self, offer):
@@ -492,14 +542,21 @@ def main():
     agent_id = None if args.dry_run else council.identify(args.role)
     ctx.agent_id = agent_id
     ctx.log("agent", "start", dry=args.dry_run, role=sorted(role), agent_budget=args.budget, agent_id=agent_id,
+            name=ctx.name, dealers=sorted(ctx.dealer_scope) if ctx.dealer_scope else "all", budget_2h=ctx.budget_2h,
+            accept_slot=list(ctx.slot),
             state_file=spath.name, lock=f"agent-{label}.lock")
     if agent_id:
         council.start_sync()
         council.post("agent", "joined", f"{agent_id} started on {council.HOST}: role {args.role} ({', '.join(sorted(role))})"
-                     + (f", budget {args.budget} P/day." if args.budget else "."))
+                     + (f", budget {args.budget} P/day" if args.budget else "")
+                     + (f", {ctx.budget_2h} P per 2 h" if ctx.budget_2h is not None else "")
+                     + (f", dealers {', '.join(sorted(ctx.dealer_scope))}" if ctx.dealer_scope else "")
+                     + (f", owner {ctx.name}" if ctx.name else "") + ".")
         ctx.announce = lambda rec: council.announce(rec, {d.get("id"): (d.get("name") or d.get("id", "")).split()[0]
                                                           for d in ctx.dealers})
     flags = bool(role & {"duels", "haggler"})  # one flagger per team: the agent that talks to dealers
+    if ctx.name:  # agents split by person: only the one running duels flags, so no message is flagged twice
+        flags = "duels" in role
     last_tick, n = None, 0
     while True:
         try:

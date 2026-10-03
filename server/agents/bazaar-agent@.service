@@ -1,0 +1,16 @@
+[Unit]
+Description=Team 13 agent of %i (one per teammate: own scope, budget and state; one team key)
+After=network-online.target
+
+[Service]
+User=bazaar
+WorkingDirectory=/home/bazaar/app/team13
+EnvironmentFile=/home/bazaar/agents/%i.env
+ExecStart=/bin/bash -c "set -a; . /home/bazaar/app/bazaar.env; . /home/bazaar/app/anthropic.env; set +a; exec /home/bazaar/venv/bin/python -u agent.py"
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/bazaar/app/team13/logs/agent-%i.out
+StandardError=append:/home/bazaar/app/team13/logs/agent-%i.out
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,8 @@ set -u
 SRC=/home/bazaar/src; APP=/home/bazaar/app; BRK=/home/bazaar/broker; LOG=/home/bazaar/deploy.log
 export GIT_SSH_COMMAND="ssh -i /home/bazaar/.ssh/github_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/home/bazaar/.ssh/known_hosts"
 say() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+# every agent service: the single bazaar-agent, or one bazaar-agent@<person> per teammate
+agents() { systemctl list-units --type=service --all --plain --no-legend 'bazaar-agent*' | awk '$3!="inactive" || $4=="running"{print $1}' | grep -v '^bazaar-agent@\.service$'; }
 cd "$SRC" || exit 0
 export HOME=/root
 git() { command git -c safe.directory="$SRC" "$@"; }
@@ -22,12 +24,17 @@ if [ "$NEW" != "$OLD" ]; then
   rsync -a --delete "$APP/team13/" /home/bazaar/app.prev/team13/ --exclude logs/ 2>/dev/null; rsync -a "$APP/agent/" /home/bazaar/app.prev/agent/; rsync -a "$APP/dashboard/" /home/bazaar/app.prev/dashboard/
   rsync -a --exclude '__pycache__' --exclude 'logs/' --exclude 'state.json' --exclude 'strategy.json' --exclude '*.env' "$SRC/team13" "$SRC/agent" "$SRC/dashboard" "$SRC/data" "$APP/"
   chown -R bazaar:bazaar "$APP" /home/bazaar/app.prev
-  systemctl restart bazaar-agent bazaar-dashboard
+  AG=$(agents)
+  systemctl restart $AG bazaar-dashboard
   systemctl is-enabled -q bazaar-duel-tuner 2>/dev/null && systemctl restart bazaar-duel-tuner
   sleep 25
-  if ! systemctl is-active -q bazaar-agent || journalctl -u bazaar-agent --since "-25s" --no-pager | grep -q "Failed with result"; then
+  DOWN=""
+  for u in $AG; do
+    if ! systemctl is-active -q "$u" || journalctl -u "$u" --since "-25s" --no-pager | grep -q "Failed with result"; then DOWN="$DOWN $u"; fi
+  done
+  if [ -n "$DOWN" ]; then
     rsync -a /home/bazaar/app.prev/team13/ "$APP/team13/" --exclude logs/ --exclude state.json --exclude strategy.json; rsync -a /home/bazaar/app.prev/agent/ "$APP/agent/"; rsync -a /home/bazaar/app.prev/dashboard/ "$APP/dashboard/"
-    systemctl restart bazaar-agent bazaar-dashboard; say "ROLLBACK from $NEW: agent did not stay up"; echo "$NEW" > /home/bazaar/rejected.sha; exit 0
+    systemctl restart $AG bazaar-dashboard; say "ROLLBACK from $NEW: did not stay up:$DOWN"; echo "$NEW" > /home/bazaar/rejected.sha; exit 0
   fi
   echo "$NEW" > /home/bazaar/deployed.sha; say "DEPLOYED $NEW ($(git log -1 --format='%an: %s' | cut -c1-90))"
   touch /home/bazaar/broker.pending
