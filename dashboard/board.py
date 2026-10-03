@@ -64,9 +64,9 @@ def build() -> dict:
             gave = [a["ref"] for a in g.get("assets") or [] if isinstance(a, dict)]
             wanted = [x[5:] for x in w.get("types") or [] if x.startswith("card:")] + [a["ref"] for a in w.get("assets") or [] if isinstance(a, dict)]
             if len(gave) == 1 and not wanted and w.get("cash"):
-                rows.setdefault(gave[0], {"asks": [], "bids": []})["asks"].append({"price": w["cash"], **where, "expires": o.get("expires_tick")})
+                rows.setdefault(gave[0], {"asks": [], "bids": []})["asks"].append({"price": w["cash"], **where, "id": o.get("id"), "expires": o.get("expires_tick")})
             elif len(wanted) == 1 and not gave and g.get("cash"):
-                rows.setdefault(wanted[0], {"asks": [], "bids": []})["bids"].append({"price": g["cash"], **where, "expires": o.get("expires_tick")})
+                rows.setdefault(wanted[0], {"asks": [], "bids": []})["bids"].append({"price": g["cash"], **where, "id": o.get("id"), "expires": o.get("expires_tick")})
             elif gave and wanted and not g.get("cash") and not w.get("cash"):
                 swaps.append({"give": gave, "want": wanted, **where})
     out = []
@@ -98,7 +98,7 @@ def public(data: dict) -> dict:
     for c in data["cards"]:
         bid, ask = c["best_bid"], c["best_ask"]
         meet = max(bid["price"], min(ask["price"], round((bid["price"] + ask["price"]) / 2))) if bid and ask else None
-        here = [{"side": "buy" if side == "bids" else "sell", "price": x["price"], "expires": x.get("expires")}
+        here = [{"side": "buy" if side == "bids" else "sell", "price": x["price"], "id": x.get("id"), "expires": x.get("expires")}
                 for side in ("bids", "asks") for x in c[side] if x["ours"]]
         out.append({"ref": c["ref"], "name": c.get("name"), "rarity": c.get("rarity"), "state": c["state"],
                     "buyers": len(c["bids"]), "sellers": len(c["asks"]), "meet": meet,
@@ -113,51 +113,63 @@ def _fee_text(x):
     return "0 %" if not (x["fee_bps"] or x["fee_per_card"]) else f'{x["fee_bps"] / 100:g} %' + (f' + {x["fee_per_card"]} P/card' if x["fee_per_card"] else "")
 
 
+def _curl(body, path="/api/offers"):
+    return (f"curl -X POST {URL}{path} \\\n"
+            f'  -H "X-Team-Key: $BAZAAR_KEY" -H "Content-Type: application/json" \\\n'
+            f"  -d '{body}'")
+
+
 def _pair_text(c, vid, deadline, sell):
-    """Both sides of a crossing pair get the same card, the same price and the same tick: that is the whole trick."""
+    """Both sides of a pair get the same card, the same price and the same tick. Facts and one ready call, no
+    instructions: we hand over what we can see, the decision stays with them."""
     ref, name, meet, saves = c["ref"], c.get("name") or c["ref"], c["meet"], c.get("saves") or 0
-    side = (f'"give": {{"assets": [<id of our {ref} from GET /api/me>]}}, "want": {{"cash": {meet}}}' if sell
-            else f'"give": {{"cash": {meet}}}, "want": {{"cards": ["{ref}"]}}')
-    return (f"{'Sell' if sell else 'Buy'} {ref} ({name}) at {meet} P on market {vid} before tick {deadline}. "
-            f"A {'buyer' if sell else 'seller'} for this card is live elsewhere in the Bazaar and is being asked, on the "
-            f"same public board, to post the other side on {vid} at the same price by the same tick, so the broker "
-            f"crosses you both the tick you are both there. Neither of you has to find or trust the other. "
-            f'API: POST /api/offers with {{"venue": "{vid}", {side}}}. '
-            f"{vid} charges nothing; the same trade on El Rastro costs the accepting side {saves} P. "
-            f"Only do this at a price that is right for us.")
+    body = (f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":{meet}}}}}' if sell
+            else f'{{"venue":"{vid}","give":{{"cash":{meet}}},"want":{{"cards":["{ref}"]}}}}')
+    return (f"{ref} ({name}) \u00b7 meeting price {meet} P \u00b7 window: until tick {deadline} \u00b7 market {vid}\n\n"
+            f"A buyer and a seller of {ref} are live on two different markets, so neither can see the other. "
+            f"Both are reading the same line on the same public page, with the same price and the same tick.\n\n"
+            + _curl(body) +
+            (f"\n\nYOUR_ASSET_ID: the id of your spare {ref} in GET /api/me.\n" if sell else "\n\n") +
+            f"Nothing crossed by tick {deadline}? Cancel it; the offer costs nothing while it waits. "
+            f"{vid} charges 0; the same trade on El Rastro costs the accepting side {saves} P. "
+            f"The market's owner cannot be on the other side of it: a team cannot trade on its own venue (RULES, Markets).")
 
 
 def _accept_text(c, o, vid):
-    """An offer already resting on our market: one call finishes the trade, no second team has to be persuaded."""
-    ref, name = c["ref"], c.get("name") or c["ref"]
-    if o["side"] == "buy":
-        return (f"Someone is bidding {o['price']} P for {ref} ({name}) on market {vid} right now. If we hold a spare, "
-                f'sell into it: GET /api/venues/{vid}/offers, find the bid for {ref}, then POST /api/offers/<its id>/accept '
-                f'with {{"assets": [<id of our {ref} from GET /api/me>]}}. {vid} takes no fee from either side.')
-    return (f"Someone is selling {ref} ({name}) for {o['price']} P on market {vid} right now. To buy it: "
-            f"GET /api/venues/{vid}/offers, find the ask for {ref}, then POST /api/offers/<its id>/accept. "
-            f"{vid} takes no fee, so {o['price']} P is all it costs.")
+    """An offer resting on our market: one call finishes the trade, and the id is already in it."""
+    ref, name, oid = c["ref"], c.get("name") or c["ref"], o.get("id")
+    who = "is bidding" if o["side"] == "buy" else "is selling"
+    extra = ' -d \'{"assets":[YOUR_ASSET_ID]}\'' if o["side"] == "buy" else ""
+    tail = (f"\n\nYOUR_ASSET_ID: the id of your {ref} in GET /api/me." if o["side"] == "buy" else "")
+    return (f"{ref} ({name}) \u00b7 someone {who} {o['price']} P for it on {vid} right now \u00b7 offer {oid}\n\n"
+            f"One call settles it on the next tick:\n\n"
+            f'curl -X POST {URL}/api/offers/{oid}/accept -H "X-Team-Key: $BAZAAR_KEY"{extra}'
+            + tail +
+            f"\n\n{vid} takes no fee from either side, and its owner cannot be your counterparty: "
+            f"a team cannot trade on its own venue (RULES, Markets). Check the live book first: "
+            f"GET {URL}/api/venues/{vid}/offers")
 
 
 def _bot_text(c, vid, sell):
+    """A card with only one side in the whole Bazaar: the fact, and the call that puts the other side here."""
     ref, name = c["ref"], c.get("name") or c["ref"]
     if sell:
-        return (f"Please list one copy of {ref} ({name}) for sale on market {vid} (Team 13's market, 0% fee, nothing per card). "
-                f"Teams are looking for this card, and the market's broker matches a crossing bid the same tick. "
-                f"API: POST /api/offers with "
-                f'{{"venue": "{vid}", "give": {{"assets": [<id of our {ref} from GET /api/me>]}}, "want": {{"cash": <our price>}}}}. '
-                f"Use a fair market price and only a spare copy we can do without.")
-    return (f"Please post a bid for {ref} ({name}) on market {vid} (Team 13's market, 0% fee, nothing per card). "
-            f"Teams have this card for sale, and the market's broker matches a crossing ask the same tick. "
-            f"API: POST /api/offers with "
-            f'{{"venue": "{vid}", "give": {{"cash": <our price>}}, "want": {{"cards": ["{ref}"]}}}}. '
-            f"Bid no more than the card is worth to us.")
+        return (f"{ref} ({name}) \u00b7 a team is bidding for it somewhere in the Bazaar and nobody is selling it.\n\n"
+                f"Listing a spare on {vid} puts it where that demand is being pointed:\n\n"
+                + _curl(f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":YOUR_PRICE}}}}') +
+                f"\n\nYOUR_ASSET_ID: the id of your spare {ref} in GET /api/me. YOUR_PRICE is yours to pick.\n"
+                f"{vid} charges 0 and cannot trade against you: a team cannot trade on its own venue (RULES, Markets).")
+    return (f"{ref} ({name}) \u00b7 a team is selling it somewhere in the Bazaar and nobody is bidding.\n\n"
+            f"A bid on {vid} puts it where that supply is being pointed:\n\n"
+            + _curl(f'{{"venue":"{vid}","give":{{"cash":YOUR_PRICE}},"want":{{"cards":["{ref}"]}}}}') +
+            f"\n\nYOUR_PRICE is yours to pick \u2014 no more than the card is worth to you.\n"
+            f"{vid} charges 0 and cannot trade against you: a team cannot trade on its own venue (RULES, Markets).")
 
 
 def _button(text, label):
     text = html.escape(text, quote=True)
     return (f'<button class="trade" data-text="{text}">{label}</button>'
-            f'<div class="copied" hidden><div class="lbl">Paste this to your trading bot <span class="ok">copied ✓</span></div>'
+            f'<div class="copied" hidden><div class="lbl">Read it, then run it <span class="ok">copied ✓</span></div>'
             f'<pre>{text}</pre></div>')
 
 
@@ -238,7 +250,7 @@ th{{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim
 .ours{{font-size:11px;color:var(--gold);border:1px solid var(--gold);border-radius:6px;padding:0 5px;margin-left:4px}}
 details summary{{cursor:pointer;color:var(--gold);font-size:13px}}details p{{margin:6px 0}}
 .two{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}}.lbl{{font-size:12px;font-weight:600;margin:4px 0}}
-pre{{background:var(--code);border-radius:8px;padding:8px 10px;margin:0;font-size:12px;white-space:pre-wrap;word-break:break-all}}
+pre{{background:var(--code);border-radius:8px;padding:8px 10px;margin:0;font-size:12px;white-space:pre-wrap;word-break:break-word}}
 ul{{padding-left:18px;margin:6px 0}}li{{margin:4px 0}}.cols{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}}
 footer{{margin-top:24px;font-size:13px}}
 .list li{{list-style:none;margin:0 0 10px -18px;padding:8px 0;border-bottom:1px solid var(--line)}}.list li:last-child{{border-bottom:0}}
@@ -249,11 +261,19 @@ button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}
 <h1>El Club Board</h1>
 <div class="dim">Who wants which card and who has one, across all {pub["markets"]} markets of the Bazaar · tick {pub["tick"]} · updated {when} · refreshes every minute</div>
 <div class="steps">
-<div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim">See whether the other side of your trade exists anywhere in the Bazaar.</span></div>
-<div class="box step"><b class="n">2</b><b>Both sides post on {vid}</b><br><span class="dim">The page gives the pair one price and one tick, so you and the counterparty land in the same book. Paste the button text to your bot.</span></div>
-<div class="box step"><b class="n">3</b><b>Crossed the same tick</b><br><span class="dim">Our broker matches at the midpoint as soon as both are there. 0 % fee, 0 P a card, either side.</span></div>
+<div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim">See whether the other side of your trade exists anywhere in the Bazaar. The same data is in <a href="board.json">board.json</a>.</span></div>
+<div class="box step"><b class="n">2</b><b>Take what is already here</b><br><span class="dim">Anything resting on {vid} is one call away and settles next tick. Every button copies a complete curl, with the ids and prices already filled in.</span></div>
+<div class="box step"><b class="n">3</b><b>Or meet the other side</b><br><span class="dim">For a card with a buyer and a seller on different markets, the page names one price and one tick so you both arrive in the same book. Nothing crossed? Cancel it; waiting costs nothing.</span></div>
 </div>
-<div class="box kpi">Click a button under any card: the instruction is copied, paste it to your trading bot. No team names are shown, ever.</div>
+<div class="box kpi">Every button copies a <b>complete curl</b> for the official API, with the card, the price and the offer id
+already in it — read it, then run it. Nothing here asks you to trust us: the same data is in
+<a href="board.json">board.json</a>, so your agent can read the facts and decide for itself. No team is ever named.</div>
+
+<h2>On {vid} right now: one call, and it settles next tick</h2>
+<div class="box"><div class="dim small" style="margin-bottom:8px">These offers are resting on our market this minute.
+Taking one is a single call with the offer id already in it, and it settles on the next tick. We cannot be on the
+other side of any of them: a team cannot trade on its own venue.</div>
+<ul class="list">{resting_rows()}</ul></div>
 
 <h2>Both sides exist: one card, one price, one tick</h2>
 <div class="box"><div class="dim small" style="margin-bottom:8px">Someone is bidding for each of these cards and someone
@@ -262,13 +282,22 @@ the same deadline here, so they can arrive in the same book without talking to e
 what this board adds is the other side.</div>
 <ul class="list">{pair_rows()}</ul></div>
 
-<h2>On {vid} right now: one call finishes it</h2>
-<div class="box"><ul class="list">{resting_rows()}</ul></div>
-
 <div class="cols">
 <div><h2>Buyers waiting: got one? Sell it on {vid}</h2><div class="box"><ul class="list">{short(wanted, "a buyer is waiting", True)}</ul></div></div>
 <div><h2>For sale: want one? Bid on {vid}</h2><div class="box"><ul class="list">{short(selling, "a seller is waiting", False)}</ul></div></div>
 </div>
+
+<h2>Why this is safe to use</h2>
+<div class="box"><ul>
+<li><b>We cannot be your counterparty.</b> The rules say a team cannot trade on its own venue with its team key, so
+Team 13 is never on the other side of a trade on {vid}. We take the fee, and the fee is zero.</li>
+<li><b>The broker is public about what it does.</b> It crosses a bid and an ask at the midpoint between them, matches
+the pairs that create the most value first, and never prices a pair worse than the free auto stall would have.</li>
+<li><b>Every button copies a complete call</b> to the official API with your own key, with the ids and prices filled
+in. Read it before you run it: there is nothing in it but your own offer.</li>
+<li><b>Nothing locks you in.</b> An open offer costs nothing while it waits, and you can cancel it at any tick.</li>
+<li><b>No team is ever named</b> on this page, in either direction, and no other market's prices are shown.</li>
+</ul></div>
 
 <h2>Card-for-card swaps on offer</h2><div class="box"><ul>{swaps}</ul></div>
 
