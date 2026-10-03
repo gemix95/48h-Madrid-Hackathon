@@ -113,9 +113,9 @@ class Context:
         self.S = strategy.load()
         self.intel = None
         self.learner = Learner()
-        self.llm = Negotiator(log=self.log)
         self.agent_budget = None  # AGENT_BUDGET: this process's daily spend cap when teammates run agents too
-        self.announce = None  # posts the deals we open/close to El Consejo, so teammates' agents don't step on them
+        self.announce = None  # set before Negotiator: its connect log calls Context.log
+        self.llm = Negotiator(log=self.log)
 
     # ---------------------------------------------------------------- logging & state
     def log(self, module, action, **detail):

@@ -8,6 +8,9 @@ Two-issue duels (price + delivery day 0-10): each side has a private weight per 
 about for price: we learn what the rival prefers from the days it proposes and give it those days if they are cheap
 for us, while asking for a better price.
 
+Knobs (duel_rounds / duel_anchor / duel_accept / duel_seller_cap) are live-tuned by duel_tuner.py from finished
+and live duels; this module also adapts mid-fight to how fast the rival is conceding.
+
 The duel payload is only known once a session starts, so every read is defensive and the raw payload is logged
 the first time we see a duel (the practice round is for exactly that).
 """
@@ -30,6 +33,7 @@ class Duels:
 
     def __init__(self, ctx):
         self.ctx = ctx
+        self._harvest_every = 0
 
     def step(self):
         ctx = self.ctx
@@ -55,6 +59,33 @@ class Duels:
                     ctx.log("duel", "refused", duel=d.get("id"), error=str(e))
             except Exception as e:  # a payload shape we did not expect: log it, keep the agent alive
                 ctx.log("duel", "error", duel=d.get("id"), error=repr(e), payload=d)
+        # every ~8 ticks: harvest finished duels so the learner (and dashboard) see scores
+        self._harvest_every = (self._harvest_every + 1) % 8
+        if self._harvest_every == 0:
+            self.harvest_done()
+
+    def harvest_done(self):
+        """Log settled duels we have not recorded yet (result is a float: our points)."""
+        ctx = self.ctx
+        logged = ctx.state.setdefault("duels_logged_done", [])
+        try:
+            done = ctx.api.duels(done=True).get("duels", [])
+        except BazaarError as e:
+            ctx.log("duel", "done_refused", error=str(e))
+            return
+        for d in done:
+            did = str(d.get("id") or d.get("duel"))
+            if not did or did in logged:
+                continue
+            logged.append(did)
+            if len(logged) > 400:
+                del logged[:-300]
+            res = d.get("result")
+            score = float(res) if isinstance(res, (int, float)) else 0.0
+            ctx.log("duel", "result", duel=d.get("duel") or d.get("id"), status=d.get("status"),
+                    score=score, price=d.get("price"), days=d.get("days"), rounds=d.get("rounds"),
+                    role=d.get("role"), limit=d.get("your_limit"), rival=d.get("rival"),
+                    session=d.get("session"), issues=d.get("issues"))
 
     def play(self, d: dict):
         ctx = self.ctx
@@ -67,7 +98,7 @@ class Duels:
         seller = role.startswith("sell")
         two_issue = "days" in (d.get("issues") or []) or d.get("your_days_weight") is not None
         w = float(first(d, "your_days_weight", "days_weight", default=0) or 0)
-        decay = float(first(d, "decay", default=0.06) or 0.06)
+        decay = float(first(d, "decay", "decay_per_round", default=0.06) or 0.06)
 
         msgs = first(d, "messages", "history", default=[]) or []
         rival_name = d.get("rival")
@@ -105,7 +136,22 @@ class Duels:
 
         S = ctx.S
         ROUNDS = int(S["duel_rounds"])
+        accept_th = float(S["duel_accept"])
         k = max(len(mine), int(d.get("rounds") or 0) if d.get("your_offer") else 0)
+        # live rival style: how fast they walk toward our limit (conceder → take sooner; tough → hold)
+        rival_prices = [first(m, "price") for m in theirs if first(m, "price") is not None]
+        style = "unknown"
+        if len(rival_prices) >= 2 and limit is not None:
+            first_r, last_r = rival_prices[0], rival_prices[-1]
+            move = (last_r - first_r) if seller else (first_r - last_r)
+            span0 = max(1.0, abs(limit - first_r))
+            frac = move / span0
+            style = "tough" if frac < 0.15 else ("conceder" if frac > 0.55 else "mid")
+            if style == "conceder":
+                accept_th = max(0.4, accept_th - 0.1)
+                ROUNDS = max(4, ROUNDS - 1)
+            elif style == "tough":
+                accept_th = min(0.7, accept_th + 0.05)
         # anchor: far from our limit; if the rival has spoken, aim past the midpoint on our side
         # duel_anchor 2.0 -> a seller opens 60% above its cost, a buyer 37.5% below its value (always a real price)
         amb = 0.3 * S["duel_anchor"]
@@ -116,7 +162,9 @@ class Duels:
         anchor = min(limit + span, limit * S.get("duel_seller_cap", 2.2)) if seller else max(limit - span, limit * 0.3, 1)
         span = abs(anchor - limit)
         x = min(1.0, k / ROUNDS)
-        target = anchor + ((limit + (1 if seller else -1) * max(1, 0.08 * span)) - anchor) * (x ** 1.3)
+        # real data: long talks score worse — accelerate concessions in the second half
+        curve = 1.15 if k >= max(2, ROUNDS // 2) else 1.3
+        target = anchor + ((limit + (1 if seller else -1) * max(1, 0.08 * span)) - anchor) * (x ** curve)
         price = math.ceil(target) if seller else math.floor(target)
         if r_price is not None:  # never concede past the rival's own offer
             price = max(price, r_price) if seller else min(price, r_price)
@@ -140,10 +188,13 @@ class Duels:
             clk = getattr(ctx, "clock", None) or {}
             ticks_left = (d["deadline_tick"] - clk["tick"]) if d.get("deadline_tick") and clk.get("tick") else 99
             last_chance = ticks_left <= 2  # practice: two duels ended no_deal with a rival offer inside our limit
-            if u_r > 0 and (last_chance or u_r >= S["duel_accept"] * u_next or k >= ROUNDS):
+            # mid-fight: if the gap is small vs our surplus, bank it before the next 6% melt
+            gap_ok = abs(price - r_price) <= max(3, 0.04 * max(price, r_price))
+            if u_r > 0 and (last_chance or u_r >= accept_th * u_next or k >= ROUNDS or (gap_ok and u_r >= 0.35 * max(u_next, 1))):
                 if ctx.take_accept(kind="duel"):
                     ctx.api.duel_accept(d["id"])
-                    ctx.log("duel", "accept", duel=d["id"], price=r_price, days=r_days, our_surplus=round(u_r, 1), limit=limit)
+                    ctx.log("duel", "accept", duel=d["id"], price=r_price, days=r_days, our_surplus=round(u_r, 1),
+                            limit=limit, style=style, accept_th=accept_th)
                     return
         if util(price, days) <= 0:  # would cross our limit: hold at a safe price instead
             price = math.ceil(limit + 1) if seller else math.floor(limit - 1)

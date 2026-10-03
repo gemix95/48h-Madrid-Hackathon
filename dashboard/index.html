@@ -287,6 +287,104 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
 .story .ev .why { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .story .ev.win { background: linear-gradient(90deg, rgba(12,163,12,.08), transparent); }
 .lesson { font-size: 13px; line-height: 1.45; padding: 8px 10px; border-left: 3px solid var(--series-1); background: var(--surface-2); border-radius: 0 6px 6px 0; margin-bottom: 8px; }
+
+/* duels tab — six steps, shrinking pie, blind limits */
+.duel-hero { display: grid; grid-template-columns: 1fr auto; gap: 10px 18px; align-items: start;
+  padding: 16px 18px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--series-1) 40%, var(--border));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--series-1) 14%, var(--surface-1)), var(--surface-1)); margin-bottom: 16px; }
+.duel-hero .kicker { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--series-1); }
+.duel-hero .title { font-size: 22px; font-weight: 750; line-height: 1.2; margin-top: 2px; }
+.duel-hero .blurb { grid-column: 1 / -1; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.duel-hero .eta { text-align: right; } .duel-hero .eta b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+.duel-hero .eta span { font-size: 12px; color: var(--muted); }
+.duel-steps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px; }
+@media (max-width: 900px) { .duel-steps { grid-template-columns: repeat(3, 1fr); } }
+.duel-step { padding: 10px 10px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
+.duel-step .n { font-size: 11px; font-weight: 700; color: var(--series-1); letter-spacing: .04em; }
+.duel-step .t { font-weight: 650; font-size: 13px; margin-top: 2px; }
+.duel-step .d { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+.duel-step.on { border-color: color-mix(in srgb, var(--series-1) 55%, var(--border)); box-shadow: inset 3px 0 0 var(--series-1); }
+.pie-bar { display: flex; gap: 3px; align-items: flex-end; height: 42px; margin: 8px 0 4px; }
+.pie-bar i { flex: 1; border-radius: 3px 3px 0 0; background: var(--series-1); opacity: .95; min-width: 0; }
+.pie-bar i.dead { background: var(--neutral); opacity: .45; }
+.limit-rule { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.limit-rule .box { padding: 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
+.limit-rule .box.ok { border-color: color-mix(in srgb, var(--good) 50%, var(--border)); }
+.limit-rule .box.bad { border-color: color-mix(in srgb, var(--critical) 45%, var(--border)); }
+.duel-card { border: 1px solid var(--border); border-radius: 14px; padding: 0; margin-bottom: 14px; background: var(--surface-1); overflow: hidden; }
+.duel-card.live { border-color: color-mix(in srgb, var(--series-2) 45%, var(--border)); }
+.duel-card.urgent { border-color: color-mix(in srgb, var(--critical) 55%, var(--border)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--critical) 25%, transparent); }
+.duel-arena { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 16px 18px 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--series-2) 8%, var(--surface-1)), var(--surface-1)); }
+.duel-arena .side-block { min-width: 0; }
+.duel-arena .side-block.them { text-align: right; }
+.duel-arena .who { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.duel-arena .name { font-size: 18px; font-weight: 750; line-height: 1.2; margin-top: 2px; }
+.duel-arena .price { font-size: 34px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.05; margin-top: 6px; }
+.duel-arena .price.us { color: var(--series-1); } .duel-arena .price.them { color: var(--series-2); }
+.duel-arena .subp { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.duel-arena .vs { width: 64px; text-align: center; }
+.duel-arena .vs b { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; letter-spacing: .04em; }
+.duel-arena .vs .gap { margin-top: 6px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.duel-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 0 18px 12px; }
+.duel-body { padding: 0 18px 16px; }
+.duel-meters { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; margin: 0 0 12px; }
+@media (max-width: 900px) {
+  .duel-arena { grid-template-columns: 1fr; text-align: center; }
+  .duel-arena .side-block.them { text-align: center; }
+  .duel-arena .vs { margin: 4px auto; }
+  .duel-meters { grid-template-columns: 1fr; }
+}
+.meter { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; border: 1px solid var(--border); }
+.meter .lab { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.meter .val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.meter .bar { height: 7px; border-radius: 999px; background: var(--grid); margin-top: 8px; overflow: hidden; }
+.meter .bar i { display: block; height: 100%; border-radius: inherit; background: var(--series-1); }
+.meter .bar i.warn { background: var(--warning); } .meter .bar i.hot { background: var(--critical); }
+.meter .bar i.ok { background: var(--good); }
+.duel-verdict { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; border-radius: 10px;
+  margin-bottom: 12px; border: 1px solid var(--border); background: var(--surface-2); font-size: 13px; }
+.duel-verdict b.big { font-size: 15px; }
+.duel-ladder { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.duel-chip { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 4px 8px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); }
+.duel-chip.us { color: var(--series-1); border-color: color-mix(in srgb, var(--series-1) 45%, var(--border));
+  background: color-mix(in srgb, var(--series-1) 12%, transparent); }
+.duel-chip.them { color: var(--series-2); border-color: color-mix(in srgb, var(--series-2) 45%, var(--border));
+  background: color-mix(in srgb, var(--series-2) 12%, transparent); }
+.duel-chip.limit { color: var(--text-primary); border-style: dashed; }
+.duel-chart-wrap { margin: 4px 0 8px; }
+.sess { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 900px) { .sess { grid-template-columns: 1fr 1fr; } .limit-rule { grid-template-columns: 1fr; } }
+.sess-card { padding: 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
+.sess-card.next, .sess-card.live { border-color: color-mix(in srgb, var(--series-1) 55%, var(--border)); }
+.sess-card .when { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sess-card .name { font-weight: 700; margin-top: 2px; }
+.sess-card .issues { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+/* duel scoreboard */
+.score-strip { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+@media (max-width: 1100px) { .score-strip { grid-template-columns: 1fr 1fr; } }
+.score-tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.score-tile.hero-tile { background: linear-gradient(135deg, color-mix(in srgb, var(--series-1) 16%, var(--surface-1)), var(--surface-1));
+  border-color: color-mix(in srgb, var(--series-1) 40%, var(--border)); }
+.score-tile .lab { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.score-tile .val { font-size: 28px; font-weight: 750; font-variant-numeric: tabular-nums; margin-top: 4px; line-height: 1.1; }
+.score-tile .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.35; }
+.score-tile .val.up { color: var(--up); } .score-tile .val.down { color: var(--critical); }
+.board-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.board-tools .spacer { flex: 1; }
+.pts { font-variant-numeric: tabular-nums; font-weight: 750; }
+.pts.zero { color: var(--critical); } .pts.good { color: var(--up); } .pts.mid { color: var(--text-primary); }
+.cum-wrap { margin: 4px 0 14px; }
+.duel-row-best td { background: color-mix(in srgb, var(--good) 10%, transparent); }
+.duel-row-zero td { background: color-mix(in srgb, var(--critical) 8%, transparent); }
+.spark-bar { display: flex; gap: 2px; align-items: flex-end; height: 36px; margin-top: 8px; }
+.spark-bar i { flex: 1; min-width: 0; border-radius: 2px 2px 0 0; background: var(--series-1); opacity: .85; }
+.spark-bar i.z { background: var(--critical); opacity: .55; }
+.board-empty { padding: 28px 18px; text-align: center; color: var(--text-secondary); }
+.board-empty b { display: block; font-size: 16px; color: var(--text-primary); margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -298,7 +396,9 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <span class="pill" id="next">next tick –</span>
     <span class="err" id="err"></span>
     <nav id="tabs">
-      <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a><a href="#album">Album</a>
+      <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a>
+      <a href="#duels">Duels<span class="pulse" id="duels-pulse" style="display:none">0</span></a>
+      <a href="#album">Album</a>
       <a href="#market">Market</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a><a href="#council">Council</a>
     </nav>
   </header>
@@ -374,7 +474,37 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <div class="grid">
       <section class="card s7" id="neg-card"><h2>Negotiations <span class="hint" id="neg-hint">our offers (blue) vs the dealer's asks (orange) · tabs: hottest on the left (FINAL offer, small gap, haggling, no reply)</span></h2><div id="neg-switch"></div><div id="threads"></div><div id="swaps" style="display:none"></div></section>
       <section class="card s5"><h2>Dealers</h2><div id="dealers"></div><div id="levels"></div></section>
-      <section class="card s12"><h2>Duels <span class="hint">we only see our own limit; the deal shrinks every round</span></h2><div id="duels"></div></section>
+    </div>
+  </main>
+
+  <main class="tab" id="tab-duels">
+    <div id="duels-hero"></div>
+    <div class="score-strip" id="duels-score-strip"></div>
+    <div class="grid">
+      <section class="card s12">
+        <h2>Playing now <span class="hint" id="duels-live-hint">blue = us · orange = rival · dashed = our secret limit</span></h2>
+        <div id="duels-live"></div>
+      </section>
+      <section class="card s8">
+        <h2>Scoreboard <span class="hint">points from each duel · hover the chart for the running total</span></h2>
+        <div id="duels-board-head"></div>
+        <div class="cum-wrap" id="duels-cum"></div>
+        <div class="board-tools" id="duels-board-tools"></div>
+        <div id="duels-done"></div>
+      </section>
+      <section class="card s4">
+        <h2>Weekend sessions</h2>
+        <div id="duels-sessions"></div>
+        <h2 style="margin-top:18px">Learning loop</h2>
+        <div id="duels-learn"></div>
+        <h2 style="margin-top:18px">Live knobs</h2>
+        <div id="duels-strategy"></div>
+        <details style="margin-top:14px"><summary>Pie, hard rule, six steps</summary>
+          <div id="duels-pie" style="margin-top:10px"></div>
+          <div id="duels-rule" style="margin-top:12px"></div>
+          <div class="duel-steps" id="duels-steps" style="margin-top:12px"></div>
+        </details>
+      </section>
     </div>
   </main>
 
@@ -718,8 +848,8 @@ function nextMoves(d, M, events) {
   if (nextDuel) { const soon = (nextDuel.wall - Date.now()) < 90 * 6e4;
     add(soon ? 1 : 5, soon ? "serious" : "info", `${nextDuel.params?.name || "Duels"} ${until(nextDuel.wall)}`,
       `${nextDuel.params?.practice ? "Practice round, does not score: use it to test our duel bot. " : ""}${nextDuel.params?.duel_ticks ?? "?"} ticks per duel, value decays ${Math.round((nextDuel.params?.decay ?? 0) * 100)}% per round: settle early inside our limit.${nextDuel.params?.issues ? " Two issues: trade delivery days we care little about for price." : ""}`, "negotiating"); }
-  const openDuels = (d.duels?.duels || []).filter(x => x.status === "open" || x.status === "active");
-  if (openDuels.length) add(0, "critical", `${openDuels.length} duel(s) running now`, "Every round of talk shrinks the pie. Never accept outside our limit.");
+  const openDuels = (d.duels?.duels || []).filter(x => /^(open|active|live|running|negotiating)$/i.test(x.status || ""));
+  if (openDuels.length) add(0, "critical", `${openDuels.length} duel(s) running now`, `Every round of talk shrinks the pie ~6%. Answer every duel. <a href="#duels">Open Duels tab →</a>`);
 
   // trades at private values
   const spares = Object.values(M.held).filter(l => l.length > 1).flatMap(l => l.slice(1));
@@ -1097,12 +1227,518 @@ function dealers(d) {
   $("levels").innerHTML = `<h2 style="margin-top:16px">Levels</h2>` + (lv.length ? lv.map(l => `<div class="move"><div class="ic" style="color:var(--series-1)">${l.status === "active" ? "✓" : "…"}</div><div><div class="t">${esc(l.name || l.id)} <span class="chip">${esc(l.status)}</span></div><div class="d">${esc(l.line || l.description || l.how || "")}</div></div></div>`).join("")
     : `<div class="empty">Nothing announced yet. New dealers and mechanics appear here.</div>`);
 }
+function duelId(x) { return x.id ?? x.duel; }
+function duelLive(x) { return /^(open|active|live|running|negotiating)$/i.test(x.status || ""); }
+function duelPrice(o) {
+  if (o == null) return null;
+  if (typeof o === "number") return o;
+  if (typeof o !== "object") return null;
+  if (o.price != null) return o.price;
+  const off = o.offer;
+  if (off && typeof off === "object") return off.price ?? off.give?.cash ?? off.want?.cash ?? null;
+  return o.give?.cash ?? o.want?.cash ?? null;
+}
+function duelDays(o) {
+  if (!o || typeof o !== "object") return null;
+  return o.days ?? o.offer?.days ?? null;
+}
+function duelSurplus(role, limit, price, days, w) {
+  if (price == null || limit == null) return null;
+  const seller = String(role || "").toLowerCase().startsWith("sell");
+  let s = seller ? (price - limit) : (limit - price);
+  if (days != null && w != null) s += Number(w) * Number(days);
+  return s;
+}
+function duelEvents() {
+  return (D?.schedule?.upcoming || []).filter(e => e.action === "duels").map(e => {
+    const c = D.clock || {}, wall = wallFor(e.at_hours, c, "duels");
+    return { ...e, wall, st: eventState(e, c.t_hours || 0), copy: eventCopy({ ...e, kind: 0 }) };
+  });
+}
+const DUEL_BEST = { enable_duels: 1, duel_rounds: 8, duel_anchor: 5.0, duel_seller_cap: 2.2, duel_accept: 0.5 };
+const DUEL_UI = { session: "all", sort: "new" };  // scoreboard filters
+
+function duelPointsOf(x) {
+  if (x == null) return null;
+  if (typeof x.points === "number") return x.points;
+  if (typeof x.result === "number") return x.result;
+  if (typeof x.score === "number") return x.score;
+  if (x.result && typeof x.result === "object") {
+    const v = x.result.your_score ?? x.result.score ?? x.result.points;
+    if (typeof v === "number") return v;
+  }
+  return null;
+}
+function duelBoard(d) {
+  // Prefer the tuner scoreboard (always fresh), then API done list, then decision harvests
+  const fromFile = d.duels_board && Array.isArray(d.duels_board.duels) ? d.duels_board : null;
+  const fromLearn = d.duel_learn?.last?.scoreboard;
+  const fromTuner = [...(d.decisions || [])].reverse().find(r => r.module === "duel_tuner" && r.scoreboard?.duels);
+  const sb = fromFile || fromLearn || fromTuner?.scoreboard;
+  if (sb?.duels?.length) return sb;
+  const api = d.duels_done?.duels || [];
+  if (api.length) {
+    const rows = api.map(x => ({
+      duel: duelId(x), session: x.session, status: x.status, role: x.role, rival: x.rival, item: x.item,
+      limit: x.your_limit, price: x.price, days: x.days, rounds: x.rounds || 0,
+      points: duelPointsOf(x) ?? 0, issues: x.issues || ["price"],
+    })).sort((a, b) => (b.session - a.session) || (b.duel - a.duel));
+    const raw = rows.reduce((t, r) => t + (r.points || 0), 0);
+    const cum = []; let run = 0;
+    [...rows].reverse().forEach(r => { run += r.points || 0; cum.push({ duel: r.duel, points: r.points, total: +run.toFixed(2), status: r.status }); });
+    return { duels: rows, n: rows.length, raw_total: +raw.toFixed(2),
+      deals: rows.filter(r => r.status === "deal").length, zeros: rows.filter(r => !r.points).length,
+      mean: rows.length ? +(raw / rows.length).toFixed(2) : null, cumulative: cum,
+      duel_points: d.me?.score?.duel_points, board_score: d.me?.score?.score, rank: d.me?.score?.rank,
+      negotiating: d.me?.score?.negotiating, best: rows.reduce((b, r) => (!b || r.points > b.points) ? r : b, null) };
+  }
+  return { duels: [], n: 0, raw_total: 0, deals: 0, zeros: 0, cumulative: [], duel_points: d.me?.score?.duel_points };
+}
+function duelCumChart(cum) {
+  if (!cum?.length) return `<div class="empty">No finished duels yet.</div>`;
+  const W = 640, H = 150, L = 36, R = 16, T = 12, B = 28;
+  const totals = cum.map(c => c.total), pts = cum.map(c => c.points);
+  let y0 = 0, y1 = Math.max(...totals, 1); const pad = Math.max(2, (y1 - y0) * 0.08); y1 += pad;
+  const X = i => L + (cum.length === 1 ? (W - L - R) / 2 : i / (cum.length - 1) * (W - L - R));
+  const Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  let g = "";
+  for (let i = 0; i <= 3; i++) {
+    const v = y0 + (y1 - y0) * i / 3;
+    g += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${Math.round(v)}</text>`;
+  }
+  // bars for per-duel points (scaled to total axis lightly)
+  const maxP = Math.max(...pts.map(Math.abs), 1);
+  cum.forEach((c, i) => {
+    const h = Math.max(2, Math.abs(c.points) / maxP * (H - T - B) * 0.35);
+    const y = H - B - h;
+    g += `<rect data-tip="${i}" x="${X(i) - 3}" y="${y}" width="6" height="${h}" rx="1" fill="${c.points > 0 ? "var(--series-1)" : "var(--critical)"}" opacity=".35"/>`;
+  });
+  g += `<path d="${cum.map((c, i) => `${i ? "L" : "M"}${X(i)},${Y(c.total)}`).join("")}" fill="none" stroke="var(--series-2)" stroke-width="2.5" stroke-linejoin="round"/>`;
+  cum.forEach((c, i) => {
+    g += `<circle cx="${X(i)}" cy="${Y(c.total)}" r="3.5" fill="var(--series-2)" stroke="var(--surface-1)" stroke-width="1.5"/>`;
+    g += `<circle data-tip="${i}" cx="${X(i)}" cy="${Y(c.total)}" r="10" fill="transparent"/>`;
+  });
+  g += `<text x="${L}" y="${H - 8}">duel 1</text><text x="${W - R}" y="${H - 8}" text-anchor="end">duel ${cum.length}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Cumulative duel points">${g}</svg>
+    <div class="legend" style="margin-top:4px"><span><i class="swatch" style="background:var(--series-2)"></i>Running total</span>
+    <span><i class="swatch" style="background:var(--series-1);opacity:.35"></i>Points that duel</span></div>`;
+}
+
 function duels(d) {
   const list = d.duels?.duels || [];
-  $("duels").innerHTML = list.length ? `<table><thead><tr><th>Duel</th><th>Rival</th><th>Role</th><th class="num">Our limit</th><th>Status</th><th>Last offer</th></tr></thead><tbody>`
-    + list.map(x => `<tr><td>#${x.id}</td><td>${esc(x.rival || x.alias || x.opponent || "–")}</td><td>${esc(x.role || x.side || "–")}</td><td class="num">${x.your_limit ?? x.limit ?? x.your_value ?? x.your_cost ?? "–"}</td><td>${esc(x.status)}</td>
-      <td class="sec">${esc(JSON.stringify(x.last_offer || x.standing || (x.messages || []).slice(-1)[0] || "").slice(0, 80))}</td></tr>`).join("") + `</tbody></table>`
-    : `<div class="empty">No duels right now. Watch the timeline for the next session.</div>`;
+  const live = list.filter(duelLive);
+  const doneApi = (d.duels_done?.duels || list.filter(x => !duelLive(x)));
+  const c = d.clock || {}, tick = c.tick ?? d.me?.tick;
+  const sc = d.me?.score || {};
+  const sess = duelEvents();
+  const next = sess.find(e => e.st !== "done") || sess[sess.length - 1];
+  const allDec = d.decisions || [];
+  const recs = allDec.filter(r => r.module === "duel");
+  const accepts = recs.filter(r => r.action === "accept");
+  const offers = recs.filter(r => r.action === "offer");
+  const board = duelBoard(d);
+  const pulse = $("duels-pulse");
+  if (pulse) { pulse.style.display = live.length ? "" : "none"; pulse.textContent = live.length; }
+
+  // hero
+  const two = (next?.params?.issues || []).includes("days");
+  const decay = Math.round((next?.params?.decay ?? next?.params?.decay_per_round ?? 0.06) * 100);
+  const heroEta = !next ? ["—", "no session queued"]
+    : next.st === "live" ? ["now", "session live"]
+    : next.st === "done" ? ["done", "last session"]
+    : [until(next.wall).replace(/^in /, ""), `until ${esc(next.params?.name || "Duels")}`];
+  const hottest = [...live].sort((a, b) => (a.deadline_tick ?? 1e9) - (b.deadline_tick ?? 1e9))[0];
+  const hotLeft = hottest && tick != null && hottest.deadline_tick != null ? Math.max(0, hottest.deadline_tick - tick) : null;
+  $("duels-hero").innerHTML = `<div class="duel-hero">
+    <div><div class="kicker">Duels · The Bazaar</div>
+      <div class="title">${live.length
+        ? `${live.length} live · hottest vs ${esc(hottest.rival || "rival")} (${hotLeft ?? "?"} ticks left)`
+        : `Scoreboard · ${board.n || 0} duels · ${fmt(board.duel_points ?? sc.duel_points)} board pts`}</div></div>
+    <div class="eta"><b>${live.length && hotLeft != null ? hotLeft + "t" : (board.raw_total != null ? fmt(board.raw_total, 0) : heroEta[0])}</b>
+      <span>${live.length ? "until hottest deadline" : (board.n ? "raw pie points summed" : heroEta[1])}${!live.length && next?.wall ? ` · next ${dayName(next.wall)} ${hm(next.wall)}` : ""}</span></div>
+    <div class="blurb">${live.length
+      ? `Each deal adds pie points now; the board compresses them into duel points. Pie shrinks ~${decay}% per round.`
+      : `Each finished duel has a <b>points</b> score (your share of that pie). Sum = raw total; the official <b>duel points</b> on the leaderboard is the compressed score that counts.`}</div>
+  </div>`;
+
+  // score strip
+  const pts = board.duel_points ?? sc.duel_points;
+  const dealRate = board.n ? Math.round((board.deals / board.n) * 100) : null;
+  if ($("duels-score-strip")) $("duels-score-strip").innerHTML = `
+    <div class="score-tile hero-tile"><div class="lab">Board duel points</div>
+      <div class="val">${pts != null ? fmt(pts) : "–"}</div>
+      <div class="sub">What counts on the leaderboard · rank ${board.rank ?? sc.rank ?? "–"} · negotiating ${fmt(board.negotiating ?? sc.negotiating)}</div></div>
+    <div class="score-tile"><div class="lab">Raw pie total</div>
+      <div class="val">${board.n ? fmt(board.raw_total) : "–"}</div>
+      <div class="sub">Sum of every duel’s points · mean ${board.mean != null ? fmt(board.mean) : "–"}</div></div>
+    <div class="score-tile"><div class="lab">Record</div>
+      <div class="val">${board.deals ?? 0}<span style="font-size:16px;font-weight:600;color:var(--muted)">/${board.n || 0}</span></div>
+      <div class="sub">${dealRate != null ? dealRate + "% deals" : "–"} · ${board.zeros || 0} zeroes (no deal)</div></div>
+    <div class="score-tile"><div class="lab">Best duel</div>
+      <div class="val up">${board.best ? fmt(board.best.points) : "–"}</div>
+      <div class="sub">${board.best ? `#${board.best.duel} vs ${esc(board.best.rival || "?")} · ${esc(board.best.role || "")}` : "none yet"}</div></div>
+    <div class="score-tile"><div class="lab">Live / agent</div>
+      <div class="val">${live.length}</div>
+      <div class="sub">${d.agent_running ? "agent running" : "agent stopped"} · ${accepts.length} accepts logged</div></div>`;
+
+  // six steps
+  const stepOn = live.length ? 3 : (next?.st === "live" ? 2 : (next && next.st !== "done" ? 1 : 0));
+  const steps = [
+    ["1", "Scheduled", "Session starts by itself. Meet every team twice: seller and buyer."],
+    ["2", "Live", "Your duel goes live, with a deadline tick."],
+    ["3", "Blind", "You see only your limit. The rival is an alias."],
+    ["4", "Talk", "One message per tick: words + a price (+ days)."],
+    ["5", "Accept", "Settles next tick, on the terms you accepted."],
+    ["6", "Score", "Your share of the pie. No deal: 0 for both."],
+  ];
+  $("duels-steps").innerHTML = steps.map((s, i) =>
+    `<div class="duel-step${i + 1 === stepOn || (live.length && i >= 2 && i <= 4) ? " on" : ""}"><div class="n">${s[0]}</div><div class="t">${s[1]}</div><div class="d">${s[2]}</div></div>`).join("");
+
+  // learning loop (duel_tuner.py → decisions + duel_learn.json)
+  const S = SD?.current || {};
+  const learnRecs = allDec.filter(r => r.module === "duel_tuner");
+  const learnLast = (d.duel_learn && d.duel_learn.last) || learnRecs[learnRecs.length - 1] || null;
+  const mLearn = learnLast?.metrics || {};
+  const autoOn = !!S.duel_autotune;
+  if ($("duels-learn")) {
+    const st = learnLast?.status || "waiting";
+    const col = st === "applied" ? "var(--up)" : st === "error" ? "var(--critical)" : st === "current_is_best" ? "var(--series-1)" : "var(--warning)";
+    const applied = learnLast?.applied || {};
+    const reasons = learnLast?.reasons || [];
+    const styles = mLearn.styles || learnLast?.styles || {};
+    const styleLine = Object.entries(styles).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(" · ") || "–";
+    $("duels-learn").innerHTML = `<div class="moves">
+      <div class="move"><div class="ic" style="color:${col}">⟳</div><div>
+        <div class="t">Auto-tune ${autoOn ? "on" : "off"} <span class="tag" style="color:${col}">${esc(st)}</span></div>
+        <div class="d">${learnLast?.lesson ? esc(learnLast.lesson) : "duel_tuner is gathering finished duels and will rewrite knobs when it finds an edge."}</div>
+        <div class="d" style="margin-top:6px">Finished <b>${mLearn.n ?? learnLast?.n ?? "–"}</b> · deal rate <b>${mLearn.deal_rate != null ? Math.round(mLearn.deal_rate * 100) + "%" : (learnLast?.deal_rate != null ? Math.round(learnLast.deal_rate * 100) + "%" : "–")}</b>
+          · mean score <b>${fmt(mLearn.mean_score ?? learnLast?.mean_score)}</b>
+          · duel points <b>${fmt(mLearn.duel_points ?? learnLast?.duel_points ?? sc.duel_points)}</b></div>
+        <div class="d">Rivals seen: ${esc(styleLine)}</div>
+        ${Object.keys(applied).length ? `<div class="d" style="margin-top:4px;color:var(--up)">Just applied: ${Object.entries(applied).map(([k, v]) => `${k}=${v}`).join(" · ")}</div>` : ""}
+        ${reasons.length ? `<div class="d muted" style="margin-top:4px">${reasons.slice(0, 3).map(esc).join(" · ")}</div>` : ""}
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn primary" id="duels-autotune-toggle">${autoOn ? "Pause auto-tune" : "Resume auto-tune"}</button>
+        </div>
+      </div></div>
+    </div>`;
+    const tog = $("duels-autotune-toggle");
+    if (tog) tog.onclick = async () => {
+      tog.disabled = true;
+      const r = await (await api("/strategy", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...S, duel_autotune: autoOn ? 0 : 1 }) })).json();
+      if (r.ok) { SD.current = r.current; draft = { ...r.current }; duels(D); }
+      else tog.disabled = false;
+    };
+  }
+
+  // strategy panel
+  const best = Object.entries(DUEL_BEST).every(([k, v]) => Number(S[k]) === Number(v));
+  $("duels-strategy").innerHTML = `<div class="moves">
+    <div class="move"><div class="ic" style="color:var(--up)">✓</div><div>
+      <div class="t">Live knobs${best ? ' <span class="tag" style="color:var(--up)">tournament baseline</span>' : ' <span class="tag" style="color:var(--series-2)">tuned</span>'}</div>
+      <div class="d">Open far (anchor <b>${S.duel_anchor ?? "–"}</b>, seller cap <b>${S.duel_seller_cap ?? "–"}×</b>),
+        concede over <b>${S.duel_rounds ?? "–"}</b> rounds, accept at
+        <b>${Math.round((S.duel_accept ?? 0) * 100)}%</b> of our next offer.
+        Never cross our limit. Gift cheap delivery days for price in two-issue sessions.</div>
+      <div class="d" style="margin-top:6px">Baseline sim ~60% pie share; auto-tune reweights to the rivals we actually meet.</div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn" id="duels-apply-best">Reset to tournament baseline</button>
+        <a class="btn" href="#strategy">All knobs →</a>
+      </div>
+    </div></div>
+  </div>`;
+  const applyBtn = $("duels-apply-best");
+  if (applyBtn) applyBtn.onclick = async () => {
+    applyBtn.disabled = true; applyBtn.textContent = "Saving…";
+    const r = await (await api("/strategy", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...S, ...DUEL_BEST, duel_autotune: S.duel_autotune ?? 1 }) })).json();
+    if (r.ok) { SD.current = r.current; draft = { ...r.current }; applyBtn.textContent = "✓ baseline — next tick"; duels(D); }
+    else { applyBtn.disabled = false; applyBtn.textContent = "⚠ failed"; }
+  };
+
+  // pie decay
+  const rounds = Math.max(4, Math.min(12, Number(S.duel_rounds) || 8));
+  const pieBits = Array.from({ length: rounds + 1 }, (_, i) => Math.max(0, 100 * (1 - 0.06 * i)));
+  $("duels-pie").innerHTML = `<div class="sec" style="font-size:13px;line-height:1.45">Open with ambition, then close.
+    Every full round of talk costs both sides ~6%. Waiting for a slightly better price often loses more than it wins.</div>
+    <div class="pie-bar">${pieBits.map((h, i) => `<i class="${i >= rounds ? "dead" : ""}" style="height:${Math.max(8, h * 0.42)}%" title="round ${i}: ~${Math.round(h)}% pie left"></i>`).join("")}</div>
+    <div class="muted" style="font-size:11px">round 0 → ${rounds}: pie left if you keep talking</div>`;
+
+  // hard rule
+  $("duels-rule").innerHTML = `<div class="limit-rule">
+    <div class="box ok"><b>As seller</b><div class="sec" style="margin-top:4px;font-size:13px">Never below your cost. Outside the limit you lose points, and the rival gets nothing from it.</div></div>
+    <div class="box ok"><b>As buyer</b><div class="sec" style="margin-top:4px;font-size:13px">Never above your value. No deal by the deadline: 0 for both — so answer every duel.</div></div>
+  </div>`;
+
+  // sessions
+  const fallback = [
+    { name: "Duels I", when: "Sat ≈ 12:00", issues: "price only", note: "first scored session" },
+    { name: "Duels II", when: "Sat ≈ 18:30", issues: "price + day", note: "trade days for price" },
+    { name: "Duels III", when: "Sun ≈ 11:00", issues: "price + day", note: "same two-issue rules" },
+    { name: "Grand Final", when: "Sun 14:00", issues: "on the big screen", note: "closing showdown" },
+  ];
+  if (sess.length) {
+    $("duels-sessions").innerHTML = `<div class="sess">${sess.map(e => {
+      const p = e.params || {}, iss = (p.issues || []).includes("days") ? "price + day" : (p.practice ? "practice · price" : "price only");
+      const cls = e.st === "live" ? "live" : (e.st !== "done" && e === next ? "next" : "");
+      return `<div class="sess-card ${cls}"><div class="when">${e.st === "live" ? "LIVE" : e.st === "done" ? "done" : until(e.wall)} · ${dayName(e.wall)} ${hm(e.wall)}</div>
+        <div class="name">${esc(p.name || "Duels")}${p.practice ? " · warm-up" : ""}</div>
+        <div class="issues">${iss} · ${(p.duel_ticks ?? "?")} ticks · decay ${Math.round((p.decay ?? 0.06) * 100)}%</div></div>`;
+    }).join("")}</div>`;
+  } else {
+    $("duels-sessions").innerHTML = `<div class="sess">${fallback.map(s => `<div class="sess-card"><div class="when">${s.when}</div><div class="name">${s.name}</div><div class="issues">${s.issues} · ${s.note}</div></div>`).join("")}</div>
+      <div class="empty" style="margin-top:8px">Schedule not loaded yet — times from the Duels briefing.</div>`;
+  }
+
+  // live arena cards — sorted by urgency (fewest ticks left first)
+  const liveSorted = [...live].sort((a, b) => (a.deadline_tick ?? 1e9) - (b.deadline_tick ?? 1e9));
+  if ($("duels-live-hint")) $("duels-live-hint").textContent = liveSorted.length
+    ? `${liveSorted.length} live · hottest (fewest ticks) first · blue = us · orange = rival · dashed = our secret limit`
+    : "blue = us · orange = rival · dashed = our secret limit";
+  if (!liveSorted.length) {
+    const lastPts = (board.duels || [])[0];
+    $("duels-live").innerHTML = `<div class="board-empty">
+      <b>${next && next.st !== "done" ? `Next up: ${esc(next.params?.name || "Duels")}` : "No live duels"}</b>
+      ${next && next.st !== "done" ? `${until(next.wall)} · ${dayName(next.wall)} ${hm(next.wall)}` : "Between sessions — study the scoreboard and keep auto-tune on."}
+      ${lastPts ? `<div style="margin-top:10px;font-size:13px">Last finished: <b class="pts ${lastPts.points > 0 ? "good" : "zero"}">${fmt(lastPts.points)}</b> pts
+        vs ${esc(lastPts.rival || "?")} · running raw total <b>${fmt(board.raw_total)}</b></div>` : ""}
+      <div class="muted" style="margin-top:8px;font-size:12px">Bot answers every live duel automatically when enable_duels is on.</div>
+    </div>`;
+  } else {
+    const duelTips = [];
+    $("duels-live").innerHTML = liveSorted.map((x, di) => {
+      const id = duelId(x), role = x.role || x.side || "–", limit = x.your_limit ?? x.limit ?? x.your_value ?? x.your_cost;
+      const seller = String(role).toLowerCase().startsWith("sell");
+      const rival = x.rival || x.alias || x.opponent || "Rival";
+      const ours = x.your_offer, them = x.rival_offer || x.standing_offer || x.standing;
+      const up = duelPrice(ours), tp = duelPrice(them), ud = duelDays(ours), td = duelDays(them);
+      const w = x.your_days_weight, twoI = (x.issues || []).includes("days") || (w != null && Number.isFinite(Number(w)));
+      const uThem = duelSurplus(role, limit, tp, td, w);
+      const uUs = duelSurplus(role, limit, up, ud, w);
+      const left = (x.deadline_tick != null && tick != null) ? Math.max(0, x.deadline_tick - tick) : null;
+      const span = (x.deadline_tick != null && tick != null) ? Math.max(1, x.deadline_tick - (tick - (x.rounds || 0) - 1)) : null;
+      // reconstruct start tick from messages when possible
+      const msgs = x.messages || [];
+      const t0 = msgs.length ? Math.min(...msgs.map(m => m.tick).filter(t => t != null)) : tick;
+      const totalTicks = (x.deadline_tick != null && t0 != null) ? Math.max(1, x.deadline_tick - t0) : (span || 12);
+      const leftPct = left == null ? 0 : Math.max(0, Math.min(100, (left / totalTicks) * 100));
+      const decayR = x.decay_per_round ?? x.decay ?? 0.06;
+      const rnd = Math.max(x.rounds || 0, msgs.filter(m => {
+        const from = m.from || m.sender;
+        return from === "you" || (from && from !== rival);
+      }).length);
+      const pieLeft = Math.max(0, 100 * (1 - decayR * rnd));
+      const gap = (up != null && tp != null) ? Math.abs(up - tp) : null;
+      const safe = uThem != null && uThem > 0;
+      const urgent = left != null && left <= 3;
+      const acceptTh = Number(S.duel_accept ?? 0.5);
+      const nextSurplus = uUs != null ? uUs * (1 - decayR) : null;
+      const takeNow = safe && nextSurplus != null && (uThem >= acceptTh * nextSurplus || rnd >= Number(S.duel_rounds || 8) || (left != null && left <= 2));
+
+      let verdictTitle, verdictCol, verdictDetail;
+      if (tp == null) {
+        verdictTitle = "Waiting on rival"; verdictCol = "var(--muted)";
+        verdictDetail = up != null ? `Our standing offer ${up} P is on the table.` : "We still need to put a price down.";
+      } else if (!safe) {
+        verdictTitle = "Refuse — outside our limit"; verdictCol = "var(--critical)";
+        verdictDetail = seller
+          ? `Their ${tp} P is below our cost ${limit} P (would score negative).`
+          : `Their ${tp} P is above our value ${limit} P (would score negative).`;
+      } else if (takeNow) {
+        verdictTitle = `Take it · +${fmt(uThem, 1)} P for us`; verdictCol = "var(--up)";
+        verdictDetail = left != null && left <= 2
+          ? "Last chance before the deadline — accept settles next tick."
+          : `Rival offer clears our accept bar (${Math.round(acceptTh * 100)}% of our next-step surplus).`;
+      } else {
+        verdictTitle = gap != null ? `Keep talking · gap ${gap} P` : "Keep talking";
+        verdictCol = "var(--warning)";
+        verdictDetail = `Taking theirs now = +${fmt(uThem, 1)} P; our next offer ≈ +${fmt(uUs, 1)} P before decay. Pie ~${Math.round(pieLeft)}% left.`;
+      }
+
+      // negotiation series for the shared priceChart helper
+      const mv = [];
+      for (const m of msgs) {
+        const p = duelPrice(m); if (p == null || m.tick == null) continue;
+        const from = m.from || m.sender;
+        const who = (from === rival || from === x.rival) ? "them" : "us";
+        mv.push({ tick: m.tick, price: p, who, text: m.text || "", days: m.days });
+      }
+      // ensure standing offers show even if messages lag
+      if (up != null && tick != null && !mv.some(m => m.who === "us" && m.tick === tick && m.price === up))
+        mv.push({ tick: ours?.tick ?? tick, price: up, who: "us" });
+      if (tp != null && !mv.some(m => m.who === "them" && m.price === tp && m.tick === (them?.tick ?? tick)))
+        mv.push({ tick: them?.tick ?? tick, price: tp, who: "them" });
+      mv.sort((a, b) => a.tick - b.tick || (a.who === "us" ? 1 : -1));
+      duelTips[di] = mv;
+      const refs = [];
+      if (limit != null) refs.push({ v: limit, label: seller ? "our cost" : "our value", col: null });
+      const chart = mv.length ? `<div class="duel-chart" data-di="${di}">${priceChart(mv, refs)}</div>` : `<div class="empty">No priced messages yet.</div>`;
+
+      // offer ladder chips (last ~10 priced moves)
+      const ladder = mv.slice(-10).map(m =>
+        `<span class="duel-chip ${m.who}" title="tick ${m.tick}${m.days != null ? ` · day ${m.days}` : ""}">${m.price}<small style="font-weight:500;opacity:.75"> t${m.tick}</small></span>`
+      ).join("") + (limit != null ? `<span class="duel-chip limit" title="secret limit">limit ${limit}</span>` : "");
+
+      const clockCls = left == null ? "" : left <= 2 ? "hot" : left <= 5 ? "warn" : "ok";
+      const pieCls = pieLeft < 70 ? (pieLeft < 50 ? "hot" : "warn") : "ok";
+      const lastUs = [...msgs].reverse().find(m => (m.from || m.sender) !== rival);
+      const lastThem = [...msgs].reverse().find(m => (m.from || m.sender) === rival);
+
+      return `<div class="duel-card live${urgent ? " urgent" : ""}">
+        <div class="duel-arena">
+          <div class="side-block">
+            <div class="who">Us · ${esc(role)}</div>
+            <div class="name">Team 13</div>
+            <div class="price us">${up != null ? up : "—"}<span style="font-size:16px;font-weight:600"> P</span></div>
+            <div class="subp">${ud != null && twoI ? `delivery day ${ud} · ` : ""}${uUs != null ? `surplus if they take us: <b>${fmt(uUs, 1)} P</b>` : "no standing offer"}</div>
+          </div>
+          <div class="vs"><b>VS</b><div class="gap" style="color:${gap == null ? "var(--muted)" : gap <= 10 ? "var(--up)" : "var(--series-2)"}">${gap == null ? "…" : gap + " P gap"}</div></div>
+          <div class="side-block them">
+            <div class="who">Rival</div>
+            <div class="name">${esc(rival)}</div>
+            <div class="price them">${tp != null ? tp : "—"}<span style="font-size:16px;font-weight:600"> P</span></div>
+            <div class="subp">${td != null && twoI ? `delivery day ${td} · ` : ""}${uThem != null ? `our surplus if we take: <b style="color:${safe ? "var(--up)" : "var(--critical)"}">${fmt(uThem, 1)} P</b>` : "silent so far"}</div>
+          </div>
+        </div>
+        <div class="duel-meta">
+          <span class="chip">#${id}</span>
+          <span class="side ${seller ? "sell" : "buy"}">${esc(role)}</span>
+          <span class="chip">${esc(x.item || "item")}</span>
+          ${twoI ? `<span class="chip">days · w=${fmt(w ?? 0, 1)}</span>` : `<span class="chip">price only</span>`}
+          <span class="chip">limit <b>${limit ?? "–"}</b></span>
+          <span class="muted" style="margin-left:auto;font-size:12px">${esc(x.limit_meaning || (seller ? "never sell below cost" : "never pay above value"))}</span>
+        </div>
+        <div class="duel-body">
+          <div class="duel-meters">
+            <div class="meter"><div class="lab">Clock</div><div class="val">${left != null ? left : "–"} <span style="font-size:13px;font-weight:500;color:var(--muted)">ticks left</span></div>
+              <div class="bar"><i class="${clockCls}" style="width:${leftPct}%"></i></div></div>
+            <div class="meter"><div class="lab">Pie left</div><div class="val">${Math.round(pieLeft)}% <span style="font-size:13px;font-weight:500;color:var(--muted)">after ${rnd} rounds</span></div>
+              <div class="bar"><i class="${pieCls}" style="width:${pieLeft}%"></i></div></div>
+            <div class="meter"><div class="lab">Gap / limit</div><div class="val">${gap != null ? gap + " P" : "–"} <span style="font-size:13px;font-weight:500;color:var(--muted)">· limit ${limit ?? "–"}</span></div>
+              <div class="bar"><i class="${safe ? "ok" : "hot"}" style="width:${gap == null || up == null ? 0 : Math.max(4, Math.min(100, 100 - (gap / Math.max(1, Math.abs((up ?? limit) - (limit ?? 0)))) * 100))}%"></i></div></div>
+          </div>
+          <div class="duel-verdict" style="border-color:color-mix(in srgb, ${verdictCol} 45%, var(--border));background:color-mix(in srgb, ${verdictCol} 10%, var(--surface-2))">
+            <b class="big" style="color:${verdictCol}">${verdictTitle}</b>
+            <span class="sec">${verdictDetail}</span>
+          </div>
+          <div class="duel-chart-wrap">${chart}</div>
+          <div class="legend" style="margin:0 0 4px"><span><i class="swatch" style="background:var(--series-1)"></i>Us</span>
+            <span><i class="swatch" style="background:var(--series-2)"></i>Rival</span>
+            <span><i class="swatch" style="border:1px dashed var(--muted);background:transparent"></i>Our secret limit</span></div>
+          <div class="duel-ladder">${ladder || `<span class="muted">No priced moves yet</span>`}</div>
+          <details style="margin-top:8px"><summary>Latest messages</summary>
+            <div class="msgs" style="margin-top:8px">${[lastThem, lastUs].filter(Boolean).map(m => {
+              const us = (m.from || m.sender) !== rival;
+              const p = duelPrice(m);
+              return `<div class="msg ${us ? "us" : ""}"><div class="who">${esc(m.from || (us ? "us" : rival))}${m.tick != null ? ` · tick ${m.tick}` : ""}</div>
+                ${p != null ? `<span class="px">${p} P</span>${m.days != null ? ` · day ${m.days}` : ""} · ` : ""}${esc(m.text || "")}</div>`;
+            }).join("") || `<div class="empty">No messages yet.</div>`}</div>
+          </details>
+        </div>
+      </div>`;
+    }).join("");
+    $("duels-live").querySelectorAll(".duel-chart").forEach(el => {
+      const mv = duelTips[+el.dataset.di] || [];
+      bindTips(el, i => {
+        const m = mv[i]; if (!m) return "";
+        return `<b>${m.who === "us" ? "Our offer" : "Rival's offer"}: ${m.price} P</b>${m.days != null ? ` · day ${m.days}` : ""}<br>tick ${m.tick}${m.text ? "<br>" + esc(m.text).slice(0, 160) : ""}`;
+      });
+    });
+  }
+
+  // scoreboard: cumulative chart + filterable table
+  const sessions = [...new Set((board.duels || []).map(r => r.session).filter(s => s != null))].sort((a, b) => a - b);
+  if (DUEL_UI.session !== "all" && !sessions.includes(+DUEL_UI.session)) DUEL_UI.session = "all";
+  let rows = [...(board.duels || [])];
+  if (DUEL_UI.session !== "all") rows = rows.filter(r => r.session === +DUEL_UI.session);
+  if (DUEL_UI.sort === "pts") rows.sort((a, b) => (b.points || 0) - (a.points || 0) || (b.duel || 0) - (a.duel || 0));
+  else if (DUEL_UI.sort === "old") rows.sort((a, b) => (a.session - b.session) || (a.duel - b.duel));
+  else rows.sort((a, b) => (b.session - a.session) || (b.duel - a.duel));
+
+  // running total after filter (chrono)
+  const chrono = [...rows].sort((a, b) => (a.session - b.session) || (a.duel - b.duel));
+  let run = 0;
+  const runOf = new Map();
+  for (const r of chrono) { run += r.points || 0; runOf.set(r.duel, +run.toFixed(2)); }
+  const filterTotal = chrono.reduce((t, r) => t + (r.points || 0), 0);
+  const bestId = board.best?.duel;
+
+  if ($("duels-board-head")) {
+    const sessBits = (board.by_session || []).map(s =>
+      `S${s.session}: <b>${fmt(s.points)}</b> <span class="muted">(${s.deals}/${s.n})</span>`).join(" · ");
+    $("duels-board-head").innerHTML = board.n
+      ? `<div class="sec" style="font-size:13px;line-height:1.45">Showing <b>${rows.length}</b> duels · filter total <b class="pts good">${fmt(filterTotal)}</b>
+          · full raw total <b>${fmt(board.raw_total)}</b> · board duel points <b>${fmt(pts)}</b>
+          ${sessBits ? `<div style="margin-top:4px">${sessBits}</div>` : ""}</div>`
+      : `<div class="empty">Waiting for finished duels…</div>`;
+  }
+  if ($("duels-cum")) {
+    const cum = DUEL_UI.session === "all" ? (board.cumulative || [])
+      : chrono.map(r => ({ duel: r.duel, points: r.points, total: runOf.get(r.duel), status: r.status }));
+    $("duels-cum").innerHTML = duelCumChart(cum);
+    bindTips($("duels-cum"), i => {
+      const c = cum[i]; if (!c) return "";
+      return `<b>Duel #${c.duel}</b><br>This duel: <b>${fmt(c.points)}</b> pts${c.points <= 0 ? " · no deal" : ""}<br>Running total: <b>${fmt(c.total)}</b>`;
+    });
+  }
+  if ($("duels-board-tools")) {
+    const tab = (key, val, label) =>
+      `<button class="btn-s ${DUEL_UI[key] === val ? "on" : ""}" data-k="${key}" data-v="${val}">${label}</button>`;
+    $("duels-board-tools").innerHTML =
+      tab("session", "all", `All · ${board.n || 0}`)
+      + sessions.map(s => {
+        const slot = (board.by_session || []).find(x => x.session === s);
+        return tab("session", String(s), `S${s} · ${slot ? fmt(slot.points, 0) : "?"} pts`);
+      }).join("")
+      + `<span class="spacer"></span>`
+      + tab("sort", "new", "Newest") + tab("sort", "old", "Oldest") + tab("sort", "pts", "Best points");
+    $("duels-board-tools").querySelectorAll("button").forEach(b => b.onclick = () => {
+      DUEL_UI[b.dataset.k] = b.dataset.k === "session" && b.dataset.v !== "all" ? b.dataset.v : b.dataset.v;
+      if (b.dataset.k === "session") DUEL_UI.session = b.dataset.v;
+      duels(D);
+    });
+  }
+
+  const recent = [...recs].reverse().filter(r => r.action !== "raw").slice(0, 24);
+  if (!rows.length && !doneApi.length) {
+    $("duels-done").innerHTML = `<div class="board-empty"><b>No duel scores yet</b>
+      As soon as a session finishes, each duel’s points land here with a running total.</div>`;
+  } else {
+    $("duels-done").innerHTML = `<table><thead><tr>
+      <th class="num">Pts</th><th class="num">Total</th><th>Duel</th><th>Rival</th><th>Role</th>
+      <th>Item</th><th class="num">Price</th><th class="num">Limit</th><th class="num">Rds</th><th>Status</th></tr></thead><tbody>`
+      + rows.map(r => {
+        const p = r.points || 0;
+        const cls = r.duel === bestId ? "duel-row-best" : (p <= 0 ? "duel-row-zero" : "");
+        const pcls = p <= 0 ? "zero" : p >= 20 ? "good" : "mid";
+        return `<tr class="${cls}">
+          <td class="num pts ${pcls}">${fmt(p)}</td>
+          <td class="num muted">${fmt(runOf.get(r.duel))}</td>
+          <td>#${r.duel}${r.session != null ? ` <span class="chip">S${r.session}</span>` : ""}</td>
+          <td>${esc(r.rival || "–")}</td>
+          <td><span class="side ${String(r.role || "").startsWith("sell") ? "sell" : "buy"}">${esc(r.role || "–")}</span></td>
+          <td class="sec">${esc(r.item || "–")}</td>
+          <td class="num">${r.price ?? "–"}</td>
+          <td class="num">${r.limit ?? "–"}</td>
+          <td class="num">${r.rounds ?? "–"}</td>
+          <td>${r.status === "deal" ? `<span style="color:var(--up);font-weight:600">deal</span>` : `<span style="color:var(--critical);font-weight:600">no deal</span>`}</td>
+        </tr>`;
+      }).join("") + `</tbody></table>`
+      + `<details style="margin-top:14px"><summary>Agent decisions (${recent.length})</summary>`
+      + (recent.length ? `<table style="margin-top:8px"><thead><tr><th>When</th><th>Action</th><th>Duel</th><th>Detail</th></tr></thead><tbody>`
+        + recent.map(r => {
+          const detail = r.action === "accept"
+            ? `took ${r.price} P${r.days != null ? ` · day ${r.days}` : ""} · surplus ${fmt(r.our_surplus, 1)} (limit ${r.limit})`
+            : r.action === "offer"
+              ? `${r.role} @ ${r.price} P${r.days != null ? ` · day ${r.days}` : ""}${r.rival_price != null ? ` · rival ${r.rival_price}` : ""} · round ${r.k ?? "?"}`
+              : r.action === "result"
+                ? `${r.status}: <b>${fmt(r.score)}</b> pts · ${esc(r.role || "")} vs ${esc(r.rival || "")}`
+                : esc(r.error || r.action);
+          return `<tr><td class="sec">${hm(new Date(r.ts * 1000))}</td><td>${esc(r.action)}</td><td>#${r.duel ?? "–"}</td><td class="sec">${detail}</td></tr>`;
+        }).join("") + `</tbody></table>` : `<div class="empty">No decisions yet.</div>`)
+      + `</details>`;
+  }
 }
 
 // ---------- market ----------
@@ -1853,7 +2489,7 @@ async function refresh() {
     $("err").textContent = errs.length ? `⚠ stale: ${errs.map(k => k.replace("_error", "")).join(", ")}` : "";
     if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
     if (!ok(d.catalog)) { $("err").textContent = "⚠ waiting for catalog…"; return; }
-    const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
+    const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.duels_done, d.duels_board?.at, d.duel_learn?.last?.at, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
       d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length, d.council?.notes?.length, d.council?.state,
       d.swaps?.auto, (d.swaps?.opportunities || []).map(r => r.auto ? r.auto.at ?? r.auto.why : 0), d.swaps?.deals?.waiting, d.announcements?.[0]?.id]);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)

@@ -68,6 +68,7 @@ ROUTES = {
     "threads": ("/api/me/threads", 3, True),
     "offers": ("/api/me/offers", 6, True),
     "duels": ("/api/duels", 6, True),
+    "duels_done": ("/api/duels?done=true", 15, True),
     "clock": ("/api/clock", 2, False),
     "board": ("/api/venues/rastro/offers", 5, False),
     "feed": ("/api/feed?limit=200", 5, False),
@@ -326,6 +327,10 @@ def poll():
             if now < due[name]:
                 continue
             data = get(path, keyed)
+            if name in ("duels", "duels_done") and isinstance(data, dict):
+                for d in data.get("duels") or []:  # API names the id "duel"; keep both
+                    if d.get("id") is None and d.get("duel") is not None:
+                        d["id"] = d["duel"]
             with lock:
                 if "_error" in data and name in cache and "_error" not in cache[name]:
                     cache[name + "_error"] = data  # keep the last good value on a hiccup
@@ -381,11 +386,20 @@ class Handler(BaseHTTPRequestHandler):
                                           for k, (m, lo, hi, _) in council.RULES.items()},
                                 "trial_ticks": council.TRIAL_TICKS, "cooldown_ticks": council.COOLDOWN_TICKS,
                                 "cycle_seconds": council.CYCLE_SECONDS}
+                try:
+                    duel_learn = json.loads((HERE.parent / "team13" / "logs" / "duel_learn.json").read_text())
+                except (OSError, ValueError):
+                    duel_learn = {}
+                try:
+                    duels_board = json.loads((HERE.parent / "team13" / "logs" / "duels_board.json").read_text())
+                except (OSError, ValueError):
+                    duels_board = {}
                 body = json.dumps({**cache, "api_spend": api_spend(), "agent_state": agent_state, "council": council_view,
                                    "history": history, "served_at": time.time(),
                                    "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60),
                                    "origins": message_origins(INDEX, cache.get("threads"), (cache.get("me") or {}).get("id")),
-                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard(), "swaps": swaps_payload(), "announcements": announcements()}).encode()
+                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard(), "swaps": swaps_payload(),
+                                   "announcements": announcements(), "duel_learn": duel_learn, "duels_board": duels_board}).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):
             self._send(200, "application/json", json.dumps(strategy.describe()).encode())

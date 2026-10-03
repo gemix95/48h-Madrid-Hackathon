@@ -2,31 +2,27 @@
 
     source ../bazaar.env && ../.venv/bin/python -u venue_watch.py
 
-Events (each fires once until its condition clears):
-  rename_window   cash covers a new bond + opening fee and the next Market Test is far enough away
-  test_over       a Market Test just finished (best moment to close / reopen or change the fee)
-  fee_before_test a Market Test is near and our live fee is not 0%
-  fee_drift       our live fee differs from strategy.json's venue_fee_bps
-  pending_fee     a fee change is waiting out its notice
-  venue_status    our venue is not open or carries a suspension reason
-  rivals          a rival venue opened, closed or changed its fee
-Never writes to the API, state.json or strategy.json.
+Light on the API: venues + schedule most cycles; /api/me only when cash might unlock a rename.
+On 429, backs off. Never writes to the API, state.json or strategy.json.
 """
 from __future__ import annotations
 
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).parent
 URL, KEY = os.environ["BAZAAR_URL"], os.environ["BAZAAR_KEY"]
-POLL = 60
-HEARTBEAT = 1800
-REOPEN_CASH = 290            # 250 bond + 20 opening fee + margin
-RENAME_MIN_GAP_HOURS = 0.75  # game hours to the next Market Test needed to close, reopen and settle the broker
-BENCH_HOURS = 0.2            # a Market Test (16 ticks) is over this long after it starts
+POLL = 300                   # 5 min steady state
+POLL_429 = 900               # 15 min after a rate limit
+HEARTBEAT = 3600
+ME_EVERY = 3                 # hit /api/me every N successful cycles
+REOPEN_CASH = 290
+RENAME_MIN_GAP_HOURS = 0.75
+BENCH_HOURS = 0.2
 TARGET_NAME = "El Club · Where Madrid Trades"
 
 
@@ -43,13 +39,17 @@ def emit(event, **detail):
 
 def main():
     fired, rivals, last_beat, last_bench = set(), None, time.time(), None
+    cash, me_cycle, sleep_for = 0, 0, POLL
     while True:
         try:
             ours_id = json.loads((HERE / "state.json").read_text()).get("venue")
             want_fee = int(json.loads((HERE / "strategy.json").read_text()).get("venue_fee_bps", 0))
             venues = get("/api/venues")["venues"]
-            me = get("/api/me", auth=True)
             sched = get("/api/schedule")
+            me_cycle += 1
+            if me_cycle >= ME_EVERY or cash < REOPEN_CASH:
+                cash = int(get("/api/me", auth=True).get("cash") or 0)
+                me_cycle = 0
             now = float(sched.get("now_hours") or 0)
             benches = [u for u in sched.get("upcoming", []) if u.get("action") == "bench"]
             eta = float(benches[0]["at_hours"]) - now if benches else None
@@ -63,14 +63,14 @@ def main():
                 conds["fee_drift"] = (int(ours["fee_bps"]) != want_fee, {"live": ours["fee_bps"], "strategy": want_fee})
                 conds["fee_before_test"] = (eta is not None and eta <= 0.5 and int(ours["fee_bps"]) > 0,
                                             {"eta_h": eta, "live": ours["fee_bps"]})
-                conds["rename_window"] = (ours["name"] != TARGET_NAME and me.get("cash", 0) >= REOPEN_CASH
+                conds["rename_window"] = (ours["name"] != TARGET_NAME and cash >= REOPEN_CASH
                                           and (eta is None or eta >= RENAME_MIN_GAP_HOURS),
-                                          {"cash": me.get("cash"), "eta_h": eta, "name": ours["name"]})
+                                          {"cash": cash, "eta_h": eta, "name": ours["name"]})
 
-            if benches and (last_bench is None or last_bench > now):  # a started test may drop off "upcoming"
+            if benches and (last_bench is None or last_bench > now):
                 last_bench = float(benches[0]["at_hours"])
             done = last_bench is not None and now >= last_bench + BENCH_HOURS
-            conds["test_over"] = (done, {"bench_at": last_bench, "cash": me.get("cash")})
+            conds["test_over"] = (done, {"bench_at": last_bench, "cash": cash})
             if done:
                 last_bench = None
 
@@ -82,17 +82,22 @@ def main():
                     fired.discard(name)
 
             snap = {v["venue"]: (v["status"], v["fee_bps"], v.get("fee_per_card")) for v in venues
-                    if v["venue"] != ours_id and not v.get("starter")}  # free starter stalls never change our decision
+                    if v["venue"] != ours_id and not v.get("starter")}
             if rivals is not None and snap != rivals:
                 emit("rivals", changes={k: snap.get(k) for k in set(snap) | set(rivals) if snap.get(k) != rivals.get(k)})
             rivals = snap
 
             if time.time() - last_beat >= HEARTBEAT:
                 last_beat = time.time()
-                emit("heartbeat", cash=me.get("cash"), eta_h=eta, fee=ours and ours["fee_bps"], name=ours and ours["name"])
-        except Exception as e:  # keep watching through network blips
+                emit("heartbeat", cash=cash, eta_h=eta, fee=ours and ours["fee_bps"], name=ours and ours["name"])
+            sleep_for = POLL
+        except urllib.error.HTTPError as e:
+            sleep_for = POLL_429 if e.code == 429 else POLL
+            print(f"venue_watch error: {e} (sleep {sleep_for}s)", flush=True)
+        except Exception as e:
+            sleep_for = POLL
             print(f"venue_watch error: {e}", flush=True)
-        time.sleep(POLL)
+        time.sleep(sleep_for)
 
 
 if __name__ == "__main__":

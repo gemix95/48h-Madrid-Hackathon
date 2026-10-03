@@ -237,6 +237,13 @@ def announce(rec: dict, dealer_names: dict | None = None) -> None:
     elif m == "duel" and a == "accept":
         post("duels", "deal", f"Duel {rec.get('duel')} settled at {rec.get('price')} P, {rec.get('days')} days.",
              {"duel": rec.get("duel"), "price": rec.get("price")}, tick=t)
+    elif m == "duel" and a == "result":
+        post("duels", "score", f"Duel {rec.get('duel')} {rec.get('status')}: score {rec.get('score')} "
+             f"({rec.get('role')} vs {rec.get('rival')}, {rec.get('rounds')} rounds).",
+             {"duel": rec.get("duel"), "score": rec.get("score"), "status": rec.get("status")}, tick=t)
+    elif m == "duel_tuner" and a in ("applied", "proposal", "current_is_best"):
+        post("tuner", "duels", rec.get("lesson") or f"Duel tune {a}: {rec.get('applied') or rec.get('changes')}",
+             {"applied": rec.get("applied"), "mean_score": rec.get("mean_score"), "deal_rate": rec.get("deal_rate")}, tick=t)
     elif m == "flip" and a in ("buy", "sell"):
         txt = (f"Flip: bought {rec.get('ref')} at {rec.get('price')} P to sell to {rec.get('target_team')} at {rec.get('target_bid')} P."
                if a == "buy" else f"Flip: sold {rec.get('ref')} to {rec.get('buyer')} for {rec.get('price')} P.")
