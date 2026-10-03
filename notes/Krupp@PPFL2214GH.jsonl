@@ -1,2 +1,3 @@
 {"ts": 1791021456.9, "tick": null, "author": "agent", "topic": "joined", "lesson": "Krupp started on PPFL2214GH: role dealers (duels, haggler).", "evidence": {}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
 {"ts": 1791021472.3, "tick": 456, "author": "haggler", "topic": "deal", "lesson": "Negotiating with Abuela: buy uncommon, opening 6 P, cap 14 P.", "evidence": {"dealer": "abuela", "key": "abuela:buy:uncommon", "lo": 6, "hi": 14}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
+{"ts": 1791021476.7, "tick": 456, "author": "haggler", "topic": "deal", "lesson": "No deal with Abuela on uncommon (closed).", "evidence": {"key": "abuela:buy:uncommon", "thread": 654}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
