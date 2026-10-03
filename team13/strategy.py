@@ -16,6 +16,7 @@ KNOBS = {
     "enable_trader": (1, 0, 1, 1, "Modules", "Team trading", "Trade with other teams on El Rastro at our private values."),
     "enable_duels": (1, 0, 1, 1, "Modules", "Duels", "Play the duel tournament automatically."),
     "enable_venue": (1, 0, 1, 1, "Modules", "Open our market", "Open our own market as soon as we reach level 2."),
+    "broker_in_agent": (1, 0, 1, 1, "Modules", "Broker inside the agent", "0 when the broker runs on our server (systemd bazaar-broker): one broker per venue. Takes effect next tick; an already running broker thread stops only with an agent restart."),
     "enable_guard": (1, 0, 1, 1, "Modules", "Guard", "Last each tick: cancel any open offer of ours that loses value at our private values or breaks a team cap."),
     "enable_flipper": (1, 0, 1, 1, "Modules", "Flipper", "Buy a card a team sells below another team's bid and sell into that bid (profit after both fees)."),
     "enable_wtb": (1, 0, 1, 1, "Modules", "Want-to-buy asks", "Direct offers to teams that probably hold a card we need and do not collect its set."),

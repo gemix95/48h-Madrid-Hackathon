@@ -200,6 +200,8 @@ class Market:
     # ------------------------------------------------------------------ broker (Market Test + real offers)
     def ensure_broker(self):
         """Run the broker in a thread unless the standalone broker (smart_broker.py, survives agent restarts) runs."""
+        if not self.ctx.S.get("broker_in_agent", 1):
+            return  # the broker runs elsewhere (our server): one broker per venue
         key = self.ctx.state.get("broker_key")
         if not key or (self.broker_thread and self.broker_thread.is_alive()):
             return
