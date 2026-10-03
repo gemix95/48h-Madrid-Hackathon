@@ -87,14 +87,16 @@ def post(author: str, topic: str, lesson: str, evidence: dict | None = None, tic
     return note
 
 
-def peer_claims(exclude_host: str | None = None, max_age_s: float = 2400) -> set:
+def peer_claims(exclude_agent: str | None = None, exclude_host: str | None = None, max_age_s: float = 2400) -> set:
     """Plan keys (`dealer:buy:rare`, …) another agent is still negotiating (from haggler deal notes)."""
     cutoff = time.time() - max_age_s
     open_keys: dict = {}
     for note in read(n=400):
         if (note.get("ts") or 0) < cutoff:
             continue
-        if exclude_host and note.get("host") == exclude_host:
+        if exclude_agent and note.get("agent") == exclude_agent:
+            continue
+        if exclude_host and not exclude_agent and note.get("host") == exclude_host:
             continue
         if note.get("author") != "haggler" or note.get("topic") != "deal":
             continue
@@ -109,12 +111,14 @@ def peer_claims(exclude_host: str | None = None, max_age_s: float = 2400) -> set
     return set(open_keys)
 
 
-def peer_lessons(exclude_host: str | None = None, n: int = 10) -> list:
+def peer_lessons(exclude_agent: str | None = None, exclude_host: str | None = None, n: int = 10) -> list:
     """Short strategy lines from other laptops' agents and the tuner (for Claude + logs)."""
     want = {"learn", "dealers", "selling", "buying", "value", "duels", "our_market", "safety", "volume", "market"}
     out, seen = [], set()
     for note in reversed(read(n=250)):
-        if exclude_host and note.get("host") == exclude_host:
+        if exclude_agent and note.get("agent") == exclude_agent:
+            continue
+        if exclude_host and not exclude_agent and note.get("host") == exclude_host:
             continue
         top = note.get("topic") or ""
         auth = note.get("author") or ""

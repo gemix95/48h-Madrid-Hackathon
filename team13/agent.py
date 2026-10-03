@@ -53,8 +53,36 @@ import strategy
 
 HERE = Path(__file__).parent
 LOGS = HERE / "logs"
-STATE = HERE / "state.json"
+STATE = HERE / "state.json"  # default for AGENT_ROLE=all; split roles use state-{role}.json
 VENUE_BOND = 270
+
+
+def role_label(role_str: str) -> str:
+    r = (role_str or "all").strip().lower()
+    return r if r in ("all", "dealers", "market") else "custom"
+
+
+def state_path_for(role_str: str) -> Path:
+    label = role_label(role_str)
+    return STATE if label == "all" else HERE / f"state-{label}.json"
+
+
+def seed_split_state(label: str, spath: Path) -> None:
+    """First run of dealers+market on one laptop: copy the old monolithic state.json into each role file."""
+    if spath.exists() or label == "all" or not STATE.exists():
+        return
+    try:
+        old = json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return
+    market_keys = ("venue", "broker_key", "venue_keys", "fee_set", "announce_tick", "announce_n", "cashback",
+                   "club_rewards", "invites", "nudged", "invite_threads", "bench_eta", "venue_try_tick")
+    if label == "market":
+        seed = {k: old[k] for k in market_keys if k in old}
+    else:
+        seed = {k: v for k, v in old.items() if k not in market_keys}
+    if seed:
+        spath.write_text(json.dumps(seed, indent=1, default=str))
 
 
 class DryApi:
@@ -102,10 +130,12 @@ class OwnedApi:
 
 
 class Context:
-    def __init__(self, api, dry=False):
+    def __init__(self, api, dry=False, state_path: Path | None = None):
         LOGS.mkdir(exist_ok=True)
         self._logf = open(LOGS / "decisions.jsonl", "a", buffering=1)
-        self.state = json.loads(STATE.read_text()) if STATE.exists() else {}
+        self._state_path = state_path or STATE
+        self.state = json.loads(self._state_path.read_text()) if self._state_path.exists() else {}
+        self.agent_id = None
         self.api = OwnedApi(DryApi(api, self.log) if dry else api, self)
         self.raw = api
         self.shared = False  # True when AGENT_ROLE splits the modules with teammates' agents
@@ -136,9 +166,10 @@ class Context:
                 pass
 
     def save(self):
-        tmp = STATE.with_suffix(".tmp")
+        path = self._state_path
+        tmp = path.with_name(path.name + ".tmp")
         tmp.write_text(json.dumps(self.state, indent=1, default=str))
-        tmp.replace(STATE)
+        os.replace(tmp, path)
 
     # ---------------------------------------------------------------- budgets & rules
     def limit(self, name, default):
@@ -361,8 +392,9 @@ class Context:
                                       "capture": m.get("dealer_capture")},
                                      tick=self.clock.get("tick", 0))
         if getattr(self, "shared", False) and self.clock.get("tick", 0) % 8 == 0:
-            self.state["peer_claims"] = council.peer_claims(exclude_host=council.HOST)
-            self.state["peer_lessons"] = council.peer_lessons(exclude_host=council.HOST, n=8)
+            ex = self.agent_id
+            self.state["peer_claims"] = council.peer_claims(exclude_agent=ex)
+            self.state["peer_lessons"] = council.peer_lessons(exclude_agent=ex, n=8)
         self.threads = api.my_threads().get("threads", [])
         self.my_offers = api.my_offers().get("offers", [])
         self.read_markets()
@@ -382,18 +414,18 @@ class Context:
         self._accepts = {"team": self.limit("accepts_per_team_per_tick", 1), "duel": 3}
 
 
-def single_instance():
-    """Exactly one agent may write with our key. A second copy on this machine exits at once (Friday: stale copies
-    kept running with old code after a restart). The lock is released automatically when the process dies."""
+def single_instance(label: str = "all"):
+    """One agent process per role label on this machine (dealers + market may run together)."""
     import fcntl
     LOGS.mkdir(exist_ok=True)
-    f = open(LOGS / "agent.lock", "a+")
+    lock = LOGS / f"agent-{label}.lock"
+    f = open(lock, "a+")
     try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         f.seek(0)
-        raise SystemExit(f"Another agent is already running (pid {f.read().strip() or '?'}). Stop it first: "
-                         f"kill $(cat team13/logs/agent.lock)")
+        raise SystemExit(f"Another agent-{label} is already running (pid {f.read().strip() or '?'}). Stop it: "
+                         f"kill $(cat team13/logs/agent-{label}.lock)")
     f.seek(0)
     f.truncate()
     f.write(str(os.getpid()))
@@ -405,8 +437,8 @@ def single_instance():
 # so each agent owns a disjoint set of modules: two agents never haggle with the same dealer or hit the same offer.
 ROLES = {
     "all": {"duels", "haggler", "venue", "trader", "flipper", "wtb", "loans", "workshop"},
-    "dealers": {"duels", "haggler", "workshop"},   # ladder + tournament; workshop is shared with market (a second POST is refused)
-    "market": {"venue", "trader", "flipper", "wtb", "loans", "workshop"},  # our market, trades, flips, asks, workshop
+    "dealers": {"duels", "haggler"},   # workshop runs on the market agent so two processes never double-craft
+    "market": {"venue", "trader", "flipper", "wtb", "loans", "workshop"},
 }
 
 
@@ -434,9 +466,13 @@ def main():
     role = parse_role(args.role)
     if args.no_trade:
         role -= {"trader", "flipper", "wtb", "loans"}
-    _lock = None if args.dry_run else single_instance()  # noqa: F841 (held until exit)
+    label = role_label(args.role)
+    spath = state_path_for(args.role)
+    if not args.dry_run:
+        seed_split_state(label, spath)
+    _lock = None if args.dry_run else single_instance(label)  # noqa: F841 (held until exit)
     api = Bazaar(os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai"), os.environ["BAZAAR_KEY"], wait_on_tick=False)
-    ctx = Context(api, dry=args.dry_run)
+    ctx = Context(api, dry=args.dry_run, state_path=spath)
     ctx.agent_budget = args.budget
     ctx.shared = role != ROLES["all"]
     build = [("loans", LoanDesk),  # first: lock a collateral that just arrived before any module could list it
@@ -454,7 +490,9 @@ def main():
     flagger = FlagHunter(ctx)  # proven bad faith in dealer messages to us: a correct flag scores
     # El Consejo: a unique id for this agent (fixed until it restarts), then announce every deal we make
     agent_id = None if args.dry_run else council.identify(args.role)
-    ctx.log("agent", "start", dry=args.dry_run, role=sorted(role), agent_budget=args.budget, agent_id=agent_id)
+    ctx.agent_id = agent_id
+    ctx.log("agent", "start", dry=args.dry_run, role=sorted(role), agent_budget=args.budget, agent_id=agent_id,
+            state_file=spath.name, lock=f"agent-{label}.lock")
     if agent_id:
         council.start_sync()
         council.post("agent", "joined", f"{agent_id} started on {council.HOST}: role {args.role} ({', '.join(sorted(role))})"

@@ -5,9 +5,11 @@
 ## Who runs which agent (one key, disjoint roles)
 
 - **Sergio's Mac: `AGENT_ROLE=market`** (venue, trader, flipper, wtb), since Saturday 11:40.
-- **Emmanuele's agent must run `AGENT_ROLE=dealers`** (duels, haggler): pull, then
-  `kill $(cat team13/logs/agent.lock); source bazaar.env && cd team13 && AGENT_ROLE=dealers python3 agent.py`.
-  Two agents with role `all` haggle with the same dealers and trade the same cards.
+- **Emmanuele's laptop may run two agents at once** (disjoint modules, separate state files):
+  `./team13/run_split_agents.sh` or two terminals with `AGENT_ROLE=dealers` and `AGENT_ROLE=market`
+  (locks `agent-dealers.lock` / `agent-market.lock`, state `state-dealers.json` / `state-market.json`).
+  They coordinate through **El Consejo** (deals, learn notes, peer_claims). Still do not run the same role twice
+  (here + server). Pull before start; push after changes.
 - The AI negotiator is Claude Opus 5.5 at medium effort (`llm_effort` 1). It needs the `anthropic` SDK and the key
   in `anthropic.env` at the repo root (git-ignored). The agent picks the key up within 30 s, with no restart.
 

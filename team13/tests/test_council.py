@@ -62,14 +62,20 @@ other = council.SPOOL / "Walton@MacBook-Pro-de-Sergio.jsonl"
 other.write_text(json.dumps({"ts": time.time(), "author": "haggler", "topic": "deal", "host": "MacBook-Pro-de-Sergio",
                              "lesson": "Negotiating with Chato: buy rare, opening 40 P, cap 60 P.",
                              "evidence": {"key": "chato:buy:rare"}, "agent": "Walton"}) + "\n")
-results.append(check("peer_claims sees another laptop's open deal",
-                     "chato:buy:rare" in council.peer_claims(exclude_host=council.HOST)))
+results.append(check("peer_claims sees another agent's open deal",
+                     "chato:buy:rare" in council.peer_claims(exclude_agent="Rockefeller")))
 other.write_text(other.read_text() + json.dumps({"ts": time.time() + 1, "author": "haggler", "topic": "deal",
                                                  "host": "MacBook-Pro-de-Sergio",
                                                  "lesson": "Deal with Chato: rare for 45 P after 3 offers.",
                                                  "evidence": {"key": "chato:buy:rare"}, "agent": "Walton"}) + "\n")
 results.append(check("peer_claims clears after deal note",
-                     "chato:buy:rare" not in council.peer_claims(exclude_host=council.HOST)))
+                     "chato:buy:rare" not in council.peer_claims(exclude_agent="Rockefeller")))
+(council.SPOOL / "Walton@MacBook-Pro-de-Sergio.jsonl").write_text(json.dumps(
+    {"ts": time.time(), "author": "haggler", "topic": "deal", "host": "PPFL2214GH",
+     "lesson": "Negotiating with Chato: buy rare, opening 40 P, cap 60 P.",
+     "evidence": {"key": "chato:buy:rare"}, "agent": "Walton", "role": "market"}) + "\n")
+results.append(check("same host, other role: dealers sees market agent's claim",
+                     "chato:buy:rare" in council.peer_claims(exclude_agent="Pulitzer")))
 
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
