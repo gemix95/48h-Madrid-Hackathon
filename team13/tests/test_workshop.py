@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, ".")
 
 from values import Values
-from workshop import choose, spare_copies
+from workshop import choose, spare_copies, accumulating, listing_reserve, HOLD_ALL_RESERVE
 
 CAT = {
     "values": {"copy_marginals": [1.0, 0.25, 0.1], "page_bonus": 0.25, "master_bonus": 0.1},
@@ -78,9 +78,22 @@ def test_prefers_the_bigger_upgrade():
     print("bigger upgrade first", plan["rarity"], plan["surplus"])
 
 
+def test_accumulate_holds_listings():
+    v = hand({"LAT-01": 2, "LAT-02": 2})
+    accum, rar, n = accumulating(v, set(), 3)
+    assert accum and rar == "common" and n == 2
+    S = {"enable_workshop": 1, "workshop_accumulate": 1, "workshop_trio_target": 3, "workshop_spares": 8}
+    assert listing_reserve(S, v, set()) == HOLD_ALL_RESERVE
+    v3 = hand({"LAT-01": 2, "LAT-02": 2, "LAT-03": 2})
+    assert accumulating(v3, set(), 3)[0] is False
+    assert listing_reserve(S, v3, set()) == 8
+    print("accumulate ok")
+
+
 if __name__ == "__main__":
     test_crafts_cheap_duplicates()
     test_skips_when_the_spares_are_worth_more()
     test_keeps_the_last_copy_and_skips_locked()
     test_prefers_the_bigger_upgrade()
+    test_accumulate_holds_listings()
     print("workshop ok")

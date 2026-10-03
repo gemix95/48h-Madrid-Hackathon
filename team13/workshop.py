@@ -13,6 +13,8 @@ from __future__ import annotations
 from bazaar_sdk import BazaarError
 
 NEXT = {"common": "uncommon", "uncommon": "rare", "rare": "epic", "epic": "legendary"}
+RARITY_LADDER = ("common", "uncommon", "rare", "epic")
+HOLD_ALL_RESERVE = 9999  # spares(reserve=…) returns nothing listable
 
 
 def spare_copies(values, locked) -> list:
@@ -31,6 +33,54 @@ def spare_copies(values, locked) -> list:
         free.sort(key=lambda a: (a.get("serial", 0), a["id"]))
         out.extend(free[-n_give:] if n_give else [])
     return out
+
+
+def fuel_by_rarity(values, locked) -> dict:
+    by: dict = {}
+    for a in spare_copies(values, locked):
+        rar = values.cards[a["ref"]]["rarity"]
+        by.setdefault(rar, []).append(a)
+    return by
+
+
+def accumulating(values, locked, target: int = 3) -> tuple[bool, str, int]:
+    """True while we do not yet have `target` spare copies of any one tier (workshop fuel).
+
+    Returns (still_accumulating, tier closest to a trio, how many spares we have there).
+    """
+    if target < 1:
+        return False, "", 0
+    by = fuel_by_rarity(values, locked)
+    best_rar, best_n = "common", 0
+    for rar in RARITY_LADDER:
+        n = len(by.get(rar, []))
+        if n >= target:
+            return False, rar, n
+        if n > best_n:
+            best_rar, best_n = rar, n
+    return True, best_rar, best_n
+
+
+def listing_reserve(strategy: dict, values, locked) -> int:
+    """How many cheapest spares stay off El Rastro. While accumulating a trio, hold every duplicate."""
+    if not int(strategy.get("enable_workshop", 1)):
+        return int(strategy.get("workshop_spares", 0))
+    if int(strategy.get("workshop_accumulate", 1)):
+        accum, _, _ = accumulating(values, locked, int(strategy.get("workshop_trio_target", 3)))
+        if accum:
+            return HOLD_ALL_RESERVE
+    return int(strategy.get("workshop_spares", 0))
+
+
+def restock_packs(strategy: dict, values, locked) -> bool:
+    """Whether the haggler should buy neighbourhood packs to grow the duplicate pool."""
+    if int(strategy.get("enable_workshop", 1)) and int(strategy.get("workshop_accumulate", 1)):
+        accum, _, _ = accumulating(values, locked, int(strategy.get("workshop_trio_target", 3)))
+        if accum:
+            return True
+    if len(spare_copies(values, locked)) < int(strategy.get("workshop_spares", 0)):
+        return True
+    return bool(strategy.get("haggle_buy_packs"))
 
 
 def choose(values, locked, edge: float) -> dict | None:

@@ -127,9 +127,11 @@ class Haggler:
         buys_today = ctx.state.setdefault("dealer_buys", {}).get(f"{ctx.day_key()}:{dealer['id']}", 0)
         can_buy = buys_today < S.get("deals_per_dealer_day", 5)
         item_cap = min(S.get("max_dealer_buy", 40), ctx.budget_left())
-        # Restock workshop: buy packs while our dump/duplicate pool is below the reserve target
-        need_workshop = len(ctx.values.spares(reserve=0)) < int(S.get("workshop_spares", 0))
-        buy_packs = bool(S["haggle_buy_packs"] or need_workshop)
+        from workshop import accumulating, restock_packs
+        buy_packs = restock_packs(S, ctx.values, ctx.locked_assets())
+        accum, acc_rar, acc_have = (accumulating(ctx.values, ctx.locked_assets(), int(S.get("workshop_trio_target", 3)))
+                                    if int(S.get("workshop_accumulate", 1)) and int(S.get("enable_workshop", 1))
+                                    else (False, "", 0))
         for s in (menu.get("sells", []) if can_buy else []):  # 1) packs: the cleanest price range to capture
             if buy_packs and "pack" in s and counts["packs"] < s.get("per_team_per_hour", 3):
                 key = f"{dealer['id']}:buy:{s['pack']}"
@@ -151,7 +153,8 @@ class Haggler:
                                                        "list": s.get("list_price"), "opening": s.get("opening_ask"),
                                                        "worth": round(worth, 1), "rounds": self._rounds(dealer["id"])}
         buys = {b.get("rarity") for b in menu.get("buys", [])}
-        spare_pool = ctx.values.spares(reserve=int(S.get("workshop_spares", 0))) if S["haggle_sell_spares"] else []
+        hold_spares = accum or not S["haggle_sell_spares"]
+        spare_pool = [] if hold_spares else ctx.values.spares(reserve=int(S.get("workshop_spares", 0)))
         for a in spare_pool:  # 2) sell a spare above the workshop reserve, never below its value to us
             if a.get("rarity") not in buys or a["id"] in ctx.locked_assets():
                 continue

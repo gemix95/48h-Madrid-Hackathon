@@ -534,9 +534,13 @@ class Market:
         ctx, v = self.ctx, self.ctx.values
         if not v:
             return None
+        from workshop import listing_reserve, spare_copies
         locked = ctx.locked_assets()
-        reserve = int(ctx.S.get("workshop_spares", 0))
-        hold = {a["id"] for a in v.workshop_held(reserve)}
+        reserve = listing_reserve(ctx.S, v, locked)
+        if reserve >= 9999:
+            hold = {a["id"] for a in spare_copies(v, locked)}
+        else:
+            hold = {a["id"] for a in v.workshop_held(reserve)}
         best = None
         for a in v.assets:
             if a.get("kind") != "card" or a.get("rarity") != "common" or a["id"] in locked or a["id"] in exclude:

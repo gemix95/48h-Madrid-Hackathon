@@ -1155,6 +1155,12 @@ function workshopTab(d) {
     const cards = fuelBy[r].map(a => `<span class="ws-mini-card${a.listed ? " listed" : ""}">${emblem(r)}<b>${esc(a.ref)}</b><span class="muted">#${a.serial ?? "?"}</span>${a.listed ? " · listed" : ""}</span>`).join("");
     return `<div class="ws-spare-group"><h3>${RAR_LABEL[r] || r} · ${fuelBy[r].length} spare${fuelBy[r].length === 1 ? "" : "s"}</h3><div class="ws-spare-cards">${cards}</div></div>`;
   });
+  const acc = W.accumulate || {};
+  if (acc.active) {
+    sparesHtml = `<div class="ws-reserve"><b>Hoarding mode</b> — every duplicate stays in the album (nothing listed on El Rastro, nothing sold to dealers). `
+      + `Need <b>${acc.need}</b> more ${esc((disp.in_label || "common").toLowerCase())} spare${acc.need === 1 ? "" : "s"} `
+      + `(${acc.have}/${kn.trio_target ?? 3} so far). Packs are the main way to grow this pool.</div>` + sparesHtml;
+  }
   $("ws-spares").innerHTML = sparesHtml + (groups.length ? `<div class="ws-spare-grid">${groups.join("")}</div>`
     : `<div class="empty">No extra copies we can burn yet. Duplicates come from packs and trades — the agent buys packs when we are below the reserve target.</div>`);
 

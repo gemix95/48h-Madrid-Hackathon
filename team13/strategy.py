@@ -67,8 +67,13 @@ KNOBS = {
                            "Sell duplicates/low-value cards to dealers (only above the workshop reserve)."),
     "haggle_buy_cards": (1, 0, 1, 1, "Dealers", "Buy single cards", "Buy cards we value most (Salamanca, Malasaña)."),
     "workshop_spares": (8, 0, 30, 1, "Trading", "Spares kept for the workshop",
-                        "Never sell, list, swap or gift this many cheapest dump/duplicate cards. Buy neighbourhood "
-                        "packs to restock when we are below the target. 0 = no reserve."),
+                        "After a full trio exists, never sell or list this many cheapest dump/duplicate cards. "
+                        "0 = no reserve."),
+    "workshop_accumulate": (1, 0, 1, 1, "Trading", "Stock a workshop trio first",
+                             "Until we hold 3 spare copies of one tier (different cards, same rarity), do not list "
+                             "or sell any duplicate — and buy neighbourhood packs to fill the pool."),
+    "workshop_trio_target": (3, 3, 9, 1, "Trading", "Spares needed before selling extras",
+                             "El Taller needs exactly three; accumulate mode relaxes only after this many on one tier."),
     # trading
     "rival_margin": (6, 0, 30, 1, "Trading", "Post only on markets of teams this far behind us (points)",
                      "A trade on a team's market scores for its owner; below this margin we post on El Rastro instead."),

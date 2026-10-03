@@ -15,7 +15,11 @@ _spec = importlib.util.spec_from_file_location("agent_workshop", ROOT / "worksho
 _agent_ws = importlib.util.module_from_spec(_spec)
 assert _spec.loader
 _spec.loader.exec_module(_agent_ws)
-NEXT, choose, spare_copies = _agent_ws.NEXT, _agent_ws.choose, _agent_ws.spare_copies
+NEXT = _agent_ws.NEXT
+choose = _agent_ws.choose
+spare_copies = _agent_ws.spare_copies
+accumulating = _agent_ws.accumulating
+listing_reserve = _agent_ws.listing_reserve
 
 RARITIES = ("common", "uncommon", "rare", "epic", "legendary")
 
@@ -61,6 +65,10 @@ def view(me, catalog, offers, threads, levels, strategy_s: dict, agent_state: di
     edge = float((strategy_s or {}).get("workshop_edge", 2))
     reserve = int((strategy_s or {}).get("workshop_spares", 0))
     enable = int((strategy_s or {}).get("enable_workshop", 1))
+
+    trio = int((strategy_s or {}).get("workshop_trio_target", 3))
+    accum_on = int((strategy_s or {}).get("workshop_accumulate", 1))
+    accum, acc_rar, acc_have = accumulating(v, locked, trio) if enable and accum_on else (False, "", 0)
 
     plan = choose(v, locked, edge) if enable else None
 
@@ -166,6 +174,19 @@ def view(me, catalog, offers, threads, levels, strategy_s: dict, agent_state: di
             worth_out_avg=plan["ev"],
             worth_gain=plan["surplus"],
         )
+    elif accum:
+        lbl_in = RAR_LABEL.get(acc_rar, acc_rar)
+        lbl_out = RAR_LABEL.get(NEXT.get(acc_rar, ""), NEXT.get(acc_rar, ""))
+        need = max(0, trio - acc_have)
+        display.update(
+            in_label=lbl_in, out_label=lbl_out,
+            progress_have=acc_have, progress_need=trio, progress_pct=round(100 * min(trio, acc_have) / trio),
+            headline=f"Saving every duplicate · {acc_have} of {trio} {lbl_in} spares",
+            detail=f"We are not selling or listing any extra copies until we have {trio} spares of one tier "
+                   f"(three different cards, same rarity). The agent buys neighbourhood packs when it can. "
+                   f"Need {need} more {lbl_in} duplicate{'s' if need != 1 else ''}.",
+            badge=f"Hoarding · {acc_have}/{trio}", badge_tone="info",
+        )
     elif best_path:
         have, need = best_path["fuel"], best_path["need"]
         lbl_in = RAR_LABEL.get(best_path["rarity"], best_path["rarity"])
@@ -203,7 +224,8 @@ def view(me, catalog, offers, threads, levels, strategy_s: dict, agent_state: di
         "display": display,
         "level": {"name": lvl.get("name") if lvl else "The Workshop", "state": (lvl or {}).get("state"),
                   "teaser": (lvl or {}).get("teaser"), "how": (lvl or {}).get("how")},
-        "knobs": {"enable": enable, "edge": edge, "reserve": reserve},
+        "knobs": {"enable": enable, "edge": edge, "reserve": reserve, "accumulate": accum_on, "trio_target": trio},
+        "accumulate": {"active": accum, "tier": acc_rar, "have": acc_have, "need": max(0, trio - acc_have)},
         "plan": plan,
         "rungs": rungs,
         "fuel_by_rarity": by_rar,

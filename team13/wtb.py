@@ -65,7 +65,9 @@ class Asker:
         """Our spare card that `team` collects and that leaves us at least the minimum gain, or None."""
         ctx, v = self.ctx, self.ctx.values
         best = None
-        for a in v.spares(reserve=int(self.ctx.S.get("workshop_spares", 0))):
+        from workshop import listing_reserve
+        wr = listing_reserve(self.ctx.S, v, locked)
+        for a in v.spares(reserve=wr):
             if a["id"] in locked or a["ref"] == ref or leans.get(team, {}).get(a["ref"][:3], 0) <= 0:
                 continue  # only a card from a set they collect makes the swap attractive to them
             net = gain - v.loss_of_removing([a["ref"]])
@@ -132,8 +134,9 @@ class Asker:
         """Short of cash for a page completer: all the cash we can spare plus our spares (from sets the holder
         collects first) until their book value covers the rest of `price`."""
         v, cash = self.ctx.values, math.floor(room)
-        spares = [a for a in v.spares(reserve=int(self.ctx.S.get("workshop_spares", 0)))
-                  if a["id"] not in locked and a["ref"] != ref]
+        from workshop import listing_reserve
+        wr = listing_reserve(self.ctx.S, v, locked)
+        spares = [a for a in v.spares(reserve=wr) if a["id"] not in locked and a["ref"] != ref]
         spares.sort(key=lambda a: (-leans.get(team, {}).get(a["ref"][:3], 0), v.loss_of_removing([a["ref"]]) - v.book(a["ref"])))
         give, worth, refs = [], cash, []
         for a in spares:

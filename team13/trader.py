@@ -546,11 +546,18 @@ class Trader:
             except BazaarError as e:
                 ctx.log("trade", "cancel_refused", offer=oid, error=str(e))
 
+        from workshop import accumulating, listing_reserve, spare_copies
         markets = self.listing_markets()
         locked = ctx.locked_assets()
-        reserve = int(S.get("workshop_spares", 0))
-        workshop_ids = {a["id"] for a in v.workshop_held(reserve)}
-        # Pull back any ask that is now part of the workshop stockpile
+        reserve = listing_reserve(S, v, locked)
+        accum, acc_rar, acc_have = (accumulating(v, locked, int(S.get("workshop_trio_target", 3)))
+                                    if int(S.get("workshop_accumulate", 1)) and int(S.get("enable_workshop", 1))
+                                    else (False, "", 0))
+        if accum:
+            workshop_ids = {a["id"] for a in spare_copies(v, locked)}
+        else:
+            workshop_ids = {a["id"] for a in v.workshop_held(reserve)}
+        # Pull back asks on duplicates we are saving for El Taller
         for oid, L in list(listed.items()):
             if L.get("kind") != "ask" or L.get("asset") not in workshop_ids:
                 continue
@@ -558,7 +565,8 @@ class Trader:
                 ctx.api.cancel(int(oid))
                 listed.pop(oid)
                 open_total -= 1
-                ctx.log("trade", "workshop_hold", offer=oid, ref=L.get("ref"), asset=L.get("asset"), reserve=reserve)
+                ctx.log("trade", "workshop_hold", offer=oid, ref=L.get("ref"), asset=L.get("asset"),
+                        reserve=reserve, accumulate=accum, tier=acc_rar, have=acc_have)
             except BazaarError as e:
                 ctx.log("trade", "cancel_refused", offer=oid, error=str(e))
         asks = [L for L in listed.values() if L["kind"] == "ask"]
