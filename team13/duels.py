@@ -11,6 +11,9 @@ for us, while asking for a better price.
 Knobs (duel_rounds / duel_anchor / duel_accept / duel_seller_cap) are live-tuned by duel_tuner.py from finished
 and live duels; this module also adapts mid-fight to how fast the rival is conceding.
 
+Silent rivals: open once so they can take us, then stop. No API to abandon a duel — parking it frees the
+tick's message/Claude budget for duels that answer. No deal still scores 0, same as talking into the void.
+
 The duel payload is only known once a session starts, so every read is defensive and the raw payload is logged
 the first time we see a duel (the practice round is for exactly that).
 """
@@ -19,6 +22,11 @@ from __future__ import annotations
 import math
 
 from bazaar_sdk import BazaarError
+
+# Our unanswered messages before we park a silent duel. 1 = open once, then stop until they speak.
+SILENT_MAX = 1
+# After they spoke once: how many of our follow-ups with no new reply before we park again.
+SILENT_AFTER = 1
 
 
 def first(d: dict, *keys, default=None):
@@ -43,6 +51,7 @@ class Duels:
             ctx.log("duel", "read_refused", error=str(e))
             return
         seen = ctx.state.setdefault("duels_seen", [])
+        live = []
         for d in duels:
             if d.get("id") is None and d.get("duel") is not None:
                 d["id"] = d["duel"]  # the server names the duel's id "duel" (practice round, Fri 22:20)
@@ -52,6 +61,10 @@ class Duels:
             status = d.get("status", "open")
             if status not in ("open", "active", "live", "running", "negotiating"):
                 continue
+            live.append(d)
+        # answer talking rivals first; ghosts last (and usually get parked)
+        live.sort(key=lambda d: (0 if self._rival_active(d) else 1, d.get("deadline_tick") or 10**9))
+        for d in live:
             try:
                 self.play(d)
             except BazaarError as e:
@@ -86,6 +99,19 @@ class Duels:
                     score=score, price=d.get("price"), days=d.get("days"), rounds=d.get("rounds"),
                     role=d.get("role"), limit=d.get("your_limit"), rival=d.get("rival"),
                     session=d.get("session"), issues=d.get("issues"))
+
+    def _rival_active(self, d: dict) -> bool:
+        """True if the rival has put a price on the table (message or standing offer)."""
+        if first(d, "rival_offer", "standing_offer", "their_offer") not in (None, {}, []):
+            return True
+        rival_name = d.get("rival")
+        for m in first(d, "messages", "history", default=[]) or []:
+            who = first(m, "sender", "from", "by", "author", default=None)
+            if rival_name is not None and who == rival_name and first(m, "price", default=None) is not None:
+                return True
+            if rival_name is None and who not in (None, "you", "us", self.ctx.me.get("id")) and first(m, "price", default=None) is not None:
+                return True
+        return False
 
     def play(self, d: dict):
         ctx = self.ctx
@@ -196,6 +222,28 @@ class Duels:
                     ctx.log("duel", "accept", duel=d["id"], price=r_price, days=r_days, our_surplus=round(u_r, 1),
                             limit=limit, style=style, accept_th=accept_th)
                     return
+
+        # Park silent rivals after one open (or one nudge after they spoke): no Claude, no more messages.
+        # There is no abandon API — stopping frees the tick for duels that answer. No deal = 0 either way.
+        if not theirs and r_price is None:
+            unanswered, silent_cap = len(mine), int(S.get("duel_silent_max", SILENT_MAX))
+        else:
+            last_them_tick = max((m.get("tick") or 0 for m in theirs), default=-1)
+            unanswered = sum(1 for m in mine if (m.get("tick") or 0) > last_them_tick)
+            if r_price is not None and (not mine or (rival or {}).get("tick", 0) >= (mine[-1].get("tick") or 0)):
+                unanswered = 0  # their standing offer is current — not silent
+            silent_cap = int(S.get("duel_silent_after", SILENT_AFTER))
+        if unanswered >= silent_cap:
+            skipped = ctx.state.setdefault("duels_skipped_silent", [])
+            did = str(d.get("id"))
+            if did not in skipped:
+                skipped.append(did)
+                if len(skipped) > 200:
+                    del skipped[:-150]
+                ctx.log("duel", "skip_silent", duel=d.get("id"), our_msgs=len(mine),
+                        their_msgs=len(theirs), unanswered=unanswered, rival=rival_name)
+            return
+
         if util(price, days) <= 0:  # would cross our limit: hold at a safe price instead
             price = math.ceil(limit + 1) if seller else math.floor(limit - 1)
         last = ctx.state.setdefault("duel_last", {}).get(str(d["id"]))

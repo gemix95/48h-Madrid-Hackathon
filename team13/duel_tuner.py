@@ -28,6 +28,7 @@ HERE = Path(__file__).parent
 LOGS = HERE / "logs"
 STATE = LOGS / "duel_learn.json"
 BOARD = LOGS / "duels_board.json"   # per-duel points for the war room
+DONE_CACHE = LOGS / "duels_done.json"  # last good /api/duels?done=true (survives 429s)
 DECISIONS = LOGS / "decisions.jsonl"
 ENV = HERE.parent / "bazaar.env"
 
@@ -35,7 +36,10 @@ CYCLE_SECONDS = 90          # re-learn often during a live session
 COOLDOWN_TICKS = 40         # leave a knob alone this long after a change
 MIN_DONE = 8                # need this many finished duels before auto-applying
 MIN_GAIN = 0.008            # sim weighted-mean gain required to switch
-KNOBS = ("duel_rounds", "duel_anchor", "duel_accept", "duel_seller_cap")
+KNOBS = ("duel_rounds", "duel_anchor", "duel_accept", "duel_seller_cap",
+         "duel_silent_max", "duel_silent_after")
+# sim grid only covers the four pricing knobs; silence knobs are empirical-only
+SIM_KNOBS = ("duel_rounds", "duel_anchor", "duel_accept", "duel_seller_cap")
 
 # search grid (kept small: a cycle must finish well under one tick)
 GRID = {
@@ -57,15 +61,30 @@ def _load_env():
         os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
-def _api(path: str):
+def _api(path: str, retries: int = 3):
     _load_env()
     url = os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai").rstrip("/")
     key = os.environ.get("BAZAAR_KEY") or os.environ.get("BAZAAR_TEAM_KEY")
     if not key:
         raise RuntimeError("BAZAAR_KEY missing")
-    req = urllib.request.Request(url + path, headers={"X-Team-Key": key})
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        return json.load(resp)
+    last = None
+    for attempt in range(max(1, retries)):
+        req = urllib.request.Request(url + path, headers={"X-Team-Key": key})
+        try:
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                return json.load(resp)
+        except Exception as e:
+            last = e
+            msg = str(e)
+            # back off on rate limits; keep other errors fail-fast after one retry
+            if "429" in msg or "Too Many" in msg:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            if attempt + 1 < retries:
+                time.sleep(0.4 * (attempt + 1))
+                continue
+            raise
+    raise last
 
 
 def _jsonl(path: Path, n: int = 5000) -> list:
@@ -115,17 +134,41 @@ def _rival_style(d: dict) -> str:
     return "tit-for-tat"
 
 
-def fetch_done() -> list:
+def _write_done_cache(duels: list) -> None:
+    if not duels:
+        return
     try:
-        data = _api("/api/duels?done=true")
-        return data.get("duels") or []
+        LOGS.mkdir(exist_ok=True)
+        DONE_CACHE.write_text(json.dumps({"at": time.time(), "duels": duels}, default=str))
+    except OSError:
+        pass
+
+
+def _read_done_cache() -> list:
+    try:
+        if DONE_CACHE.exists():
+            data = json.loads(DONE_CACHE.read_text())
+            return data.get("duels") or []
     except Exception:
-        return []
+        pass
+    return []
+
+
+def fetch_done() -> list:
+    """Finished duels. Retries through 429s and falls back to the last good cache."""
+    try:
+        data = _api("/api/duels?done=true", retries=4)
+        duels = data.get("duels") or []
+        if duels:
+            _write_done_cache(duels)
+        return duels
+    except Exception:
+        return _read_done_cache()
 
 
 def fetch_live() -> list:
     try:
-        data = _api("/api/duels")
+        data = _api("/api/duels", retries=2)
         return data.get("duels") or []
     except Exception:
         return []
@@ -133,7 +176,7 @@ def fetch_live() -> list:
 
 def fetch_me() -> dict:
     try:
-        return _api("/api/me")
+        return _api("/api/me", retries=2)
     except Exception:
         return {}
 
@@ -213,16 +256,21 @@ def analyze(done: list, live: list | None = None) -> dict:
         if d.get("status") == "deal" and price is not None and limit is not None:
             surplus = (price - limit) if seller else (limit - price)
         rival = d.get("rival")
-        rival_prices = [m["price"] for m in (d.get("messages") or [])
+        msgs = d.get("messages") or []
+        rival_prices = [m["price"] for m in msgs
                         if m.get("from") == rival and m.get("price") is not None]
+        our_msgs = [m for m in msgs if m.get("from") != rival]
         last_rival = rival_prices[-1] if rival_prices else None
         missed = False
         if d.get("status") == "no_deal" and last_rival is not None and limit is not None:
             missed = (last_rival >= limit) if seller else (last_rival <= limit)
+        silent = d.get("status") == "no_deal" and not rival_prices
         rows.append({
             "status": d.get("status"), "score": sc, "role": d.get("role"),
             "rounds": d.get("rounds") or 0, "style": style, "surplus": surplus,
-            "missed_inside": missed, "rival": rival, "session": d.get("session"),
+            "missed_inside": missed, "silent_rival": silent,
+            "our_msgs": len(our_msgs), "their_msgs": len(rival_prices),
+            "rival": rival, "session": d.get("session"),
             "decay": d.get("decay_per_round") or d.get("decay") or 0.06,
             "two_issue": "days" in (d.get("issues") or []),
         })
@@ -267,6 +315,8 @@ def analyze(done: list, live: list | None = None) -> dict:
         "mean_rounds_deal": statistics.mean([r["rounds"] for r in deals]) if deals else None,
         "mean_rounds_nodeal": statistics.mean([r["rounds"] for r in no_deals]) if no_deals else None,
         "missed_inside": sum(1 for r in rows if r["missed_inside"]),
+        "silent_no_deals": sum(1 for r in rows if r.get("silent_rival")),
+        "silent_waste_msgs": sum(r.get("our_msgs") or 0 for r in rows if r.get("silent_rival")),
         "short_mean": statistics.mean(short) if short else None,
         "long_mean": statistics.mean(long_) if long_ else None,
         "by_role": by_role,
@@ -282,12 +332,12 @@ def analyze(done: list, live: list | None = None) -> dict:
 
 def empirical_proposal(m: dict, S: dict) -> dict:
     """Heuristic moves from real outcomes. Returns proposed knobs (may equal current)."""
-    prop = {k: S[k] for k in KNOBS}
+    prop = {k: S.get(k, strategy.KNOBS.get(k, (None,))[0]) for k in KNOBS}
     reasons = []
     if (m.get("n") or 0) < MIN_DONE:
         return {"changes": {}, "reasons": ["need more finished duels"], "proposed": prop}
 
-    # Long talks score worse than short ones → settle sooner
+    # Timing: long talks score worse than short ones → settle sooner (pie melts ~6%/round)
     if m.get("short_mean") is not None and m.get("long_mean") is not None and m["long_mean"] + 2 < m["short_mean"]:
         if prop["duel_rounds"] > 5:
             prop["duel_rounds"] = max(4, int(prop["duel_rounds"]) - 1)
@@ -295,6 +345,16 @@ def empirical_proposal(m: dict, S: dict) -> dict:
         if prop["duel_accept"] > 0.4:
             prop["duel_accept"] = round(max(0.4, float(prop["duel_accept"]) - 0.05), 2)
             reasons.append("accept a bit earlier so the pie does not melt")
+    elif (m.get("mean_rounds_deal") or 0) >= 4.5 and prop["duel_rounds"] > 5:
+        prop["duel_rounds"] = max(5, int(prop["duel_rounds"]) - 1)
+        reasons.append(f"deals average {m['mean_rounds_deal']:.1f} rounds: tighten the schedule")
+
+    # Silent rivals wasted opens — keep the park-after-one-open timing tight
+    silent_n = m.get("silent_no_deals") or 0
+    if silent_n >= 2:
+        prop["duel_silent_max"] = 1
+        prop["duel_silent_after"] = 1
+        reasons.append(f"{silent_n} silent no-deals ({m.get('silent_waste_msgs', 0)} msgs wasted): park after one open")
 
     # Zeroes from walking past a good rival offer → accept sooner
     if m.get("missed_inside", 0) >= 1 and prop["duel_accept"] > 0.4:
@@ -364,10 +424,10 @@ def search(S: dict, weights: dict, focus: dict | None = None) -> dict:
         ordered = sorted(opts, key=lambda x: abs(x - cur))
         return sorted(set(ordered[:3]))
 
-    base = {k: S[k] for k in KNOBS}
+    base = {k: S[k] for k in SIM_KNOBS}
     focus = focus or {}
     axes = {}
-    for k in KNOBS:
+    for k in SIM_KNOBS:
         vals = set(nearby(k, base[k]))
         if k in focus:
             vals.add(focus[k])
@@ -376,15 +436,18 @@ def search(S: dict, weights: dict, focus: dict | None = None) -> dict:
     cur_ev = T.eval_duels(S, n=60, seed=7)
     cur_w = sum(weights.get(s, 0.25) * cur_ev[s] for s in cur_ev)
     best, best_w, best_ev = dict(base), cur_w, cur_ev
-    for vals in itertools.product(*[axes[k] for k in KNOBS]):
-        cand = {**S, **dict(zip(KNOBS, vals))}
+    for vals in itertools.product(*[axes[k] for k in SIM_KNOBS]):
+        cand = {**S, **dict(zip(SIM_KNOBS, vals))}
         ev = T.eval_duels(cand, n=60, seed=7)
         w = sum(weights.get(s, 0.25) * ev[s] for s in ev)
         # robust: prefer mean of wmean and worst
         score = 0.5 * w + 0.5 * min(ev.values())
         best_score = 0.5 * best_w + 0.5 * min(best_ev.values())
         if score > best_score + 1e-6:
-            best, best_w, best_ev = {k: cand[k] for k in KNOBS}, w, ev
+            best, best_w, best_ev = {k: cand[k] for k in SIM_KNOBS}, w, ev
+    # keep silence knobs from the empirical focus / current S (sim does not model ghosts)
+    for k in ("duel_silent_max", "duel_silent_after"):
+        best[k] = (focus or {}).get(k, S.get(k))
     return {
         "current_wmean": round(cur_w, 3),
         "best_wmean": round(best_w, 3),
@@ -424,9 +487,15 @@ def _clock_tick() -> int | None:
 def learn(apply: bool = True) -> dict:
     """One learning cycle. Safe to call from a loop or the dashboard."""
     S = strategy.load()
-    if not S.get("enable_duels", 1) or not S.get("duel_autotune", 1):
-        snap = {"status": "disabled", "at": time.time(),
-                "note": "enable_duels or duel_autotune is off"}
+    # always keep autotune on while we are fighting for duel rank (caller can still --dry)
+    if not S.get("duel_autotune", 1) and apply:
+        try:
+            _set_knobs({"duel_autotune": 1})
+            S = strategy.load()
+        except Exception:
+            pass
+    if not S.get("enable_duels", 1):
+        snap = {"status": "disabled", "at": time.time(), "note": "enable_duels is off"}
         st = _load_state(); st["last"] = snap; _save_state(st)
         return snap
 
@@ -450,20 +519,33 @@ def learn(apply: bool = True) -> dict:
     proposed = dict(emp["proposed"])
     reasons = list(emp["reasons"])
     if sim["gain"] >= MIN_GAIN:
-        for k in KNOBS:
-            if sim["best"][k] != S.get(k):
+        for k in SIM_KNOBS:
+            sk = sim["best"].get(k)
+            if sk is not None and sk != S.get(k):
                 # prefer sim when empirical had no opinion on this knob
-                if k not in emp["changes"] or emp["changes"].get(k) == sim["best"][k]:
-                    proposed[k] = sim["best"][k]
+                if k not in emp["changes"] or emp["changes"].get(k) == sk:
+                    proposed[k] = sk
         reasons.append(f"sim +{sim['gain']:.3f} pie share vs observed rival mix")
     elif sim["gain"] > 0 and not emp["changes"]:
-        proposed = dict(sim["best"])
+        proposed = {**proposed, **{k: sim["best"][k] for k in SIM_KNOBS}}
         reasons.append(f"sim slight edge +{sim['gain']:.3f}; empirical stable")
 
     # hard caps from the field: keep opens takeable while we are still dropping deals
     if (m.get("deal_rate") or 1) < 0.9 and proposed.get("duel_seller_cap", 2.2) > 2.2:
         proposed["duel_seller_cap"] = 2.2
         reasons.append("cap seller open at 2.2× while deal rate < 90%")
+
+    # Timing lock: when long talks score worse, never raise accept / rounds (pie melts ~6%/round)
+    if (m.get("short_mean") is not None and m.get("long_mean") is not None
+            and m["long_mean"] + 1.5 < m["short_mean"]):
+        if proposed.get("duel_accept", 1) > float(S.get("duel_accept") or 0.4):
+            proposed["duel_accept"] = S.get("duel_accept", 0.4)
+            reasons.append("timing lock: keep accept early while long talks underperform")
+        if proposed.get("duel_rounds", 99) > int(S.get("duel_rounds") or 8):
+            proposed["duel_rounds"] = S.get("duel_rounds", 5)
+            reasons.append("timing lock: do not lengthen schedule while long talks underperform")
+        proposed["duel_silent_max"] = min(int(proposed.get("duel_silent_max") or 1), 1)
+        proposed["duel_silent_after"] = min(int(proposed.get("duel_silent_after") or 1), 1)
 
     changes = {k: proposed[k] for k in KNOBS if proposed[k] != S.get(k)}
     st = _load_state()
@@ -477,7 +559,7 @@ def learn(apply: bool = True) -> dict:
             _set_knobs(trial["old"])
             reasons.append(f"reverted trial: mean score {before} → {after}")
             changes = {}
-            proposed = {k: S[k] for k in KNOBS}
+            proposed = {k: S.get(k) for k in KNOBS}
         st["trial"] = None
 
     applied = {}
@@ -565,6 +647,11 @@ def _lesson(status, m, changes, reasons) -> str:
     bits = [f"{m.get('n', 0)} finished duels, deal rate "
             f"{(m.get('deal_rate') or 0):.0%}, mean score {m.get('mean_score') or 0:.1f}, "
             f"duel points {m.get('duel_points') if m.get('duel_points') is not None else '–'}."]
+    if m.get("silent_no_deals"):
+        bits.append(f"Silent rivals: {m['silent_no_deals']} no-deals "
+                    f"({m.get('silent_waste_msgs', 0)} msgs parked after).")
+    if m.get("short_mean") is not None and m.get("long_mean") is not None:
+        bits.append(f"Timing: short talks {m['short_mean']:.1f} vs long {m['long_mean']:.1f}.")
     if changes:
         bits.append("Knobs " + ", ".join(f"{k}→{v}" for k, v in changes.items()) + f" ({status}).")
     else:

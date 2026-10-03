@@ -17,7 +17,8 @@ KNOBS = {
     "enable_duels": (1, 0, 1, 1, "Modules", "Duels", "Play the duel tournament automatically."),
     "duel_autotune": (1, 0, 1, 1, "Modules", "Auto-tune duel knobs",
                       "duel_tuner.py learns from finished and live duels every ~90 s and updates "
-                      "duel_rounds / duel_anchor / duel_accept / duel_seller_cap in strategy.json (agent reloads next tick)."),
+                      "timing (duel_rounds / duel_accept), opens (duel_anchor / duel_seller_cap), "
+                      "and silence park (duel_silent_max / duel_silent_after) in strategy.json (agent reloads next tick)."),
     "enable_venue": (1, 0, 1, 1, "Modules", "Open our market", "Open our own market as soon as we reach level 2."),
     "broker_in_agent": (1, 0, 1, 1, "Modules", "Broker inside the agent", "0 when the broker runs on our server (systemd bazaar-broker): one broker per venue. Takes effect next tick; an already running broker thread stops only with an agent restart."),
     "enable_guard": (1, 0, 1, 1, "Modules", "Guard", "Last each tick: cancel any open offer of ours that loses value at our private values or breaks a team cap."),
@@ -104,6 +105,10 @@ KNOBS = {
                         "Lower closes sooner but captures less: simulator mean 0.528 at 2.2x vs 0.478 at 1.6x. Revisit with Duels I data."),
     "duel_accept": (0.5, 0.4, 1.0, 0.05, "Duels", "Accept threshold",
                     "Take the rival's offer when it gives us this share of what our next offer would."),
+    "duel_silent_max": (1, 1, 3, 1, "Duels", "Messages if rival never answers",
+                        "Open this many times, then park the duel (no more messages/Claude) until they speak. No abandon API."),
+    "duel_silent_after": (1, 1, 3, 1, "Duels", "Follow-ups after rival goes quiet",
+                          "After they spoke once: our unanswered messages before we park again and move on."),
     # market
     "venue_fee_bps": (0, 0, 1000, 25, "Market", "Our market fee (bps)",
                       "0 = free (Saturday default). Fees never score and a positive fee blocks thin Market Test pairs "
