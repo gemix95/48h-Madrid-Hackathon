@@ -93,7 +93,8 @@ class Haggler:
             if best and best[0].get("list_price", 99) * 0.75 <= min(cash, ctx.budget_left()):
                 s, ref, gain = best
                 return {"buy": {"card": ref}}, {"side": "buy", "key": f"{dealer['id']}:buy:{s['rarity']}", "lo": 1,
-                                                "hi": min(math.floor(s["list_price"] * S["haggle_cap"]), ctx.budget_left()), "list": s["list_price"],
+                                                "hi": min(math.floor(s["list_price"] * S["haggle_cap"]), ctx.budget_left(),
+                                                          math.floor(gain - S["trade_min_gain"])), "list": s["list_price"],
                                                 "ref": ref, "beginner": True}
 
         S = ctx.S
@@ -104,6 +105,9 @@ class Haggler:
             if S["haggle_buy_packs"] and "pack" in s and counts["packs"] < s.get("per_team_per_hour", 3):
                 key = f"{dealer['id']}:buy:{s['pack']}"
                 hi = min(math.floor((s.get("list_price") or s.get("opening_ask", 30)) * S["haggle_cap"]), cash, item_cap)
+                pack = next((p for p in (getattr(ctx, "catalog", None) or {}).get("packs", []) if p["id"] == s["pack"]), None)
+                if pack:  # not worth it for us above its value: don't buy, move on
+                    hi = min(hi, math.floor(ctx.values.pack_ev(pack) - S["trade_min_gain"]))
                 if (s.get("list_price") or 0) * 0.6 > item_cap:
                     continue  # too expensive for the ladder: the same capture is available on cheaper items
                 if hi < 5 or key in unsupported:
@@ -133,7 +137,7 @@ class Haggler:
                     key = f"{dealer['id']}:buy:{s['rarity']}"
                     if key in unsupported:
                         break
-                    hi = min(math.floor(s.get("list_price", 10) * S["haggle_cap"]), cash, math.floor(gain), item_cap)
+                    hi = min(math.floor(s.get("list_price", 10) * S["haggle_cap"]), cash, math.floor(gain - S["trade_min_gain"]), item_cap)
                     if hi < 3:
                         break
                     lo = self._opening(stats.get(key), s, side="buy")
@@ -264,6 +268,7 @@ class Haggler:
                 self._accept(last, th, plan, reason="final offer inside our cap")
             else:
                 ctx.log("haggle", "final_declined", thread=th["id"], ask=ask, plan=plan)
+                self._move_on(th, plan, f"final offer {ask} P is more than it is worth to us")
             return
         if buy and ask is not None and ask > ctx.budget_left():
             pass  # cannot afford it without touching the bond reserve: keep talking, never accept
@@ -275,8 +280,12 @@ class Haggler:
         if last and ask is not None and nxt is not None and ((buy and ask <= nxt) or (not buy and ask >= nxt)) and good(ask):
             if ctx.take_accept():
                 return self._accept(last, th, plan, reason="her ask already beats our next step")
-        if nxt is None:
-            return  # at our cap: wait for her to move or name a final offer
+        if nxt is None:  # we are at our limit
+            if buy and ask is not None and ask > plan["hi"]:
+                plan["stuck"] = plan.get("stuck", 0) + 1
+                if plan["stuck"] >= 2:  # she stays above what it is worth to us: don't buy, move on
+                    self._move_on(th, plan, f"her price {ask} P stays above our limit {plan['hi']} P")
+            return
         texts = KIND_BUY if buy else KIND_SELL
         text = texts[(plan["k"] + random.randrange(len(texts))) % len(texts)].format(name=plan.get("name", "Carmen"), p=nxt)
         # the safe band around the rule price: always a new price, never past our cap or her ask
@@ -328,6 +337,14 @@ class Haggler:
         if asks and asks[-1] is not None:
             p = max(p, asks[-1])
         return p if p >= lo and (not offers or p < offers[-1]) else None
+
+    def _move_on(self, th, plan, why):
+        """Leave a conversation that is not worth it, so the slot goes to a better deal."""
+        try:
+            self.ctx.api.close_thread(th["id"])
+            self.ctx.log("haggle", "moved_on", thread=th["id"], key=plan.get("key"), why=why)
+        except BazaarError as e:
+            self.ctx.log("haggle", "close_refused", thread=th["id"], error=str(e)[:160])
 
     def _accept(self, offer, th, plan, reason):
         ctx = self.ctx
