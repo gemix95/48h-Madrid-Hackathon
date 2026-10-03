@@ -422,8 +422,6 @@ document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click
 fetch("/board/cards.json").then(r => r.json()).then(cards => {{
   document.querySelectorAll(".thumb[data-card]").forEach(t => {{ const h = cards[t.dataset.card]; if (h) t.innerHTML = h; }});
 }}).catch(() => {{}});
- }});
-paint();
 async function refresh() {{
   try {{
     const r = await fetch("/board/live.json", {{cache: "no-store"}}); if (!r.ok) return;
