@@ -29,39 +29,43 @@ ctx.venues = [v for v in get("/api/venues")["venues"] if v["status"] == "open"]
 ctx.leaderboard = json.load(urllib.request.urlopen(URL + "/api/leaderboard"))["teams"]
 calls = []
 ctx.api = type("A", (), {"list_offer": lambda self, g, w, venue=None, to=None, expires_in_ticks=40:
-                         calls.append((w["cards"][0], to, g["cash"], venue)) or {"id": 1}})()
+                         calls.append((w["cards"][0], to, g.get("cash"), venue)) or {"id": 1}})()
 ctx.log = lambda *a, **k: None
 
+
+def show(plan):
+    for ref, team, price, assets in plan[:8]:
+        print(f"  ask {team} for {ref}: {price or 0} P + {[a['ref'] for a in assets]}")
+
+
 plan = Asker(ctx).plan()
-for ref, team, price, asset in plan[:8]:
-    print(f"  ask {team} for {ref} at {price}" if price else f"  ask {team} for {ref}, swap for our {asset['ref']}")
+show(plan)
 assert plan, "expected some asks"
 collectors = {"t17"}  # collects Malasaña and Salamanca on Friday
 assert not any(t in collectors and r[:3] in ("MAL", "SAL") for r, t, _, _ in plan)
-assert all(p <= 300 - 40 for _, _, p, _ in plan if p)
+assert all(p <= 300 - 10 for _, _, p, _ in plan if p)
 assert ("MAL-10", "t09") in {(r, t) for r, t, _, _ in plan}, "t09's rarest card is MAL-10 and it dumps Malasaña"
-assert all(p >= 0.6 * ctx.values.book(r) for r, _, p, _ in plan if p)
+assert all(p >= 0.6 * ctx.values.book(r) for r, _, p, a in plan if p and not a)
 Asker(ctx).step()
 assert len(calls) == 1 and calls[0][3] != ctx.state.get("venue"), calls
 print("posted:", calls[0])
 
-# short of cash (our real 17 P): a swap of a spare from a set the holder collects. Friday night our only spares
-# are La Latina cards and no holder collects La Latina, so no swap is right; add a Lavapies duplicate (t09 collects
-# Lavapies) and t09 must be offered it for MAL-10.
+# an open ask for a card is never doubled
+ctx.my_offers = [{"maker": me["id"], "to": "t09", "want": {"types": ["card:MAL-10"]}, "give": {"cash": 50}}]
+assert "MAL-10" not in {r for r, _, _, _ in Asker(ctx).plan()}
+ctx.my_offers = []
+
+# short of cash (our real cash): a page completer gets all the cash we can spare plus spares, never a loss
 real = get("/api/me")
 ctx.me, ctx.values, ctx.state = real, Values(cat, real), {}
 ctx.locked_assets = lambda: set()
-assert all(a is None for _, _, _, a in Asker(ctx).plan()) or True
-lav = next(a for a in real["assets"] if a["ref"].startswith("LAV-0") and a["rarity"] == "common")
-dup = {**lav, "id": 999999, "serial": 999}
-me_dup = {**real, "assets": real["assets"] + [dup]}
-ctx.me, ctx.values = me_dup, Values(cat, me_dup)
-swaps = [p for p in Asker(ctx).plan() if p[3] is not None]
-for ref, team, price, asset in swaps[:6]:
-    print(f"  swap: {team} gets our {asset['ref']} for their {ref}")
-assert ("MAL-10", "t09") in {(r, t) for r, t, _, _ in swaps}, "t09 collects Lavapies and holds MAL-10"
-from team_intel import lean  # noqa: E402
-lv = lean(feed)
-assert all(lv.get(t, {}).get(a["ref"][:3], 0) > 0 for _, t, _, a in swaps), "we only offer cards from sets they collect"
-assert all(ctx.values.gain_of_adding([r]) - ctx.values.loss_of_removing([a["ref"]]) >= 3 for r, _, _, a in swaps)
+plan = Asker(ctx).plan()
+show(plan)
+for ref, team, price, assets in plan:
+    refs = [a["ref"] for a in assets]
+    assert (price or 0) <= real["cash"] - 10
+    assert ctx.values.gain_of_adding([ref]) - (price or 0) - ctx.values.loss_of_removing(refs) >= 3, (ref, price, refs)
+    if not price:  # a pure swap only offers cards from sets they collect
+        from team_intel import lean  # noqa: E402
+        assert all(lean(feed).get(team, {}).get(r[:3], 0) > 0 for r in refs)
 print("OK")

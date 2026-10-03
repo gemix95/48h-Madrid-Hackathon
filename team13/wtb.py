@@ -96,10 +96,20 @@ class Asker:
         free = ctx.me.get("cash", 0) - ctx.reserve() - open_cash
         locked = ctx.locked_assets() if hasattr(ctx, "locked_assets") else set()
         out = []
+        rival = self._rival_bids(events, now)
+        pending = {t[5:] for o in ctx.my_offers if o.get("maker") == me and o.get("to")
+                   for t in (o.get("want") or {}).get("types") or [] if t.startswith("card:")}
         for ref, gain in v.wishlist(limit=40):
+            if ref in pending:
+                continue
             book = v.book(ref)
+            completer = gain > book * v.m(ref) * 1.2
             price = math.floor(min(book * S.get("wtb_price_share", 0.9), gain - S["trade_min_gain"], caps.get(ref, 10 ** 9)))
-            cash_ok = price >= 0.6 * book and price <= free  # a lowball ask (2 P for a 10 P card) only annoys the holder
+            room = free
+            if completer:  # the page bonus makes it worth outbidding other teams and spending below the cash floor
+                room = ctx.me.get("cash", 0) - S.get("completer_keep_cash", 10) - open_cash
+                price = math.floor(min(max(price, rival.get(ref, 0) + 4), gain * 0.6, caps.get(ref, 10 ** 9)))
+            cash_ok = price >= 0.6 * book and price <= room  # a lowball ask (2 P for a 10 P card) only annoys the holder
             for team, cards in hold.items():
                 c = cards.get(ref)
                 if team == me or not c or c[0] <= 0 or team not in active:
@@ -111,13 +121,52 @@ class Asker:
                 if now - asks.get(f"{team}:{ref}", -10 ** 6) < RETRY_TICKS:
                     continue
                 if cash_ok:
-                    out.append((gain - price, ref, team, price, None))
+                    out.append((gain - price, ref, team, price, []))
+                elif completer and room >= 0.4 * book:
+                    mix = self._cash_and_spares(ref, team, leans, locked, gain, price, room)
+                    if mix:
+                        out.append(mix)
                 elif S.get("wtb_swaps", 1):
                     sw = self._swap_card(ref, team, leans, locked, gain)
                     if sw:
-                        out.append((sw[0], ref, team, None, sw[1]))
+                        out.append((sw[0], ref, team, None, [sw[1]]))
         out.sort(key=lambda x: -x[0])
-        return [(ref, team, price, asset) for _, ref, team, price, asset in out]
+        return [(ref, team, price, assets) for _, ref, team, price, assets in out]
+
+    def _cash_and_spares(self, ref, team, leans, locked, gain, price, room):
+        """Short of cash for a page completer: all the cash we can spare plus our spares (from sets the holder
+        collects first) until their book value covers the rest of `price`."""
+        v, cash = self.ctx.values, math.floor(room)
+        spares = [a for a in v.spares() if a["id"] not in locked and a["ref"] != ref]
+        spares.sort(key=lambda a: (-leans.get(team, {}).get(a["ref"][:3], 0), v.loss_of_removing([a["ref"]]) - v.book(a["ref"])))
+        give, worth, refs = [], cash, []
+        for a in spares:
+            if worth >= price or len(give) >= 3:
+                break
+            give.append(a)
+            refs.append(a["ref"])
+            worth += v.book(a["ref"])
+        if worth < price:
+            return None
+        net = gain - cash - v.loss_of_removing(refs)
+        return (net, ref, team, cash, give) if net >= 3 * self.ctx.S["trade_min_gain"] else None
+
+    @staticmethod
+    def _rival_bids(events, now):
+        """Best open cash bid another team has posted for each card (ref -> P), from the public feed."""
+        best = {}
+        for e in events:
+            p = e.get("payload") or {}
+            o = p.get("offer") if isinstance(p.get("offer"), dict) else None
+            if e.get("type") != "offer.listed" or not o or o.get("maker") == "t13":
+                continue
+            if (o.get("expires_tick") or 0) < now or (o.get("give") or {}).get("assets"):
+                continue
+            cash = (o.get("give") or {}).get("cash") or 0
+            for t in (o.get("want") or {}).get("types") or []:
+                if t.startswith("card:") and cash > best.get(t[5:], 0):
+                    best[t[5:]] = cash
+        return best
 
     def step(self):
         ctx, S = self.ctx, self.ctx.S
@@ -128,13 +177,18 @@ class Asker:
         plan = self.plan()
         if not plan:
             return
-        ref, team, price, asset = plan[0]
+        ref, team, price, assets = plan[0]
         venue = self._venue()
-        give = {"assets": [asset["id"]]} if asset else {"cash": price}
+        give = {}
+        if price:
+            give["cash"] = price
+        if assets:
+            give["assets"] = [a["id"] for a in assets]
+        swap = [a["ref"] for a in assets] or None
         try:
             o = ctx.api.list_offer(give, {"cards": [ref]}, venue=venue, to=team, expires_in_ticks=int(S.get("wtb_ticks", 120)))
             ctx.state.setdefault("wtb", {})[f"{team}:{ref}"] = ctx.clock.get("tick", 0)
-            ctx.log("wtb", "asked", ref=ref, team=team, price=price, swap=asset and asset["ref"], venue=venue, offer=o.get("id"))
+            ctx.log("wtb", "asked", ref=ref, team=team, price=price, swap=swap, venue=venue, offer=o.get("id"))
         except BazaarError as e:
             ctx.state.setdefault("wtb", {})[f"{team}:{ref}"] = ctx.clock.get("tick", 0)
-            ctx.log("wtb", "ask_refused", ref=ref, team=team, price=price, swap=asset and asset["ref"], error=str(e)[:160])
+            ctx.log("wtb", "ask_refused", ref=ref, team=team, price=price, swap=swap, error=str(e)[:160])
