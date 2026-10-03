@@ -76,7 +76,7 @@ def find_matches(events: list, boards: dict, me: str, ours: str, hold: dict, lea
                 continue
             lean = leans.get(team, {}).get(ref[:3], 0)
             if c[0] >= 2 or lean < 0:
-                cands.append((1 if c[0] >= 2 else 2, team, f"x{c[0]}, lean {lean:+d}"))
+                cands.append((1 if c[0] >= 2 else 2, team, f"x{c[0]}, lean {lean:+.0f}"))
         if cands:
             _, seller, why = sorted(cands)[0]
             out.append((ref, buyer, bid, seller, why))

@@ -13,7 +13,7 @@ events = [{"id": 1, "tick": 10, "type": "offer.listed", "payload": {"offer": {"i
           {"id": 3, "tick": 12, "type": "settlement", "payload": {"items": [
               {"kind": "card", "ref": "LAT-07", "frm": "t03", "to": "t12"}, ]}}]
 boards = {"v07": [{"id": 501, "give": {"cash": 14}, "want": {"types": ["card:LAT-07"]}}]}
-m = matchmaker.find_matches(events, boards, "t13", "v24", {"t12": {"LAT-07": [2, 12, "got it"]}}, {"t12": {"LAT": -5}})
+m = matchmaker.find_matches(events, boards, "t13", "v24", {"t12": {"LAT-07": [2, 12, "got it"]}}, {"t12": {"LAT": -5.5}})
 assert m and m[0][:4] == ("LAT-07", "t06", 14, "t12"), m
 
 tmp = tempfile.mkdtemp(); matchmaker.FEED_STORE = os.path.join(tmp, "feed.jsonl")
