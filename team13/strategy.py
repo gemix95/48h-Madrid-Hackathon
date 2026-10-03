@@ -102,6 +102,9 @@ KNOBS = {
                    "Never spent, even after our market bond is paid: room for a great trade or tomorrow's first deals."),
     "deals_per_dealer_day": (5, 1, 12, 1, "Money", "Most buys per dealer per day",
                              "Only our best 3 deals per level count each day; a couple more is enough to improve them."),
+    "llm_effort": (0, 0, 2, 1, "AI", "Claude reasoning effort (0 low, 1 medium, 2 high)",
+                   "How hard Claude thinks before each message. Low: ~4 s, ~$0.0075 a message, fits Sunday's 15 s ticks. "
+                   "Medium/high: more careful wording, but slower (risk of missing a tick, then the template is used) and pricier."),
     "api_credit_usd": (0, 0, 1000, 1, "AI", "Claude API credit when you set this ($)",
                        "Copy your balance from console.anthropic.com > Billing. The dashboard subtracts what the agent spends "
                        "from here on (the API cannot report the balance with a user key). 0 = not set."),

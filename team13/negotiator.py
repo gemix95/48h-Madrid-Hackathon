@@ -130,7 +130,7 @@ class Negotiator:
             if leaked:
                 self.log("security", "leak_blocked", numbers=leaked, message=msg[:160])
                 return fallback[0], fallback[1], "rules-leak"
-            self.log("llm", "message", model=MODEL, price=price, band=[lo, hi], rule_price=fallback[1],
+            self.log("llm", "message", model=MODEL, effort=effort, price=price, band=[lo, hi], rule_price=fallback[1],
                      reason=str(out.get("reason", ""))[:200], ms=int((time.time() - t0) * 1000),
                      tokens_in=resp.usage.input_tokens, tokens_out=resp.usage.output_tokens)
             return msg, price, "claude"

@@ -148,6 +148,7 @@ class Context:
         if who and self.is_untrusted(who):
             return fallback[0], fallback[1], "rules-untrusted"  # they tried to manipulate us today: templates only
         if self.S.get("llm_negotiator", 1) and self.llm.ready() and left >= 2.5:
+            effort = ["low", "medium", "high"][int(self.S.get("llm_effort", 0))]  # Strategy tab > Advanced > AI
             msg, price, src = self.llm.propose(situation, band, fallback, effort=effort, timeout=min(8.0, left - 1.0))
             if src == "rules-injection" and who:
                 self.mark_untrusted(who)

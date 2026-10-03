@@ -1345,7 +1345,9 @@ function strategyPlan(d, M) {
   const llm = recs.filter(r => r.module === "llm");
   const msgs = llm.filter(r => r.action === "message"), fails = llm.filter(r => r.action === "fallback_to_rules");
   const on = !!S.llm_negotiator, last = msgs[msgs.length - 1];
+  const effortSet = ["low", "medium", "high"][S.llm_effort || 0], effortUsed = last?.effort || "low";
   $("llm").innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><b style="font-size:16px">Claude Opus 5.5</b>
+    <span class="chip" title="Reasoning effort: how hard Claude thinks before each message (adaptive thinking). Change it in Advanced settings → AI.">reasoning: ${esc(effortUsed)}${effortUsed !== effortSet ? ` → ${esc(effortSet)} next` : ""}</span>
       <label style="margin-left:auto"><input type="checkbox" id="llm-toggle" ${on ? "checked" : ""}> ${on ? "on" : "off"}</label></div>
     <div class="sec" style="font-size:13px;line-height:1.5">Writes every message and picks the price inside the safe band our tested rules allow. Accept/decline stays with the rules. Falls back to templates if the API is slow.</div>
     <div class="stats" style="display:flex;gap:18px;margin-top:10px;font-size:12px;color:var(--muted)">
