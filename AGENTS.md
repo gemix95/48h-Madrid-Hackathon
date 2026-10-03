@@ -2,6 +2,15 @@
 
 - Pull before you start whenever there are no conflicts; push after every change.
 
+## Who runs which agent (one key, disjoint roles)
+
+- **Sergio's Mac: `AGENT_ROLE=market`** (venue, trader, flipper, wtb), since Saturday 11:40.
+- **Emmanuele's agent must run `AGENT_ROLE=dealers`** (duels, haggler): pull, then
+  `kill $(cat team13/logs/agent.lock); source bazaar.env && cd team13 && AGENT_ROLE=dealers python3 agent.py`.
+  Two agents with role `all` haggle with the same dealers and trade the same cards.
+- The AI negotiator is Claude Opus 5.5 at medium effort (`llm_effort` 1). It needs the `anthropic` SDK and the key
+  in `anthropic.env` at the repo root (git-ignored). The agent picks the key up within 30 s, with no restart.
+
 ## El Consejo: the shared board
 
 - The board is the `council` branch, checked out at `.council/` by `team13/council.py` on first use. Never edit it,

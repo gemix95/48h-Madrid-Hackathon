@@ -81,13 +81,22 @@ class Negotiator:
         self.client = None
         self.disabled_until = 0.0
         self.stats = {"calls": 0, "fails": 0, "ms": 0}
+        self._checked = 0.0
+        self._connect()
+
+    def _connect(self):
+        """A client as soon as there is a key: dropping ../anthropic.env in later needs no agent restart."""
+        self._checked = time.time()
         key = _local_key()  # the team's key in ../anthropic.env (git-ignored) wins over the shell's
         if key:
             os.environ["ANTHROPIC_API_KEY"] = key
         if anthropic is not None and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
             self.client = anthropic.Anthropic(timeout=8.0, max_retries=0)  # ticks are 30 s on Saturday, 15 s on Sunday
+            self.log("llm", "connected", model=MODEL)
 
     def ready(self) -> bool:
+        if self.client is None and time.time() - self._checked >= 30:
+            self._connect()
         return self.client is not None and time.time() >= self.disabled_until
 
     def propose(self, situation: dict, band: tuple, fallback: tuple, effort: str = "low", timeout: float = 8.0) -> tuple:
