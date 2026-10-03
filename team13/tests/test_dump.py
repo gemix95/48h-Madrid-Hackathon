@@ -62,6 +62,10 @@ def test_dump_tiers_and_spare_order():
     assert "LAT-01" in refs and "RET-01" in refs
     assert refs.index("LAT-01") < refs.index("CHA-01") or refs.index("RET-01") < refs.index("CHA-01")
     assert unique_sal not in refs
+    # workshop reserve: keep the cheapest N off the sell list (and all of them when N >= pool)
+    assert len(v.spares(reserve=2)) == max(0, len(spares) - 2)
+    assert v.spares(reserve=len(spares)) == []
+    assert [a["id"] for a in v.workshop_held(2)] == [a["id"] for a in spares[:2]]
 
 
 def test_page_protection_blocks_salamanca():

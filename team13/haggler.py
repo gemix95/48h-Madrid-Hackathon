@@ -127,8 +127,11 @@ class Haggler:
         buys_today = ctx.state.setdefault("dealer_buys", {}).get(f"{ctx.day_key()}:{dealer['id']}", 0)
         can_buy = buys_today < S.get("deals_per_dealer_day", 5)
         item_cap = min(S.get("max_dealer_buy", 40), ctx.budget_left())
+        # Restock workshop: buy packs while our dump/duplicate pool is below the reserve target
+        need_workshop = len(ctx.values.spares(reserve=0)) < int(S.get("workshop_spares", 0))
+        buy_packs = bool(S["haggle_buy_packs"] or need_workshop)
         for s in (menu.get("sells", []) if can_buy else []):  # 1) packs: the cleanest price range to capture
-            if S["haggle_buy_packs"] and "pack" in s and counts["packs"] < s.get("per_team_per_hour", 3):
+            if buy_packs and "pack" in s and counts["packs"] < s.get("per_team_per_hour", 3):
                 key = f"{dealer['id']}:buy:{s['pack']}"
                 hi = min(math.floor((s.get("list_price") or s.get("opening_ask", 30)) * S["haggle_cap"]), cash, item_cap)
                 pack = next((p for p in (getattr(ctx, "catalog", None) or {}).get("packs", []) if p["id"] == s["pack"]), None)
@@ -148,7 +151,8 @@ class Haggler:
                                                        "list": s.get("list_price"), "opening": s.get("opening_ask"),
                                                        "worth": round(worth, 1), "rounds": self._rounds(dealer["id"])}
         buys = {b.get("rarity") for b in menu.get("buys", [])}
-        for a in ctx.values.spares() if S["haggle_sell_spares"] else []:  # 2) sell a spare, never below its value to us
+        spare_pool = ctx.values.spares(reserve=int(S.get("workshop_spares", 0))) if S["haggle_sell_spares"] else []
+        for a in spare_pool:  # 2) sell a spare above the workshop reserve, never below its value to us
             if a.get("rarity") not in buys or a["id"] in ctx.locked_assets():
                 continue
             key = f"{dealer['id']}:sell:{a['rarity']}"

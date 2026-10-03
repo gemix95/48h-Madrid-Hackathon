@@ -548,10 +548,23 @@ class Trader:
 
         markets = self.listing_markets()
         locked = ctx.locked_assets()
+        reserve = int(S.get("workshop_spares", 0))
+        workshop_ids = {a["id"] for a in v.workshop_held(reserve)}
+        # Pull back any ask that is now part of the workshop stockpile
+        for oid, L in list(listed.items()):
+            if L.get("kind") != "ask" or L.get("asset") not in workshop_ids:
+                continue
+            try:
+                ctx.api.cancel(int(oid))
+                listed.pop(oid)
+                open_total -= 1
+                ctx.log("trade", "workshop_hold", offer=oid, ref=L.get("ref"), asset=L.get("asset"), reserve=reserve)
+            except BazaarError as e:
+                ctx.log("trade", "cancel_refused", offer=oid, error=str(e))
         asks = [L for L in listed.values() if L["kind"] == "ask"]
         bids = [L for L in listed.values() if L["kind"] == "bid"]
-        # asks: dump Retiro/Latina + extras first (v.spares is ranked), priced to clear under rivals / into WTB
-        for a in v.spares():
+        # asks: dump Retiro/Latina + extras first (above the workshop reserve), priced to clear under rivals / into WTB
+        for a in v.spares(reserve=reserve):
             if len(asks) >= MAX_ASKS or budget <= 0 or open_total >= ctx.limit("max_open_offers_per_team", 30):
                 break
             if a["id"] in locked or any(L.get("asset") == a["id"] for L in asks) or self.protected(a["ref"]):

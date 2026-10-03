@@ -58,8 +58,12 @@ KNOBS = {
                         "Open at (1 - this) x our value (lower if the list-price rule opens lower), then concede "
                         "Boulware-style up to the cap, reaching it at the round this dealer usually names its final (every team's conversations)."),
     "haggle_buy_packs": (1, 0, 1, 1, "Dealers", "Buy packs", "Packs: 3 per hour from Abuela."),
-    "haggle_sell_spares": (1, 0, 1, 1, "Dealers", "Sell spares to dealers", "Sell duplicates/low-value cards to dealers."),
+    "haggle_sell_spares": (1, 0, 1, 1, "Dealers", "Sell spares to dealers",
+                           "Sell duplicates/low-value cards to dealers (only above the workshop reserve)."),
     "haggle_buy_cards": (1, 0, 1, 1, "Dealers", "Buy single cards", "Buy cards we value most (Salamanca, Malasaña)."),
+    "workshop_spares": (8, 0, 30, 1, "Trading", "Spares kept for the workshop",
+                        "Never sell, list, swap or gift this many cheapest dump/duplicate cards. Buy neighbourhood "
+                        "packs to restock when we are below the target. 0 = no reserve."),
     # trading
     "rival_margin": (6, 0, 30, 1, "Trading", "Post only on markets of teams this far behind us (points)",
                      "A trade on a team's market scores for its owner; below this margin we post on El Rastro instead."),

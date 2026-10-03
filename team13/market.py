@@ -519,16 +519,18 @@ class Market:
         return REWARDS_PER_DAY - sum(1 for d in given.values() if d == day)
 
     def reward_spare(self, exclude=()):
-        """Our cheapest-to-lose spare common that still sells at REWARD_PRICE with REWARD_MIN_GAIN, or None."""
+        """Our cheapest-to-lose spare common (above the workshop reserve) that still sells at REWARD_PRICE."""
         ctx, v = self.ctx, self.ctx.values
         if not v:
             return None
         locked = ctx.locked_assets()
+        reserve = int(ctx.S.get("workshop_spares", 0))
+        hold = {a["id"] for a in v.workshop_held(reserve)}
         best = None
         for a in v.assets:
             if a.get("kind") != "card" or a.get("rarity") != "common" or a["id"] in locked or a["id"] in exclude:
                 continue
-            if v.held[a["ref"]] < 2:  # duplicates only: never touch a page
+            if a["id"] in hold or v.held[a["ref"]] < 2:  # duplicates only; never the workshop stockpile
                 continue
             loss = v.loss_of_removing([a["ref"]])
             if REWARD_PRICE - loss >= REWARD_MIN_GAIN and (best is None or loss < best[1]):

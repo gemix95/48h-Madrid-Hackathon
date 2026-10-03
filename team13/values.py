@@ -116,8 +116,12 @@ class Values:
             return "soft"
         return "keep"
 
-    def spares(self) -> list:
-        """Assets we could give away cheaply: dump sets and extras first (hard → extra → soft)."""
+    def spares(self, reserve: int = 0) -> list:
+        """Assets we could give away cheaply: dump sets and extras first (hard → extra → soft).
+
+        `reserve` keeps that many cheapest-to-lose spares off the sell list (workshop stockpile: commons
+        from dump sets and duplicates). Page cards of collect sets never appear here.
+        """
         by_ref: dict = {}
         for a in sorted(self.assets, key=lambda a: a.get("serial", 0)):
             by_ref.setdefault(a["ref"], []).append(a)
@@ -135,7 +139,18 @@ class Values:
             # Within a tier: lowest private-value loss first (clears faster), then higher serial.
             return (rank.get(tier, 9), self.loss_of_removing([a["ref"]]), -a.get("serial", 0))
 
-        return sorted(out, key=key)
+        ranked = sorted(out, key=key)
+        if reserve <= 0 or reserve >= len(ranked):
+            return [] if reserve >= len(ranked) and reserve > 0 else ranked
+        hold = {a["id"] for a in ranked[:int(reserve)]}
+        return [a for a in ranked if a["id"] not in hold]
+
+    def workshop_held(self, reserve: int) -> list:
+        """The spare assets we keep for the workshop (cheapest-to-lose first), or []."""
+        if reserve <= 0:
+            return []
+        # Full pool with reserve=0, then take the head.
+        return self.spares(reserve=0)[:int(reserve)]
 
     def wishlist(self, limit: int = 12) -> list:
         """Released cards we lack, ranked by what one copy would be worth to us (page completion included)."""
