@@ -60,6 +60,16 @@ in `data/feed.jsonl`, so `agent/collect.py` is not needed. Retired: `agent/abuel
 Code changes: commit and push from anywhere, then the Host runs `git pull` and restarts the agent (state survives in
 `team13/state.json`). Strategy changes need no restart: the Strategy tab writes `team13/strategy.json`, read every tick.
 
+## 1b. Morning checklist for everything added on Friday night
+
+After `git pull` and a restart, these are live (all on by default, each has a Strategy switch):
+`guard` (cancels value-losing offers and bids over caps), `flipper`, `wtb` (direct asks), `flags`
+(proven dealer lies), solvency checks (skip makers that cannot pay), direct offers addressed to us, duel fixes
+(`duel` id, sane openings, last-chance accept), Market Test length from the schedule, Claude tick budget.
+Tests to run once: `tests/check_guard_live.py`, `tests/test_flipper.py`, `tests/test_flags.py`,
+`tests/test_solvency.py`, `tests/test_wtb.py` (all must print OK). Then decide the market fee together, and only
+after the restart post the direct-asks note in the teams' channel (draft in our chat log, section 13 idea).
+
 ## 2. Start of day (Emmanuele, 08:45)
 
 ```bash
