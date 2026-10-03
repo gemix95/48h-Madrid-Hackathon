@@ -91,7 +91,13 @@ class Matchmaker:
         st = self.ctx.state
         if st.get("venue"):
             return st["venue"]
-        for v in getattr(self.ctx, "venues", None) or []:
+        venues = getattr(self.ctx, "venues", None)
+        if not venues:  # a duels-only agent never reads the markets: ask once a scan
+            try:
+                venues = self.ctx.public_get("/api/venues").get("venues", [])
+            except Exception:
+                venues = []
+        for v in venues:
             if v.get("owner") == self.ctx.me.get("id") and v.get("status") == "open":
                 return v["venue"]
         return None
@@ -109,9 +115,6 @@ class Matchmaker:
         if not ctx.S.get("enable_matchmaker", 0):
             return
         st, tick = ctx.state.setdefault("matchmaker", {"queue": [], "sent": {}, "open": {}, "scan": -999}), ctx.clock.get("tick", 0)
-        venue = self._venue()
-        if not venue:
-            return
         for tid, opened in list(st["open"].items()):  # close invitation threads after a few ticks
             if tick - opened >= CLOSE_AFTER:
                 try:
@@ -121,7 +124,10 @@ class Matchmaker:
                 st["open"].pop(tid)
         if tick - st["scan"] >= MATCH_EVERY:
             st["scan"] = tick
-            self._scan(st, tick, venue)
+            venue = self._venue()
+            if venue:
+                st["venue"] = venue
+                self._scan(st, tick, venue)
         if st["queue"] and len(st["open"]) < 2:
             team, text, key = st["queue"].pop(0)
             try:
