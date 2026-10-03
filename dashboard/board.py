@@ -216,7 +216,8 @@ MAX_PRICE = 100000  # a sanity cap for the price field, far above any card's val
 
 def _button(text, label, ask=None):
     """A copy button. With ask = {"def": suggested price, "min": lowest allowed}, the click first asks for the price,
-    checks it (a whole number from min to MAX_PRICE) and puts it into the call in place of YOUR_PRICE."""
+    checks it (a whole number from min to MAX_PRICE) and puts it into the call in place of YOUR_PRICE. The usual range
+    is shown as a hint only: the price is the user's call."""
     text = html.escape(text, quote=True)
     attrs, form = "", ""
     if ask:
@@ -609,12 +610,6 @@ document.querySelectorAll("form.pricef").forEach(f => f.addEventListener("submit
   const [n, why] = checkPrice(f.querySelector("input").value, parseInt(b.dataset.min || "1", 10));
   err.textContent = why;
   if (n === null) return;
-  const lo = parseInt(b.dataset.lo || "0", 10), hi = parseInt(b.dataset.hi || "0", 10);
-  if (hi && (n > hi * 3 || n * 3 < lo) && f.dataset.warned !== String(n)) {{  // far from what it trades at: ask once more
-    f.dataset.warned = String(n);
-    err.textContent = `${{n}} P is far from the usual ${{lo}}–${{hi}} P. Press Copy request again to use it anyway.`;
-    return;
-  }}
   copyOut(box, b.dataset.text.split("YOUR_PRICE").join(String(n)));
 }}));
 fetch("/board/cards.json").then(r => r.json()).then(cards => {{
