@@ -355,6 +355,9 @@ def run(url, key):
                 log(event="heartbeat", tick=tick, fee_bps=fee_bps, offers=len(book.get("offers") or []))
         except BazaarError as e:
             log(event="read_failed", error=str(e)[:200])
+            if "bad_key" in str(e) or "too_many_failures" in str(e):
+                # a wrong key retried every half second gets the whole server address blocked: wait a minute
+                time.sleep(60)
         except Exception as e:  # keep the loop up: a dead broker scores 0 for the rest of the session
             log(event="loop_error", error=repr(e)[:200])
         time.sleep(0.5)
