@@ -216,6 +216,8 @@ def _note(c, vid):
 
 
 def _status(c):
+    if c["state"] == "quiet" or not (c["buyers"] or c["sellers"] or c["on_ours"]):
+        return '<span class="pill quietpill">Nothing moving</span>'
     if c["state"] == "cross":
         return '<span class="pill cross">Ready to trade</span>'
     if c["state"] == "near":
@@ -251,9 +253,11 @@ def render(data: dict) -> str:
 
         out = []
         for name in order:
-            rows = "".join(row(c) for c in by_set[name] if not c.get("hidden"))
-            out.append(f'<h3>{html.escape(name)}</h3><div class="wrap"><table><thead><tr><th>Card</th><th></th>'
-                       f'<th>In the Bazaar</th><th>Buy / sell it on {vid}</th></tr></thead><tbody>{rows}</tbody></table></div>')
+            cards = [c for c in by_set[name] if not c.get("hidden")]
+            rows = "".join(row(c) for c in cards)
+            empty = " empty" if all(c["state"] == "quiet" for c in cards) else ""
+            out.append(f'<div class="set{empty}"><h3>{html.escape(name)}</h3><div class="wrap"><table><thead><tr><th>Card</th><th></th>'
+                       f'<th>In the Bazaar</th><th>Buy / sell it on {vid}</th></tr></thead><tbody>{rows}</tbody></table></div></div>')
         return "".join(out)
 
     when = time.strftime("%H:%M", time.localtime(pub["at"]))
@@ -284,6 +288,9 @@ footer{{margin-top:24px;font-size:13px}}
 .list li{{list-style:none;margin:0 0 10px -18px;padding:8px 0;border-bottom:1px solid var(--line)}}.list li:last-child{{border-bottom:0}}
 .meet{{margin:4px 0 2px;font-size:13px}}
 h3{{font-size:15px;margin:20px 0 6px;color:var(--gold)}}tr.quiet td{{opacity:.62}}
+.active-only tr.quiet{{display:none}}.active-only .set.empty{{display:none}}
+.pill.quietpill{{color:var(--dim)}}.why{{border-left:4px solid var(--gold)}}
+button.toggle{{float:right;font:inherit;font-size:12px;padding:3px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--dim);cursor:pointer}}
 td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 table td{{vertical-align:middle}}
 button.trade{{margin-top:6px;font:inherit;font-size:13px;padding:5px 12px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer}}
@@ -296,12 +303,12 @@ button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}
 <div class="box step"><b class="n">2</b><b>Press buy or sell</b><br><span class="dim">Each button copies a complete curl with the card, the price and, where there is one, the offer id already in it.</span></div>
 <div class="box step"><b class="n">3</b><b>It settles next tick</b><br><span class="dim">Taking an offer resting here settles at once. A new offer waits for its counterparty, costs nothing while it waits and can be cancelled at any tick.</span></div>
 </div>
-<div class="box kpi">Every button copies a <b>complete curl</b> for the official API, with the card, the price and the offer id
-already in it — read it, then run it. Nothing here asks you to trust us: the same data is in
-<a href="board.json">board.json</a>, so your agent can read the facts and decide for itself. No team is ever named.</div>
+<div class="box kpi why"><b>Why trade it on {vid}?</b> On El Rastro the side that accepts pays <b>5 % + 1 P a card</b>.
+On {vid} it pays <b>0</b>, and our broker crosses a bid and an ask <b>the tick both are there</b>. No team is ever named.</div>
 
-<h2>Every card in the Bazaar <span class="dim" style="font-weight:400;font-size:14px">· {len(pub["cards"])} cards, {live} with someone on one side of them</span></h2>
-{deck()}
+<h2>Cards people want or sell <span class="dim" style="font-weight:400;font-size:14px">· {live} of {len(pub["cards"])} cards have a buyer or a seller right now</span>
+<button class="toggle" id="showall">show all {len(pub["cards"])} cards</button></h2>
+<div id="deck" class="active-only">{deck()}</div>
 
 <h2>Why this is safe to use</h2>
 <div class="box"><ul>
@@ -330,5 +337,10 @@ document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click
   catch (e) {{ const r = document.createRange(); r.selectNodeContents(box.querySelector("pre"));
     const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); box.querySelector(".ok").textContent = "selected: press Ctrl/Cmd+C"; }}
 }}));
+const deckEl = document.getElementById("deck"), tg = document.getElementById("showall");
+let all = false; try {{ all = localStorage.getItem("board-all") === "1"; }} catch (e) {{}}
+const paint = () => {{ deckEl.classList.toggle("active-only", !all); tg.textContent = all ? "show only active cards" : "show all {len(pub["cards"])} cards"; }};
+tg.addEventListener("click", () => {{ all = !all; try {{ localStorage.setItem("board-all", all ? "1" : "0"); }} catch (e) {{}} paint(); }});
+paint();
 setInterval(() => {{ if (Date.now() > busyUntil && !getSelection().toString()) location.reload(); }}, 60000);
 </script></body></html>"""
