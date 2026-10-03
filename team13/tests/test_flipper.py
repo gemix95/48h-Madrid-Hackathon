@@ -47,9 +47,15 @@ boards = {"v02": [ask(1, "LAT-03", 8, "t04"), ask(2, "MAL-09", 70, "t09")],
 
 ctx = make_ctx(boards)
 Flipper(ctx).step()
-assert ctx.api.calls == [("accept", 1, None)], ctx.api.calls          # buys LAT-03 at 8, not MAL-09 (worth 91 to us), not t06 -> t06
+assert ctx.api.calls == [], ctx.api.calls  # LAT-03 is worth ~5 to us: never pay 8 for it, even to flip
+print("tick 9 OK: refused LAT-03 at 8 (more than it is worth to us)")
+
+boards["v02"][0] = ask(1, "LAT-03", 4, "t04")
+ctx = make_ctx(boards)
+Flipper(ctx).step()
+assert ctx.api.calls == [("accept", 1, None)], ctx.api.calls          # buys LAT-03 at 4, not MAL-09 (worth 91 to us), not t06 -> t06
 assert ctx.state["flip"]["target"]["team"] == "t15"
-print("tick 10 OK: bought LAT-03 at 8 for t15's bid of 18; skipped MAL-09 (keep) and the same-team pair")
+print("tick 10 OK: bought LAT-03 at 4 for t15's bid of 18; skipped MAL-09 (keep) and the same-team pair")
 
 # next tick: the card arrived, t15's bid is still there -> sell into it with that asset
 me2 = {**me, "assets": me["assets"] + [card("LAT-03", 7777)]}
@@ -57,7 +63,7 @@ ctx.values, ctx.me, ctx.clock, ctx._acc, ctx.api.calls = Values(cat, me2), me2, 
 Flipper(ctx).step()
 assert ctx.api.calls == [("accept", 3, [7777])], ctx.api.calls
 assert ctx.state["flip"]["stage"] == "settling"
-print("tick 11 OK: sold LAT-03 into t15's bid at 18 (profit 18 - 2 fee - 8 = 8)")
+print("tick 11 OK: sold LAT-03 into t15's bid at 18 (profit 18 - 2 fee - 4 = 12)")
 
 # a tick later the card is gone -> flip done
 ctx.values, ctx.me, ctx.clock = Values(cat, me), me, {"tick": 12}

@@ -253,15 +253,10 @@ class Haggler:
         def good(p):  # inside our limits, and (buying) within today's budget and never with the cash we keep
             return p is not None and ((buy and p <= plan["hi"] and p <= ctx.budget_left()) or (not buy and p >= plan["lo"]))
 
-        def good_final(p):  # finals: up to the threshold learned from every team's conversations
+        def good_final(p):  # a buying final above plan["hi"] would cost more than the item is worth to us: walk away
             if buy and p is not None and p > ctx.budget_left():
                 return False  # never past today's budget or into the cash we keep
-            if good(p):
-                return True
-            asks = plan.get("asks") or []
-            if buy and p is not None and plan.get("final_max_r") and asks:
-                return p <= math.floor(plan["final_max_r"] * asks[0]) and p <= math.floor((plan.get("list") or p) * ctx.S["haggle_cap"])
-            return False
+            return good(p)
 
         if last and last.get("final"):
             if good_final(ask) and ctx.take_accept():

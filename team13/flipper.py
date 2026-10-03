@@ -1,8 +1,9 @@
 """Flipper: buy a card one team sells below what another team bids for it, then sell into that bid.
 
-Each trade scores at our private values, so a flip scores (their bid - the ask - both fees) whatever the card's set:
-we gain its value when we buy and give the same value back when we sell. We pay both fees because we accept both
-sides; the profit must still clear `flip_min_gain`.
+Each trade scores at our private values, so a flip scores (their bid - the ask - both fees): we gain its value when
+we buy and give the same value back when we sell. We pay both fees because we accept both sides; the profit must
+still clear `flip_min_gain`, and we only buy at or below what the card is worth to us, so a bid that vanishes
+never leaves us holding a loss.
 
 One flip at a time, so a flip never ties up more than one card and `flip_max_cash`:
   buying   we accepted the ask; it settles next tick
@@ -71,16 +72,17 @@ class Flipper:
         for ref, side in book.items():
             if not side["asks"] or not side["bids"] or ref not in ctx.values.cards:
                 continue
+            keep = ctx.values.gain_of_adding([ref])
             for ask, av, ao, at in sorted(side["asks"], key=lambda x: x[0])[:3]:
                 cost = ask + self._fee(av, ask)
-                if cost > budget or ask > caps.get(ref, 10 ** 9):
-                    continue
+                if cost > budget or ask > caps.get(ref, 10 ** 9) or cost > keep:
+                    continue  # never pay more than the card is worth to us, even if the bid vanishes
                 for bid, bv, bo, bt in sorted(side["bids"], key=lambda x: -x[0])[:3]:
                     sol = getattr(ctx, "solvency", None)
                     if bt == at or (sol and sol.cannot_pay(bt, bid)):
                         continue  # never route a team's card back to the same team
                     profit = bid - self._fee(bv, bid) - cost
-                    keep = ctx.values.gain_of_adding([ref])  # if we value it above the bid, keeping beats flipping
+                    # if we value it above the bid, keeping beats flipping
                     if profit >= min_gain and bid - self._fee(bv, bid) > keep and (best is None or profit > best[0]):
                         best = (profit, ref, ask, av, ao, at, bid, bv, bo, bt)
         if not best or not ctx.take_accept():
