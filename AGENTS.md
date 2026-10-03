@@ -11,6 +11,10 @@ A local process would trade as the same team. `pkill -f agent.py` then `pgrep -f
 - **Emmanuele** (`server/agents/emmanuele.env`): L2 Chato + L4 Pícaros, 30 P per 2 game hours, accepts on even ticks (`AGENT_SLOT=0`).
 - Scope and budget live in `/home/bazaar/agents/<name>.env` on the server (root). Changing them is a server edit, not a laptop restart.
 - Code changes go to `main`. Auto-deploy restarts both agents.
+- A laptop dashboard has no live agent log. Add `DASHBOARD_REMOTE=http://217.160.143.83` and
+  `DASHBOARD_REMOTE_PASSWORD=<dashboard password>` to your `bazaar.env`. Each message of ours then shows who sent it:
+  🤖 sergio / emmanuele / anton, 📜 script (server scripts), ✋ manual, or ⚠ not ours (no log on the server has it:
+  a laptop or another program used our key).
 - Emmanuele's log: `ssh <you>@217.160.143.83 'tail -f /home/bazaar/app/team13/logs/decisions.jsonl' | grep '"agent": "emmanuele"'`
 - The AI negotiator is Claude Opus 5.5 at medium effort (`llm_effort` 1). It needs the `anthropic` SDK and the key
   in `anthropic.env` at the repo root (git-ignored). The agent picks the key up within 30 s, with no restart.
