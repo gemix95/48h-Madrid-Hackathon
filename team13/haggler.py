@@ -53,6 +53,21 @@ def Learner_reward(ctx, plan, price, opening):
                 capture=round(1 - price / opening, 3) if price and opening else 0)
 
 
+# Abuela gives a small gift (a random common) to teams that are kind to her, about once per team every two game
+# hours (Saturday feed: t06 at ticks 447 and 687, t07 at 506 and 759). A visit is one warm message, no price, no buy.
+VISIT_TEXTS = [
+    "¡Buenas tardes, Abuela Carmen! I only came by to say thank you. Your stall is the warmest corner of El Rastro, "
+    "and after a long day of running around it is lovely to see a friendly face. How is your day going?",
+    "Abuela Carmen, hello again! No hurry and nothing to sell today, I just wanted to see how you are. "
+    "Your stories make El Rastro feel like home. Have you had a moment to rest?",
+    "¡Hola, Abuela! Passing by to wish you a lovely afternoon. Thank you for always being so patient with us; "
+    "it means a lot to a team far from home. Is there anything nice happening at your stall today?",
+]
+VISIT_HOURS = 2.0       # game hours between two visits
+VISIT_CLOSE_TICKS = 3   # leave the visit thread open this long for her answer (and the gift), then close it
+PERSONA_QUOTA = 10      # the game: at most 10 conversations per hour with one dealer
+
+
 def S_use_intel(ctx) -> bool:
     return bool(ctx.S.get("use_intel", 1)) and getattr(ctx, "intel", None) is not None
 
@@ -271,6 +286,36 @@ class Haggler:
         strict = ((dealer.get("traits") or {}).get("strictness") or 0) >= 0.6 or (st or {}).get("walked", 0) >= 2
         return (4, 1.0) if strict else (None, None)
 
+    # ------------------------------------------------------------------ conversations per hour, and Abuela visits
+    def _opens(self, dealer_id: str) -> list:
+        """Game hours at which we opened a conversation with this dealer within the last hour."""
+        now = self.ctx.clock.get("t_hours") or 0
+        opens = self.ctx.state.setdefault("dealer_opens", {}).setdefault(dealer_id, [])
+        opens[:] = [h for h in opens if now - h < 1.0]
+        return opens
+
+    def _visit_due(self, d) -> bool:
+        if d["id"] != "abuela" or not self.ctx.S.get("abuela_visits", 1):
+            return False
+        now = self.ctx.clock.get("t_hours") or 0
+        return now - self.ctx.state.get("abuela_visit_hours", -99) >= VISIT_HOURS and len(self._opens("abuela")) < PERSONA_QUOTA
+
+    def _visit(self, d):
+        ctx = self.ctx
+        try:
+            th = ctx.api.open_thread(d["id"], topic={"buy": {"pack": "sobre_barrio"}})
+        except BazaarError as e:
+            ctx.log("haggle", "visit_refused", dealer=d["id"], error=str(e)[:120])
+            ctx.state["abuela_visit_hours"] = (ctx.clock.get("t_hours") or 0) - VISIT_HOURS + 0.25  # retry in 15 min
+            return
+        n = ctx.state.get("abuela_visit_n", 0)
+        ctx.api.say(th["id"], VISIT_TEXTS[n % len(VISIT_TEXTS)])
+        ctx.state.update(abuela_visit_hours=ctx.clock.get("t_hours") or 0, abuela_visit_n=n + 1)
+        self._opens(d["id"]).append(ctx.clock.get("t_hours") or 0)
+        ctx.state.setdefault("plans", {})[str(th["id"])] = {"visit": True, "dealer": d["id"], "tick": ctx.clock.get("tick", 0),
+                                                             "key": "abuela:visit"}
+        ctx.log("haggle", "visit", dealer=d["id"], thread=th["id"])
+
     # ------------------------------------------------------------------ the loop
     def step(self):
         ctx = self.ctx
@@ -278,9 +323,22 @@ class Haggler:
         open_threads = {t["with"]: t for t in ctx.threads if t.get("kind") == "persona" and t["status"] == "open"}
         for d in dealers:
             th = open_threads.get(d["id"])
+            plan = ctx.state.get("plans", {}).get(str(th["id"])) if th else None
+            if plan and plan.get("visit"):  # a gift visit: no haggling, close it after a few ticks
+                if ctx.clock.get("tick", 0) - plan["tick"] >= VISIT_CLOSE_TICKS:
+                    try:
+                        ctx.api.close_thread(th["id"])
+                    except BazaarError:
+                        pass
+                continue
             if th is None:
                 if len([t for t in ctx.threads if t["status"] == "open"]) >= ctx.limit("max_open_threads_per_team", 6):
                     continue
+                if self._visit_due(d):
+                    self._visit(d)
+                    continue
+                if d["id"] == "abuela" and len(self._opens(d["id"])) >= ctx.S.get("abuela_haggle_per_hour", 6):
+                    continue  # keep the rest of her hourly quota for a visit
                 choice = self.choose_topic(d)
                 if not choice:
                     continue
@@ -300,6 +358,7 @@ class Haggler:
                 plan.update(k=0, offers=[], dealer=d["id"], name=d.get("name", d["id"]).split()[0], rounds=rounds, curve=curve)
                 ctx.state.setdefault("plans", {})[str(th["id"])] = plan
                 self._counts(d["id"])["opened"] += 1
+                self._opens(d["id"]).append(ctx.clock.get("t_hours") or 0)
                 ctx.log("haggle", "opened", dealer=d["id"], topic=topic, plan=plan)
                 th = ctx.api.thread(th["id"])
             self.negotiate(th, d)
@@ -452,6 +511,9 @@ class Haggler:
     def finish(self, th, plan):
         ctx = self.ctx
         plan["done"] = True
+        if plan.get("visit"):
+            ctx.log("haggle", "visit_ended", thread=th["id"], status=th["status"])
+            return
         stats = ctx.state.setdefault("dealer_stats", {}).setdefault(plan["key"], {"deals": [], "walked": 0, "rounds": []})
         price = None
         for o in th.get("standing_offers", []):

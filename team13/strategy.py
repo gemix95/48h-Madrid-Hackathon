@@ -62,6 +62,10 @@ KNOBS = {
     "buy_open_margin": (0.6, 0.1, 0.8, 0.05, "Dealers", "First offer under our value",
                         "Open at (1 - this) x our value (lower if the list-price rule opens lower), then concede "
                         "Boulware-style up to the cap, reaching it at the round this dealer usually names its final (every team's conversations)."),
+    "abuela_visits": (1, 0, 1, 1, "Dealers", "Abuela gift visits",
+                      "Every 2 game hours one kind message to Abuela, no price and no buy: she gives kind teams a small gift."),
+    "abuela_haggle_per_hour": (6, 0, 10, 1, "Dealers", "Abuela haggles per hour",
+                               "Her quota is 10 conversations an hour; haggling stops here so a gift visit always has room."),
     "haggle_buy_packs": (1, 0, 1, 1, "Dealers", "Buy packs", "Packs: 3 per hour from Abuela."),
     "haggle_sell_spares": (1, 0, 1, 1, "Dealers", "Sell spares to dealers",
                            "Sell duplicates/low-value cards to dealers (only above the workshop reserve)."),
