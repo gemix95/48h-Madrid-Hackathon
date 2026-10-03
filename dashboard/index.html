@@ -1836,10 +1836,20 @@ function marketing(d) {
 }
 
 // ---------- rivals ----------
+function rivalCash(d, team) {
+  // Cash is private; we reconstruct it from the public feed and shift so our row matches /api/me.
+  const rows = d.intel?.teams || {};
+  const ourEst = rows[d.me.id]?.cash;
+  const shift = (ourEst != null && d.me.cash != null) ? d.me.cash - ourEst : 0;
+  if (team === d.me.id) return { cash: d.me.cash, approx: false };
+  const est = rows[team]?.cash;
+  if (est == null) return { cash: null, approx: true };
+  return { cash: est + shift, approx: true };
+}
 function leaderboard(d) {
   const teams = (d.leaderboard?.teams || []).slice().sort((a, b) => b.score - a.score || a.rank - b.rank);
   if (!teams.length) { $("leaderboard").innerHTML = `<div class="empty">No leaderboard yet.</div>`; return; }
-  const W = 700, rowH = 22, L = 110, R = 230, H = teams.length * rowH + 4;
+  const W = 780, rowH = 22, L = 110, R = 300, H = teams.length * rowH + 4;
   const max = Math.max(1, ...teams.map(t => (t.negotiating || 0) + (t.market || 0)));
   const X = v => v / max * (W - L - R);
   let g = "";
@@ -1851,13 +1861,16 @@ function leaderboard(d) {
     if (m > 0) g += `<rect x="${L + n + 1}" y="${y + 4}" width="${Math.max(1, m - 1)}" height="12" rx="2" fill="var(--series-2)"/>`;
     g += `<text x="${L + n + m + 6}" y="${y + 14}" class="ink1">${fmt(t.score)}</text>`;
     const spent = d.intel?.teams?.[t.team]?.spent;
-    g += `<text x="${W - 4}" y="${y + 14}" text-anchor="end">L${t.level} · ${t.album_filled}/${t.album_slots} · ${t.deals} deals · ${spent ?? 0} P spent</text>`;
+    const { cash, approx } = rivalCash(d, t.team);
+    const cashTxt = cash == null ? "? P" : `${approx ? "~" : ""}${Math.round(cash)} P`;
+    g += `<text x="${W - 4}" y="${y + 14}" text-anchor="end"><tspan style="font-weight:700">${cashTxt}</tspan> · L${t.level} · ${t.album_filled}/${t.album_slots} · ${t.deals}d · ${spent ?? 0} spent</text>`;
     g += `<rect data-tip="${i}" x="0" y="${y}" width="${W}" height="${rowH}" fill="transparent"/>`;
   });
   g += `<line x1="${L}" x2="${L}" y1="0" y2="${H}" stroke="var(--axis)"/>`;
-  $("leaderboard").innerHTML = `<div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Negotiating</span><span><i class="swatch" style="background:var(--series-2)"></i>Market-making</span><span class="muted">right: level · album · deals · spent at dealers</span></div>
-    <svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg><div class="empty" style="margin-top:6px">The public board is a snapshot that refreshes every few minutes; our tile score is live.</div>`;
-  bindTips($("leaderboard"), i => { const t = teams[i]; return `<b>${esc(t.name)}</b> · score ${fmt(t.score)}<br>negotiating ${fmt(t.negotiating)} · market ${fmt(t.market)}<br>level ${t.level} · album ${t.album_filled}/${t.album_slots} · ${t.pages_complete} pages · ${t.deals} deals<br>spent at dealers: ${d.intel?.teams?.[t.team]?.spent ?? "–"} P (${d.intel?.teams?.[t.team]?.negotiated ?? 0} haggled)<br>rarest: ${esc(t.rarest?.name || "–")} ${t.rarest ? `#${t.rarest.serial}/${t.rarest.print_run}` : ""}${t.venue ? `<br>venue: ${esc(t.venue)}` : ""}`; });
+  $("leaderboard").innerHTML = `<div class="legend"><span><i class="swatch" style="background:var(--series-1)"></i>Negotiating</span><span><i class="swatch" style="background:var(--series-2)"></i>Market-making</span><span class="muted">right: cash left · level · album · deals · spent at dealers</span></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg><div class="empty" style="margin-top:6px">Cash for other teams is estimated from the public feed (ours is exact); ~ means approximate. The scoreboard snapshot refreshes every few minutes.</div>`;
+  bindTips($("leaderboard"), i => { const t = teams[i]; const { cash, approx } = rivalCash(d, t.team);
+    return `<b>${esc(t.name)}</b> · score ${fmt(t.score)}<br>cash left: ${cash == null ? "?" : `${approx ? "~" : ""}${Math.round(cash)} P`}${approx ? " (from public feed)" : ""}<br>negotiating ${fmt(t.negotiating)} · market ${fmt(t.market)}<br>level ${t.level} · album ${t.album_filled}/${t.album_slots} · ${t.pages_complete} pages · ${t.deals} deals<br>spent at dealers: ${d.intel?.teams?.[t.team]?.spent ?? "–"} P (${d.intel?.teams?.[t.team]?.negotiated ?? 0} haggled)<br>rarest: ${esc(t.rarest?.name || "–")} ${t.rarest ? `#${t.rarest.serial}/${t.rarest.print_run}` : ""}${t.venue ? `<br>venue: ${esc(t.venue)}` : ""}`; });
 }
 let feedFilter = "all";
 function feed(d) {
@@ -2383,9 +2396,12 @@ function intelTab(d, M) {
   bindTips($("intel-prices"), i => tips[i]);
 
   // rivals table
-  $("intel-teams").innerHTML = `<table><thead><tr><th>Team</th><th class="num">Talks</th><th class="num">Deals</th><th class="num">Haggled</th><th class="num">Spent</th><th class="num">Gifts</th><th class="num">Listings</th></tr></thead><tbody>`
-    + Object.entries(I.teams).sort((a, b) => b[1].negotiated - a[1].negotiated || b[1].deals - a[1].deals).map(([t, v]) =>
-      `<tr${t === d.me.id ? ' style="font-weight:700"' : ""}><td>${esc(nm(t) === "us" ? "Team 13 (us)" : nm(t))}</td><td class="num">${v.conversations}</td><td class="num">${v.deals}</td><td class="num">${v.negotiated}</td><td class="num">${v.spent} P</td><td class="num">${v.gifts}</td><td class="num">${v.listings}</td></tr>`).join("") + `</tbody></table>`;
+  $("intel-teams").innerHTML = `<table><thead><tr><th>Team</th><th class="num">Cash</th><th class="num">Talks</th><th class="num">Deals</th><th class="num">Haggled</th><th class="num">Spent</th><th class="num">Gifts</th><th class="num">Listings</th></tr></thead><tbody>`
+    + Object.entries(I.teams).sort((a, b) => b[1].negotiated - a[1].negotiated || b[1].deals - a[1].deals).map(([t, v]) => {
+      const { cash, approx } = rivalCash(d, t);
+      const cashTxt = cash == null ? "–" : `${approx ? "~" : ""}${Math.round(cash)} P`;
+      return `<tr${t === d.me.id ? ' style="font-weight:700"' : ""}><td>${esc(nm(t) === "us" ? "Team 13 (us)" : nm(t))}</td><td class="num">${cashTxt}</td><td class="num">${v.conversations}</td><td class="num">${v.deals}</td><td class="num">${v.negotiated}</td><td class="num">${v.spent} P</td><td class="num">${v.gifts}</td><td class="num">${v.listings}</td></tr>`;
+    }).join("") + `</tbody></table>`;
   // rounds until each dealer's final, every team together (what our agent uses) and per team
   const RD = I.rounds || {}, ds = Object.keys(RD).sort((a, b) => RD[b].n - RD[a].n);
   const tms = [...new Set(ds.flatMap(x => Object.keys(RD[x].teams)))]

@@ -176,7 +176,7 @@ class Intel:
                 "beginner_deals": [(r["tick"], r["price"], r["team"]) for r in v["beginner"]],
             }
 
-        teams: dict = defaultdict(lambda: {"deals": 0, "negotiated": 0, "spent": 0, "gifts": 0, "listings": 0, "conversations": 0})
+        teams: dict = defaultdict(lambda: {"deals": 0, "negotiated": 0, "spent": 0, "gifts": 0, "listings": 0, "conversations": 0, "cash": None})
         for th in threads.values():
             teams[th["team"]]["conversations"] += 1
         for s in settlements:
@@ -190,6 +190,8 @@ class Intel:
         for l in listings:
             if l["maker"]:
                 teams[l["maker"]]["listings"] += 1
+        for tid, left in self.cash_left(evs).items():  # public feed only; dashboard calibrates ours to /api/me
+            teams[tid]["cash"] = left
 
         # rounds: the team's offers until the dealer named a final (her patience); a deal without a final ended
         # earlier by choice, so it only counts for a dealer with fewer than three finals
@@ -223,6 +225,65 @@ class Intel:
                          "dealer_deals": [s["rec"] for s in settlements][-120:]}
         self._at = time.time()
         return self._summary
+
+    def cash_left(self, evs=None) -> dict:
+        """Estimate each team's liquid primas from the public feed (cash is not on the leaderboard).
+
+        Starts at 400, adds schedule grants (e.g. Saturday +150), gifts of cash, dealer and team trade
+        prices, and subtracts venue bonds (+20 opening fee). Skips Market Test `match` settlements and
+        per-trade fees (those are hard to attribute and usually small). Expect a few P of error; the
+        dashboard shifts every row so our estimate matches /api/me.
+        """
+        START, OPEN_FEE = 400, 20
+        cash: dict = defaultdict(lambda: START)
+        joined: set = set()
+        owners: dict = {}
+        for e in sorted(evs if evs is not None else self.events.values(),
+                        key=lambda x: (x.get("tick") or 0, x.get("id") or 0)):
+            t, p = e.get("type"), e.get("payload") or {}
+            if t == "team.joined" and p.get("team"):
+                joined.add(p["team"])
+                cash.setdefault(p["team"], START)
+            elif t == "schedule.fired" and p.get("action") == "grant_all":
+                m = re.search(r"(\d+)\s*primas", p.get("note") or "")
+                if m:
+                    amt = int(m.group(1))
+                    for tid in joined or list(cash):
+                        cash[tid] += amt
+            elif t == "gift.given" and p.get("team"):
+                cash[p["team"]] += int(p.get("cash") or 0)
+            elif t == "venue.opened":
+                owner = p.get("owner") or p.get("team")
+                if owner:
+                    owners[p.get("venue")] = owner
+                    bond = int(p.get("bond") or 0)
+                    if bond:
+                        cash[owner] -= bond + OPEN_FEE
+            elif t == "venue.closed":
+                owner = owners.get(p.get("venue")) or p.get("owner") or p.get("team")
+                refund = int(p.get("refund") or 0)
+                if owner and refund:
+                    cash[owner] += refund
+            elif t == "settlement" and p.get("kind") != "match":
+                price = int(p.get("price") or 0)
+                if not price:
+                    continue
+                items = p.get("items") or []
+                recv = {it.get("to") for it in items
+                        if it.get("kind") in ("card", "pack") and str(it.get("to") or "").startswith("t")}
+                give = {(it.get("frm") or it.get("from")) for it in items
+                        if it.get("kind") in ("card", "pack")
+                        and str(it.get("frm") or it.get("from") or "").startswith("t")}
+                buyers, sellers = recv - give, give - recv
+                if not buyers and recv:
+                    buyers = set(recv)
+                if not sellers and give:
+                    sellers = set(give)
+                for b in buyers:
+                    cash[b] -= price
+                for s in sellers:
+                    cash[s] += price
+        return {tid: int(v) for tid, v in cash.items()}
 
     # ------------------------------------------------------------------ advice for the agent
     def advice(self, dealer: str, cls: str) -> dict:
