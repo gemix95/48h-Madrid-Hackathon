@@ -18,6 +18,7 @@ KNOBS = {
     "enable_venue": (1, 0, 1, 1, "Modules", "Open our market", "Open our own market as soon as we reach level 2."),
     "enable_guard": (1, 0, 1, 1, "Modules", "Guard", "Last each tick: cancel any open offer of ours that loses value at our private values or breaks a team cap."),
     "enable_flipper": (1, 0, 1, 1, "Modules", "Flipper", "Buy a card a team sells below another team's bid and sell into that bid (profit after both fees)."),
+    "enable_wtb": (1, 0, 1, 1, "Modules", "Want-to-buy asks", "Direct offers to teams that probably hold a card we need and do not collect its set."),
     "auto_flag_proven": (1, 0, 1, 1, "Modules", "Flag proven bad faith", "Flag a dealer message when its own structured offer proves the words false (price or card code). A correct flag scores, a wrong one costs."),
     "flag_bluffs": (0, 0, 1, 1, "Modules", "Also flag proven bluffs", "Flag a 'final' price the same dealer later beat in the same conversation. Off until we see how organisers score bluffs."),
     "flag_catalog": (0, 0, 1, 1, "Modules", "Also flag catalog contradictions", "Flag a stated print run that contradicts the catalog."),
@@ -47,6 +48,10 @@ KNOBS = {
     "haggle_sell_spares": (1, 0, 1, 1, "Dealers", "Sell spares to dealers", "Sell duplicates/low-value cards to dealers."),
     "haggle_buy_cards": (1, 0, 1, 1, "Dealers", "Buy single cards", "Buy cards we value most (Salamanca, Malasaña)."),
     # trading
+    "wtb_price_share": (0.9, 0.5, 1.3, 0.05, "Trading", "Want-to-buy price (x book)",
+                        "Never above our value minus the minimum gain, a team cap or free cash; never below 0.6 x book."),
+    "wtb_max_open": (3, 0, 10, 1, "Trading", "Want-to-buy asks open at once", "One new ask per tick at most."),
+    "wtb_ticks": (120, 10, 400, 10, "Trading", "Want-to-buy ask life (ticks)", "Long, so the holder's agent has time to see it."),
     "flip_min_gain": (4, 1, 30, 1, "Trading", "Minimum profit per flip (P)",
                       "A flip buys from one team and sells into another team's bid; it must clear this after both fees."),
     "flip_max_cash": (120, 0, 400, 10, "Trading", "Most cash one flip may use (P)",

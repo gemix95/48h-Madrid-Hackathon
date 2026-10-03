@@ -300,3 +300,18 @@ every set. Chato sells rare singles at ~85 by minting new copies, so a rare's pr
 6. Silver packs for an epic: no. A Salamanca epic from one pack is ~2% (12% x 1/6 sets) and the pack's expected
    book (~160) is about its price: a lottery, not a plan.
 
+## 13. Direct asks: "can you sell us ABC?" (`team13/wtb.py`, `agent/ledger.py`)
+
+- `agent/ledger.py who MAL-07 MAL-10` lists the likely holders of a card from public evidence (settlements, gifts,
+  listings, each team's rarest card) with their lean on that set. Starting hands and pack contents are hidden, so
+  it lists likely holders, not inventories (on ourselves it misses cards we started with).
+- The `wtb` module asks them with a direct offer on the cheapest market that is not ours (`to: <team>`, 120
+  ticks): never a team that collects that set, never a team that has not acted itself in 120 ticks (t11 never
+  moved on Friday), never an untrusted team. Price: book x 0.9, never above our value minus the minimum gain, a
+  team cap or free cash, never below 0.6 x book. At most 3 asks open, one new per tick, the same team and card once
+  per 60 ticks. The guard cancels an ask once we own the card.
+- Friday night's plan with 300 P: MAL-10 from t09 at 63 (its rarest card; it dumps Malasaña), MAL-07 from t10 or
+  t06 at 22, LAV-06/07 from t06 or t12 at 22. Test: `python3 team13/tests/test_wtb.py`.
+- What Friday taught: sellers that do not collect the set say yes (t04, SAL-09 at 74), collectors say no (t17,
+  SAL-10), several agents never read their threads, and thread offers die after 2 ticks.
+
