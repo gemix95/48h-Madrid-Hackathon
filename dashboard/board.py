@@ -285,6 +285,18 @@ def render(data: dict) -> str:
     deadline = pub["deadline"]
     live = sum(1 for c in pub["cards"] if c["state"] != "quiet")
 
+    def setnav():
+        """Quick links to each set's table, in page order."""
+        seen, links = set(), []
+        for c in sorted(pub["cards"], key=lambda x: x.get("order") or (99, 99)):
+            name, sid = c.get("set") or "?", c.get("set_id") or c.get("set") or "?"
+            if name in seen or c.get("hidden"):
+                continue
+            seen.add(name)
+            n = sum(1 for x in pub["cards"] if x.get("set") == name and not x.get("hidden") and (x["buyers"] or x["sellers"]))
+            links.append(f'<a href="#set-{html.escape(str(sid))}">{html.escape(name)}<span class="n">{n}</span></a>')
+        return "".join(links)
+
     def deck():
         """Every card of the Bazaar, by set, each with what the board knows about it and both calls."""
         by_set, order = {}, []
@@ -312,7 +324,8 @@ def render(data: dict) -> str:
             cards = [c for c in by_set[name] if not c.get("hidden")]
             rows = "".join(row(c) for c in cards)
             empty = " empty" if all(c["state"] == "quiet" for c in cards) else ""
-            out.append(f'<div class="set{empty}"><h3>{html.escape(name)}</h3><div class="wrap"><table class="deck"><thead><tr>'
+            sid = html.escape(str(cards[0].get("set_id") or name)) if cards else html.escape(name)
+            out.append(f'<div class="set{empty}" id="set-{sid}"><h3>{html.escape(name)}</h3><div class="wrap"><table class="deck"><thead><tr>'
                        f'<th>Card</th><th>For sale <span class="dim">· best price to buy</span></th>'
                        f'<th>Sell it <span class="dim">· best price you get</span></th></tr></thead><tbody>{rows}</tbody></table></div></div>')
         return "".join(out)
@@ -356,7 +369,11 @@ td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 table.deck td{{vertical-align:middle}}td.cardcell{{display:flex;gap:12px;align-items:center;min-width:240px}}
 .thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
 .cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
-td.side button.trade{{margin-top:6px}}.price.flash{{background:color-mix(in srgb,var(--gold) 25%,transparent);border-radius:6px;transition:background 1s}}
+td.side button.trade{{margin-top:6px}}
+.setnav{{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;margin:6px 0 4px;background:var(--bg)}}
+.setnav a{{text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;font-size:13px}}
+.setnav a:hover{{border-color:var(--gold);color:var(--gold)}}.setnav .n{{color:var(--dim);margin-left:6px;font-size:12px}}
+.set{{scroll-margin-top:56px}}.price.flash{{background:color-mix(in srgb,var(--gold) 25%,transparent);border-radius:6px;transition:background 1s}}
 table td{{vertical-align:middle}}
 button.trade{{margin-top:6px;font:inherit;font-size:13px;padding:5px 12px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer}}
 button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}.ok{{color:var(--green);font-weight:600;margin-left:6px}}
@@ -372,6 +389,7 @@ Got a spare? <b>Sell it fast</b> to the best buyer.</div>
 </div>
 
 <h2>Every card in the Bazaar <span class="dim" style="font-weight:400;font-size:14px">· {live} have a price now · no price? bid first, on {vid}</span></h2>
+<nav class="setnav">{setnav()}</nav>
 <div id="deck">{deck()}</div>
 
 <h2>Why this is safe to use</h2>
