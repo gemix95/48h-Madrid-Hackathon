@@ -16,3 +16,4 @@
 {"ts": 1791055657.5, "tick": 1260, "author": "duels", "topic": "deal", "lesson": "Duel 5691 settled at 104 P, 5 days.", "evidence": {"duel": 5691, "price": 104}, "agent": "Hershey-26", "role": "dealers", "host": "PPFL2214GH"}
 {"ts": 1791055657.5, "tick": 1260, "author": "duels", "topic": "deal", "lesson": "Duel 6066 settled at 55 P, 10 days.", "evidence": {"duel": 6066, "price": 55}, "agent": "Hershey-26", "role": "dealers", "host": "PPFL2214GH"}
 {"ts": 1791055657.5, "tick": 1260, "author": "duels", "topic": "deal", "lesson": "Duel 6012 settled at 147 P, 10 days.", "evidence": {"duel": 6012, "price": 147}, "agent": "Hershey-26", "role": "dealers", "host": "PPFL2214GH"}
+{"ts": 1791055715.5, "tick": 1262, "author": "duels", "topic": "deal", "lesson": "Duel 5749 settled at 95 P, 10 days.", "evidence": {"duel": 5749, "price": 95}, "agent": "Hershey-26", "role": "dealers", "host": "PPFL2214GH"}
