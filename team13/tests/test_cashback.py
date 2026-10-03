@@ -10,8 +10,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import market  # noqa: E402
 import strategy  # noqa: E402
 
-notes = []
+notes, screen = [], []
 market.council_note = lambda topic, text, evidence=None, tick=None: notes.append(text)
+
+
+class Broker:  # our venue's big screen
+    def __init__(self, url, key):
+        pass
+
+    def announce(self, text):
+        screen.append(text)
+
+
+market.Broker = Broker
 
 
 class Api:
@@ -44,11 +55,13 @@ class Intel:
 class Ctx:
     def __init__(self, free_market=True):
         self.S = {**strategy.defaults()}
-        self.state = {"venue": "v03"}
+        self.state = {"venue": "v03", "broker_key": "k"}
+        self.raw = type("Raw", (), {"url": "http://test"})()
         self.clock = {"tick": 100, "today": "sat"}
         self.me = {"id": "t13", "level": 3, "score": {"score": 25, "mm_points": 0.0}}
         self.api, self.intel, self.threads, self.my_offers = Api(), Intel(), [], []
-        self.leaderboard = [{"team": "t13", "score": 25}, {"team": "t12", "score": 30}, {"team": "t07", "score": 10}]
+        self.leaderboard = [{"team": "t13", "score": 25}, {"team": "t12", "score": 30}, {"team": "t07", "score": 10},
+                            {"team": "t02", "name": "Team 2", "score": 20}, {"team": "t05", "name": "Team 5", "score": 20}]
         self.venues = [{"venue": "v02", "owner": "t12", "fee_bps": 0, "fee_per_card": 0, "status": "open"}]
         if free_market:
             self.venues.append({"venue": "v11", "owner": "t07", "fee_bps": 0, "fee_per_card": 0, "status": "open"})
@@ -94,6 +107,12 @@ ctx.clock["tick"] = 105
 m.cashback(105)
 cb = ctx.state["cashback"]
 r.append(check("accepted cashback counts as spent", cb["spent"] == 2, cb["spent"]))
+paid = [t for t in screen if "CASHBACK PAID" in t]
+r.append(check("each cashback collected is announced on the big screen", len(paid) == 1 and "Team 2 +1 P (sold LAT-02)" in paid[0]
+               and "Team 5 +1 P (bought LAT-02)" in paid[0] and "🚨" in paid[0] and "P left TODAY" in paid[0]
+               and len(paid[0]) <= market.ANNOUNCE_MAX, paid))
+m.cashback(106)
+r.append(check("a payout is announced only once", len([t for t in screen if "CASHBACK PAID" in t]) == 1))
 
 # 2 more accepted with no market-making gain: the check at 4 P pauses today's promo
 for oid, team in ((103, "t02"), (104, "t05")):

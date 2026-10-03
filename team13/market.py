@@ -62,11 +62,15 @@ REWARDS_PER_DAY = 4
 REWARD_TICKS = 60
 
 # cashback (knobs cashback_*): both sides of every trade between two teams on El Club get P back, as a cash offer
-CASHBACK_ANNOUNCE = ("CASHBACK at El Club ({venue}): every trade between two teams here pays {p} P back to EACH side, today "
-                     "while the {cap} P promo lasts ({left} P left). {fee} fee, 0 P per card. We send it as a cash offer: accept it.")
+CASHBACK_ANNOUNCE = ("🚨 CASHBACK at El Club ({venue}) 🚨 Every trade between two teams here pays {p} P back to EACH side 💸 "
+                     "Only {left} P left TODAY, first come first paid! {fee} fee, 0 P per card. We send it as a cash offer: accept it.")
 CASHBACK_PITCH = " Today: {p} P cashback to each side of every trade at El Club."
 CASHBACK_TEXT = ("El Club cashback: thanks for trading at El Club ({venue}). Here is {p} P back, a gift with nothing asked in "
                  "return: accept offer #{oid} with POST /api/offers/{oid}/accept (no assets needed). It settles next tick.")
+# true claims only: the names, amounts and P left are real; when the budget is gone we say so
+CASHBACK_PAID = ("🚨 CASHBACK PAID 🚨 {who} at El Club ({venue}) 💸 Only {left} P left TODAY, first come first paid: trade at "
+                 "El Club NOW and BOTH sides get paid! 0% fee 🚨")
+CASHBACK_GONE = "🚨 CASHBACK PAID 🚨 {who} at El Club ({venue}) 💸 Today's cashback budget is all gone: well played!"
 CASHBACK_TICKS = 60
 TEAM = re.compile(r"^t\d+$")
 
@@ -394,7 +398,7 @@ class Market:
         self._cashback_settle(cb, events, tick, me)
         self._cashback_check(cb, tick)
         if not self.cashback_active():
-            return
+            return self._announce_paid(cb, tick)  # payouts collected before a pause are still announced
         amount = int(S.get("cashback_p", 1))
         for e in events:
             p = e.get("payload") or {}
@@ -410,9 +414,38 @@ class Market:
                 if cb["per_team"].get(team, 0) >= int(S.get("cashback_per_team", 2)) or self.cashback_left() < amount:
                     ctx.log("market", "cashback_skipped", team=team, settlement=sid, why="team or day cap")
                     continue
-                self._pay_cashback(cb, team, amount, sid, tick)
+                cards = [i for i in p.get("items") or [] if i.get("kind") == "card"]
+                role = "selling" if any(i.get("frm") == team for i in cards) else "buying"
+                self._pay_cashback(cb, team, amount, sid, tick, role=role, ref=", ".join(i.get("ref", "") for i in cards))
+        self._announce_paid(cb, tick)
 
-    def _pay_cashback(self, cb, team, amount, sid, tick):
+    def _announce_paid(self, cb, tick):
+        """Every cashback a team collects goes on the big screen (one message per tick, up to 3 payouts)."""
+        ctx, st = self.ctx, self.ctx.state
+        due = [oid for oid, o in cb["offers"].items() if o["status"] == "paid" and not o.get("announced")]
+        if not due or not st.get("broker_key") or st.get("cashback_paid_tick") == tick:
+            return
+        names = {t.get("team"): t.get("name") or t.get("team") for t in getattr(ctx, "leaderboard", None) or []}
+        verb = {"selling": "sold", "buying": "bought"}
+        left = self.cashback_left()
+        for n in (3, 2, 1):  # as many payouts as fit the big screen
+            who = ", ".join(f"{names.get(cb['offers'][o]['team'], cb['offers'][o]['team'])} +{cb['offers'][o]['amount']} P "
+                            f"({verb.get(cb['offers'][o].get('role'), 'traded')} {cb['offers'][o].get('ref') or 'a card'})" for o in due[:n])
+            text = (CASHBACK_PAID if left >= int(ctx.S.get("cashback_p", 1)) else CASHBACK_GONE).format(venue=st.get("venue"), who=who, left=left)
+            if len(text) <= ANNOUNCE_MAX:
+                break
+        due = due[:n]
+        text = text[:ANNOUNCE_MAX]
+        try:
+            Broker(ctx.raw.url, st["broker_key"]).announce(text)
+            ctx.log("market", "cashback_paid_announced", text=text)
+        except BazaarError as e:
+            ctx.log("market", "announce_refused", error=str(e)[:200])
+        st["cashback_paid_tick"] = tick
+        for o in due:
+            cb["offers"][o]["announced"] = tick  # refused or not: never repeat the same payout forever
+
+    def _pay_cashback(self, cb, team, amount, sid, tick, role=None, ref=None):
         ctx = self.ctx
         where = next((v for v in safe_markets(ctx, team) if self._fee(v)[0] == 0), "rastro")  # free markets first
         bps = self._fee(where)[0]
@@ -425,7 +458,7 @@ class Market:
             ctx.log("market", "cashback_refused", team=team, settlement=sid, error=str(err)[:200])
             return
         cb["offers"][str(o["id"])] = {"team": team, "settlement": sid, "tick": tick, "amount": amount, "gross": gross,
-                                      "venue": where, "status": "open"}
+                                      "venue": where, "status": "open", "role": role, "ref": ref}
         cb["per_team"][team] = cb["per_team"].get(team, 0) + 1
         ctx.log("market", "cashback_offered", team=team, offer=o["id"], amount=amount, gross=gross, venue=where, settlement=sid)
         self._cashback_message(team, o["id"], amount, tick)
