@@ -418,3 +418,30 @@ inside the agent must be off while the server's broker runs: one broker per venu
 Market Test ~11:50 (16 ticks), Duels I ~12:00, Doña Pilar opens to everyone ~12:20 (we have her already: level 3,
 pays over book for cards she loves, sells Gold packs with 85% epics), Market Tests every 2 game hours after that.
 
+## 15. Everything runs on our server (217.160.143.83) since Saturday ~12:00
+
+| Service | What | Writes with the team key? |
+|---|---|---|
+| `bazaar-agent` | the agent (all modules, Claude negotiator on) | **yes, the only one** |
+| `bazaar-broker` | broker for v03 (broker key only) | no |
+| `bazaar-dashboard` | war room at **http://217.160.143.83** (user `team13`, password from Anton), behind nginx | only via its swap button and the Strategy tab |
+| `bazaar-logserve` | read-only broker-log tail (token) | no |
+| `bazaar-deploy.timer` | auto-deploy from GitHub every minute | no |
+
+**Nobody runs the agent, broker or dashboard on a laptop any more.** A swap that gave away SAL-03 (a complete
+page card) came from a laptop process at ~12:55 and was cancelled by hand.
+
+Server-only settings live in `team13/strategy.json` **on the server** and change only through the dashboard
+(Strategy tab): `enable_venue 1`, `broker_in_agent 0`, `llm_negotiator 1`, `ladder_sell 1`, `solvency_check 0`.
+Deploys never overwrite them, nor `state.json`, `*.env` or logs.
+
+### Auto-deploy: push to main and the server picks it up within a minute (`server/deploy.sh`)
+
+1. Fetch `main`. 2. Everything must compile and `agent` must import, else the commit is skipped (logged).
+3. Keep the running code, copy the new one in, restart agent and dashboard. 4. If the agent does not stay up for
+25 s, **roll back** to the previous code. 5. The broker is updated only when no Market Test is running (no bench
+book in the last 2 minutes); otherwise it waits for the next run.
+
+Log: `ssh root@217.160.143.83 tail /home/bazaar/deploy.log` (DEPLOYED / SKIP / ROLLBACK lines).
+Needs a read-only **deploy key** on the GitHub repo (owner adds it: Settings -> Deploy keys).
+
