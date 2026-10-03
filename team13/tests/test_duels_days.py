@@ -54,5 +54,15 @@ for role, limit, rp, w, rd in (("seller", 100, 92, 5.0, 10), ("buyer", 100, 108,
 # 3) a rival price inside our limit near the deadline is accepted
 c = Ctx(); Duels(c).play(duel("seller", 100, 1.0, 130, 5, rounds=6, deadline=101))
 print(f"inside-limit last chance: accepted {bool(c.accepted)} -> {'ok' if c.accepted else 'FAIL'}"); c.accepted or fails.append(3)
+# 4) a large days weight must not be given away by meeting halfway
+c = Ctx(); Duels(c).play(duel("seller", 80, 7.0, 50, 0, rounds=3, deadline=130))
+p, d = c.said[-1] if c.said else (None, None)
+ok = (not c.accepted) and d == 10 and p is not None and p > 80
+print(f"keep-days w=+7 rival day 0: price {p} days {d} accepted {bool(c.accepted)} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(4)
+# 5) last chance against a low rival bid: offer just above our limit so they can take us
+c = Ctx(); Duels(c).play(duel("seller", 76, 1.28, 56, 0, rounds=6, deadline=103))
+p, d = c.said[-1] if c.said else (None, None)
+ok = (not c.accepted) and d == 10 and p is not None and 77 <= p <= 90
+print(f"last-chance takeable: price {p} days {d} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(5)
 print("ALL OK" if not fails else f"FAILED {fails}")
 sys.exit(1 if fails else 0)

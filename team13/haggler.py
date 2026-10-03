@@ -635,6 +635,14 @@ class Haggler:
         if last and ask is not None and nxt is not None and ((buy and ask <= nxt) or (not buy and ask >= nxt)) and good(ask):
             if ctx.take_accept():
                 return self._accept(last, th, plan, reason="her ask already beats our next step")
+        if last and ask is not None and nxt is not None and good(ask):
+            opening = next((a for a in (plan.get("asks") or []) if a is not None), None) or plan.get("list")
+            near = (buy and ask <= nxt + 2) or ((not buy) and ask >= nxt - 2)
+            cheap = bool(opening) and ((buy and ask <= math.ceil(0.84 * opening))
+                                       or ((not buy) and ask >= math.floor(1.12 * opening)))
+            if (near or cheap) and ctx.take_accept():
+                why = "ask within 2 P of our next step" if near else "already a strong capture of the range"
+                return self._accept(last, th, plan, reason=why)
         if nxt is None:  # we are at our limit
             if buy and ask is not None and ask > plan["hi"]:
                 plan["stuck"] = plan.get("stuck", 0) + 1

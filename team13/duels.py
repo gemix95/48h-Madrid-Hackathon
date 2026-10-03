@@ -5,8 +5,8 @@ So: never cross our limit, anchor ambitiously, concede on a schedule that conver
 and accept as soon as waiting would cost more (decay) than it could win.
 
 Two-issue duels (price + delivery day 0-10): each side has a private weight per day. We trade days we care little
-about for price: we learn what the rival prefers from the days it proposes and give it those days if they are cheap
-for us, while asking for a better price.
+about for price. When days are worth real money we hold our preferred day and never meet halfway — giving away
+day 10 at weight 7 costs 70 P, more than most price concessions.
 
 Knobs (duel_rounds / duel_anchor / duel_accept / duel_seller_cap) are live-tuned by duel_tuner.py from finished
 and live duels; this module also adapts mid-fight to how fast the rival is conceding.
@@ -164,7 +164,9 @@ class Duels:
         ROUNDS = int(S["duel_rounds"])
         accept_th = float(S["duel_accept"])
         k = max(len(mine), int(d.get("rounds") or 0) if d.get("your_offer") else 0)
-        # live rival style: how fast they walk toward our limit (conceder → take sooner; tough → hold)
+        clk = getattr(ctx, "clock", None) or {}
+        ticks_left = (d["deadline_tick"] - clk["tick"]) if d.get("deadline_tick") and clk.get("tick") else 99
+        # live rival style: how fast they walk toward our limit
         rival_prices = [first(m, "price") for m in theirs if first(m, "price") is not None]
         style = "unknown"
         if len(rival_prices) >= 2 and limit is not None:
@@ -174,10 +176,13 @@ class Duels:
             frac = move / span0
             style = "tough" if frac < 0.15 else ("conceder" if frac > 0.55 else "mid")
             if style == "conceder":
-                accept_th = max(0.4, accept_th - 0.1)
-                ROUNDS = max(4, ROUNDS - 1)
+                # they are already giving: hold our price, do not chase them down
+                accept_th = min(0.65, accept_th + 0.08)
+                ROUNDS = min(8, ROUNDS + 1)
             elif style == "tough":
-                accept_th = min(0.7, accept_th + 0.05)
+                # they will not gift us more — walk to a takeable price and bank a real offer
+                accept_th = max(0.35, accept_th - 0.08)
+                ROUNDS = max(3, ROUNDS - 2)
         # anchor: far from our limit; if the rival has spoken, aim past the midpoint on our side
         # duel_anchor 2.0 -> a seller opens 60% above its cost, a buyer 37.5% below its value (always a real price)
         amb = 0.3 * S["duel_anchor"]
@@ -187,10 +192,14 @@ class Duels:
         # seller cap (Strategy tab): 2.2x scored best in the simulator; practice long duels were mostly small pies
         anchor = min(limit + span, limit * S.get("duel_seller_cap", 2.2)) if seller else max(limit - span, limit * 0.3, 1)
         span = abs(anchor - limit)
-        x = min(1.0, k / ROUNDS)
+        x = min(1.0, k / max(1, ROUNDS))
         # real data: long talks score worse — accelerate concessions in the second half
         curve = 1.15 if k >= max(2, ROUNDS // 2) else 1.3
         target = anchor + ((limit + (1 if seller else -1) * max(1, 0.08 * span)) - anchor) * (x ** curve)
+        # mid / tit-for-tat: split the remaining gap so they can take us without we crossing the limit
+        if style == "mid" and r_price is not None:
+            mid = (target + r_price) / 2
+            target = max(mid, limit + 1) if seller else min(mid, limit - 1)
         price = math.ceil(target) if seller else math.floor(target)
         if r_price is not None:  # never concede past the rival's own offer
             price = max(price, r_price) if seller else min(price, r_price)
@@ -198,36 +207,47 @@ class Duels:
 
         days = None
         if two_issue:
+            pref = 10 if w >= 0 else 0
             if abs(w) < 0.5 and r_days is not None:
                 days = int(r_days)  # cheap for us: give the rival the days it wants, keep pushing on price
                 bump = max(1, round(abs(w) * 3))
                 price = price + bump if seller else price - bump
             else:
-                days = 10 if w > 0 else 0
-                if r_days is not None and k >= 2:  # meet halfway on days late in the talk
-                    days = round((days + int(r_days)) / 2)
+                # we care about days: never meet halfway (session 3: w=7 turned a day-10 +70 into dust)
+                days = pref
+
+        last_chance = ticks_left <= 3 or k >= ROUNDS
+        # last ticks: put a price they can accept, still on our side of the limit
+        if last_chance:
+            if seller:
+                floor_p = math.ceil(limit + 1)
+                price = min(price, max(floor_p, r_price if (r_price is not None and r_price > limit) else floor_p))
+            else:
+                ceil_p = math.floor(limit - 1)
+                price = max(price, min(ceil_p, r_price if (r_price is not None and r_price < limit) else ceil_p))
+            price = max(1, int(price))
 
         # accept the rival's offer when it is inside our limit and at least as good as what waiting would likely bring
         if r_price is not None:
             u_r = util(r_price, r_days if r_days is not None else days)
             u_next = util(price, days) * (1 - decay)
-            clk = getattr(ctx, "clock", None) or {}
-            ticks_left = (d["deadline_tick"] - clk["tick"]) if d.get("deadline_tick") and clk.get("tick") else 99
-            last_chance = ticks_left <= 2  # practice: two duels ended no_deal with a rival offer inside our limit
             # mid-fight: if the gap is small vs our surplus, bank it before the next 6% melt
-            gap_ok = abs(price - r_price) <= max(3, 0.04 * max(price, r_price))
+            gap_ok = abs(price - r_price) <= max(2, 0.03 * max(price, r_price))
+            held = len(rival_prices) >= 2 and rival_prices[-1] == rival_prices[-2]
             # the price itself must be inside our limit: days may add to the deal, never excuse a price past it
             # (a deal outside the limit loses points, and the rules speak of the limit as a price)
             price_ok = (r_price >= limit) if seller else (r_price <= limit)
-            if price_ok and u_r > 0 and (last_chance or u_r >= accept_th * u_next or k >= ROUNDS or (gap_ok and u_r >= 0.35 * max(u_next, 1))):
+            take = (last_chance or held or k >= ROUNDS or u_r >= accept_th * max(u_next, 1)
+                    or (gap_ok and u_r >= 0.35 * max(u_next, 1)))
+            if price_ok and u_r > 0 and take:
                 if ctx.take_accept(kind="duel"):
                     ctx.api.duel_accept(d["id"])
                     ctx.log("duel", "accept", duel=d["id"], price=r_price, days=r_days, our_surplus=round(u_r, 1),
                             limit=limit, style=style, accept_th=accept_th)
                     return
 
-        # Park silent rivals after one open (or one nudge after they spoke): no Claude, no more messages.
-        # There is no abandon API — stopping frees the tick for duels that answer. No deal = 0 either way.
+        # Park true ghosts after one open. If they have spoken, keep walking until our price is takeable,
+        # and always send a close in the last ticks (session 3: we parked 5705 eight ticks before the deadline).
         if not theirs and r_price is None:
             unanswered, silent_cap = len(mine), int(S.get("duel_silent_max", SILENT_MAX))
         else:
@@ -236,7 +256,9 @@ class Duels:
             if r_price is not None and (not mine or (rival or {}).get("tick", 0) >= (mine[-1].get("tick") or 0)):
                 unanswered = 0  # their standing offer is current — not silent
             silent_cap = int(S.get("duel_silent_after", SILENT_AFTER))
-        if unanswered >= silent_cap:
+        still_fat = (seller and price > limit * 1.12) or (not seller and price < limit * 0.88)
+        closing = ticks_left <= 4 or last_chance
+        if unanswered >= silent_cap and not closing and not still_fat:
             skipped = ctx.state.setdefault("duels_skipped_silent", [])
             did = str(d.get("id"))
             if did not in skipped:
