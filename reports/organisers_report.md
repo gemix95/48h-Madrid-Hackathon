@@ -19,7 +19,7 @@ on purpose, tell us the scope and we will stay inside it.
 | 5 | The duel payload has no `id` (it is `duel`); the SDK names the field `deadline` but the payload says `deadline_tick` | docs vs behaviour | every agent built from the SDK |
 | 6 | `/api/levels` uses `state`, `/api/dealers` uses `status` for the same idea | consistency | agent authors |
 | 7 | Friday's first Market Test was scheduled at game hour 3.0, after the 23:00 close | schedule | market-making scores |
-| 8 | Early level unlocks skipped Team 13 twice despite 6 and 12 Pilar deals | possible counter bug | Team 13, maybe others |
+| 8 | Which deals count for an early unlock (the window) is not documented | docs | every team chasing a head start |
 | 9 | Flag verdicts are not visible anywhere | transparency | every team that flags |
 | 10 | `/api/venues` lags several ticks behind venue open/close events | consistency | agents choosing a market |
 
@@ -81,16 +81,16 @@ on purpose, tell us the scope and we will stay inside it.
   at 21:41, so hour 3.0 fell at about 23:20, after the 23:00 close. Fine if intended; worth a line on the screen,
   since market-making is 30 points and teams prepared brokers for it.
 
-### 8. Early unlocks skipped Team 13 (possible counter bug)
+### 8. The counting window for early unlocks is not documented
 
-- **What we saw.** Los Pícaros opened early at tick 761 for t01, t03, t05, t08, t10 ("3 deals with pilar") and t02,
-  t04, t09, t16 ("2 deals with pilar"). Don Ernesto opened early at tick 971 for t01, t02, t15 (3 deals), t03 (4),
-  t05, t10, t14 (5), t08 (8). Team 13 had **6** settlements with Doña Pilar before tick 761 (ticks 326-610) and **12**
-  before tick 971, all negotiated over several rounds, yet both opened to us only with "open to everyone now"
-  (ticks 881 and 1091). The counter also looks off the other way: in the public feed t14 had one Pilar settlement
-  by tick 971 and was credited with "5 deals with pilar".
-- **Question.** Which deals does the unlock counter take? If ours were excluded on purpose (opening-price deals?),
-  a line in `/api/dealers` → `unlock` would help; if not, could you check Team 13's counter?
+- **What we learned.** Deals with the previous dealer count only after the next level is announced (we had six
+  Pilar deals before Los Pícaros was announced at tick 630 and none after, so no early unlock for us: fair).
+  `/api/dealers` → `unlock` shows `early_deals_with` and `early_min_deals` but not this window, and RULES only says
+  "a few good deals with the one before".
+- **Small inconsistency, low confidence.** From our copy of the public feed a few credited counts look higher than
+  the deals after the announcement (for example "2 deals with pilar" at tick 761 for a team we saw no Pilar
+  settlement for after tick 630). Our copy may have gaps, so this is only a pointer.
+- **Suggestion.** Add the window to `unlock` (e.g. `"counts_from": "announcement"`) and to RULES.
 
 ### 9. Flag verdicts are not visible
 
