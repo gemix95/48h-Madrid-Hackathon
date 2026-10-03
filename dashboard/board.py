@@ -418,13 +418,22 @@ def _auctions_html(data, vid):
             f'<div style="margin:8px 0 18px">{_button(how, "Auction your card in 1 call")}</div>')
 
 
+def _lots_link() -> str:
+    try:
+        import auctions
+        n = sum(l.get("status") == "open" for l in auctions.load().values())
+    except Exception:
+        n = 0
+    return f' · <a href="#auctions">🔨 {n} live auction{"s" if n != 1 else ""}</a>' if n else ""
+
+
 def render(data: dict) -> str:
     pub = public(data)
     ov = pub.get("our_venue") or {}
     vid = html.escape(ov.get("venue", "v24"))
+    lots_link = _lots_link()
     _LAST["vid"] = ov.get("venue")
     deadline = pub["deadline"]
-    live = sum(1 for c in pub["cards"] if c["state"] != "quiet")
 
     def setnav():
         """Quick links to each set's table, in page order."""
@@ -510,7 +519,7 @@ td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 table.deck{{table-layout:fixed;width:100%;min-width:720px}}table.deck td{{vertical-align:middle;overflow-wrap:anywhere}}table.deck.sets th:nth-child(1){{width:30%}}table.deck.sets th:nth-child(n+2){{width:35%}}table.deck.lots th:nth-child(1){{width:24%}}table.deck.lots th:nth-child(2){{width:11%}}table.deck.lots th:nth-child(3){{width:23%}}table.deck.lots th:nth-child(4){{width:14%}}table.deck.lots th:nth-child(5){{width:28%}}td.cardcell{{display:flex;gap:12px;align-items:center}}
 .thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
 .cardtxt{{min-width:0;overflow-wrap:anywhere}}.cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
-td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.hint{{width:100%}}.hist{{margin-top:4px;color:var(--dim)}}.sparkwrap{{position:relative;display:block;width:max-content;cursor:zoom-in;outline:none}}.sparkwrap>svg{{display:block;margin-bottom:2px}}.sparkbig{{display:none;position:absolute;left:0;top:24px;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 8px 4px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:276px}}.sparkwrap:hover .sparkbig,.sparkwrap:focus .sparkbig,.sparkwrap:focus-within .sparkbig{{display:block}}@media (max-width:640px){{.steps{{display:none}}.hero{{font-size:17px}}table.deck.sets,table.deck.lots{{min-width:0;table-layout:auto}}table.deck.sets thead,table.deck.lots thead{{display:none}}table.deck.sets tr,table.deck.lots tr{{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:12px;border-bottom:1px solid var(--line)}}table.deck.sets td,table.deck.lots td{{display:block;padding:0;border:0;width:auto}}table.deck td.cardcell{{grid-column:1/-1;display:flex}}table.deck.lots td:last-child{{grid-column:1/-1}}td.side::before{{content:attr(data-label);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}}td.side.open{{grid-column:1/-1}}.thumb{{width:60px;height:84px}}.thumb .cromo{{font-size:3.75px}}.sparkbig{{left:-72px}}}}.rules summary{{cursor:pointer}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
+td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.hint{{width:100%}}.hist{{margin-top:4px;color:var(--dim)}}.sparkwrap{{position:relative;display:block;width:max-content;cursor:zoom-in;outline:none}}.sparkwrap>svg{{display:block;margin-bottom:2px}}.sparkbig{{display:none;position:absolute;left:0;top:24px;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 8px 4px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:276px}}.sparkwrap:hover .sparkbig,.sparkwrap:focus .sparkbig,.sparkwrap:focus-within .sparkbig{{display:block}}@media (max-width:640px){{.hero{{font-size:16px}}table.deck.sets,table.deck.lots{{min-width:0;table-layout:auto}}table.deck.sets thead,table.deck.lots thead{{display:none}}table.deck.sets tr,table.deck.lots tr{{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:12px;border-bottom:1px solid var(--line)}}table.deck.sets td,table.deck.lots td{{display:block;padding:0;border:0;width:auto}}table.deck td.cardcell{{grid-column:1/-1;display:flex}}table.deck.lots td:last-child{{grid-column:1/-1}}td.side::before{{content:attr(data-label);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}}td.side.open{{grid-column:1/-1}}.thumb{{width:60px;height:84px}}.thumb .cromo{{font-size:3.75px}}.sparkbig{{left:-72px}}}}.rules summary,.how summary{{cursor:pointer}}.how{{margin:18px 0}}.how .steps{{margin-top:12px}}.status{{margin:4px 0 10px}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
 .setnav{{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;margin:6px 0 4px;background:var(--bg)}}
 .setnav a{{text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;font-size:13px}}
 .setnav a:hover{{border-color:var(--gold);color:var(--gold)}}.setnav .n{{color:var(--dim);margin-left:6px;font-size:12px}}
@@ -520,25 +529,23 @@ button.trade{{margin-top:6px;font:inherit;font-size:13px;padding:5px 12px;border
 button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}.ok{{color:var(--green);font-weight:600;margin-left:6px}}
 </style></head><body><main>
 <h1>El Club Board</h1>
-<div class="hero">Find the card you need at the <b>best price in the Bazaar</b> and buy it in one click.
-Got a spare? <b>Sell it fast</b> to the best buyer.</div>
-<div class="hero2">Not for sale anywhere? <b>Bid on {vid}</b>: we will find this card for you.
-Selling something nobody bids for? We ask the teams that collect its set.</div>
-<div class="dim small">The calls use your kit's <code>$BAZAAR_URL</code> (https://bazaar.causaprima.ai) and <code>$BAZAAR_KEY</code>.</div>
-<div class="dim">Prices from all {pub["markets"]} markets · tick <span id="tick">{pub["tick"]}</span> · updated <span id="upd">{when}</span> · live, every 15 s</div>
-<div class="steps">
-<div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim"><b>Buy</b> shows the cheapest seller in the Bazaar, <b>Sell</b> the best buyer.</span></div>
-<div class="box step"><b class="n">2</b><b>Click and paste</b><br><span class="dim">The button copies one ready call. Paste it to your agent, or run it yourself.</span></div>
-<div class="box step"><b class="n">3</b><b>Matched on {vid}</b><br><span class="dim">Buyers and sellers from this board meet on {vid}, our market, and are matched the tick both are there.</span></div>
-</div>
-
-<h2>Every card in the Bazaar <span class="dim" style="font-weight:400;font-size:14px">· {live} have a price now · no price? bid first, on {vid}</span></h2>
-{_auctions_html(data, vid)}
+<div class="hero">Every card in the Bazaar at its <b>best price</b>. Buy or sell in 1 click. 🔥 = well under the usual price.</div>
+<div class="dim small status">All {pub["markets"]} markets · tick <span id="tick">{pub["tick"]}</span> · updated <span id="upd">{when}</span> · live{lots_link} · <a href="#how" class="howlink">How it works</a></div>
 <nav class="setnav">{setnav()}</nav>
 <div id="deck">{deck()}</div>
 
-<h2>Why this is safe to use</h2>
-<div class="box"><ul>
+{_auctions_html(data, vid)}
+
+<details id="how" class="box how"><summary><b>How it works, and why it is safe</b></summary>
+<div class="steps">
+<div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim"><b>Buy</b> shows the cheapest seller in the Bazaar, <b>Sell</b> the best buyer.</span></div>
+<div class="box step"><b class="n">2</b><b>Click and paste</b><br><span class="dim">Set your price; the button copies one ready call. Paste it to your agent, or run it yourself.</span></div>
+<div class="box step"><b class="n">3</b><b>Matched on {vid}</b><br><span class="dim">Buyers and sellers from this board meet on {vid}, our market, and are matched the tick both are there.</span></div>
+</div>
+<p>Not for sale anywhere? <b>Bid on {vid}</b>: we will find this card for you. Selling something nobody bids for? We ask the teams that collect its set.</p>
+<p class="dim small">The calls use your kit's <code>$BAZAAR_URL</code> (https://bazaar.causaprima.ai) and <code>$BAZAAR_KEY</code>.
+Under each card: its last trade price, the usual range of recent trades, how many and the trend (↑ ↓ →); tap the little chart for a big one.</p>
+<ul>
 <li><b>We cannot be your counterparty.</b> The rules say a team cannot trade on its own venue with its team key, so
 Team 13 is never on the other side of a trade on {vid}. We take the fee, and the fee is zero.</li>
 <li><b>The broker is public about what it does.</b> It crosses a bid and an ask at the midpoint between them, matches
@@ -547,16 +554,13 @@ the pairs that create the most value first, and never prices a pair worse than t
 in. Read it before you run it: there is nothing in it but your own offer.</li>
 <li><b>Nothing locks you in.</b> An open offer costs nothing while it waits, and you can cancel it at any tick.</li>
 <li><b>No team is ever named</b> on this page, in either direction, and no other market's prices are shown.</li>
-</ul></div>
+</ul></details>
 
-<footer class="dim"><b>How to read it.</b> <i>Buyer waiting</i>: someone in the Bazaar is bidding for the card and nobody sells it.
-<i>For sale</i>: someone sells it and nobody bids. <i>Buyers and sellers apart</i>: both exist, on different markets, and the
-board names the price that splits them. <i>Nothing moving</i>: no bid and no ask anywhere — the first side posted here is
-the one the other will find. Our broker crosses a bid and an ask on {vid} the tick they are both there.<br>
-JSON: <a href="board.json">board.json</a> · <a href="board/live.json">live.json</a> (every 15 s) · <a href="board/history.json">history.json</a> (trade prices per card) · Team 13</footer>
+<footer class="dim">JSON for your agent: <a href="board.json">board.json</a> · <a href="board/live.json">live.json</a> (every 15 s) · <a href="board/history.json">history.json</a> (trade prices per card) · <a href="board/lots.json">lots.json</a> (auctions) · Team 13</footer>
 </main>
 <script>
 let busyUntil = 0;
+document.querySelectorAll("a.howlink").forEach(a => a.addEventListener("click", () => {{ document.getElementById("how").open = true; }}));
 const PHONE = matchMedia("(max-width:640px)").matches ? "1" : "0";
 function ping(e, b) {{
   const q = new URLSearchParams({{e, m: PHONE}});
