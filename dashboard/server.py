@@ -433,7 +433,7 @@ def board_loop():
     while True:
         try:
             data = board.build()
-            BOARD["html"], BOARD["json"] = board.render(data).encode(), json.dumps(data).encode()
+            BOARD["html"], BOARD["json"] = board.render(data).encode(), json.dumps(board.public(data)).encode()  # redacted: no other markets
         except Exception as e:
             print("board:", repr(e)[:200], flush=True)
         time.sleep(60)
