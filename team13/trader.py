@@ -698,7 +698,8 @@ class Trader:
                 continue  # a close rival's market: our trade there would score for them (venues.safe_markets)
             activity = 1 + (v.get("trades") or 0) + (v.get("traders") or 0) + 0.5 * len(ctx.boards.get(v["venue"], []))
             net = 1 - (v.get("fee_bps") or 0) / 10000
-            scored.append((activity * net, v["venue"]))
+            board = 1.35 if (v.get("rules") or {}).get("mechanism") == "board" else 1.0
+            scored.append((activity * net * board, v["venue"]))
         return [vid for _, vid in sorted(scored, reverse=True)] or ["rastro"]
 
     @staticmethod
