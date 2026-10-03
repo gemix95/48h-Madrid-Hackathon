@@ -37,6 +37,7 @@ import advisor  # noqa: E402  (team13/advisor.py: recalibrates on every team's d
 RECHECK = threading.Event()
 DECISIONS = HERE.parent / "team13" / "logs" / "decisions.jsonl"
 BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
+import council  # noqa: E402  (team13/council.py: El Consejo, the board where our agents post what they learnt)
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
 # the bots' own logs, so they only exist on the laptop that runs them: agent.py writes decisions.jsonl, agent/hand.py hand.jsonl
 INDEX = LogIndex({"agent": DECISIONS, "manual": HERE.parent / "logs" / "hand.jsonl"})
@@ -272,7 +273,17 @@ class Handler(BaseHTTPRequestHandler):
                     agent_state["plans"] = {k: v for k, v in (agent_state["plans"] or {}).items() if not v.get("done")}
                 except (OSError, ValueError):
                     agent_state = {}
-                body = json.dumps({**cache, "api_spend": api_spend(), "agent_state": agent_state, "history": history, "served_at": time.time(),
+                try:
+                    council_state = json.loads(council.STATE.read_text())
+                except (OSError, ValueError):
+                    council_state = {}
+                council_view = {"notes": tail(council.BOARD, 200), "state": council_state,
+                                "rules": {k: {"metric": m, "low": lo, "high": hi, "safe": council.SAFE[k]}
+                                          for k, (m, lo, hi, _) in council.RULES.items()},
+                                "trial_ticks": council.TRIAL_TICKS, "cooldown_ticks": council.COOLDOWN_TICKS,
+                                "cycle_seconds": council.CYCLE_SECONDS}
+                body = json.dumps({**cache, "api_spend": api_spend(), "agent_state": agent_state, "council": council_view,
+                                   "history": history, "served_at": time.time(),
                                    "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60),
                                    "origins": message_origins(INDEX, cache.get("threads"), (cache.get("me") or {}).get("id")),
                                    "log_sources": INDEX.status(), "guard": INDEX.recent_guard()}).encode()

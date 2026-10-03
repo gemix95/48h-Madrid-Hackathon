@@ -282,7 +282,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <span class="err" id="err"></span>
     <nav id="tabs">
       <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a><a href="#album">Album</a>
-      <a href="#market">Market</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a>
+      <a href="#market">Market</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a><a href="#council">Council</a>
     </nav>
   </header>
 
@@ -421,6 +421,15 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
       <section class="card s7"><h2>The story <span class="hint">newest first · in plain words</span></h2><div class="chips" id="brain-filter"></div><div id="brain" class="story"></div></section>
     </div>
     <div id="brain-stats" style="display:none"></div>
+  </main>
+
+  <main class="tab" id="tab-council">
+    <div class="grid">
+      <section class="card s12"><h2>El Consejo <span class="hint">our agents' shared board: what each module learnt, and how the strategy tunes itself</span></h2><div id="council-head"></div></section>
+      <section class="card s5"><h2>Self-tuning <span class="hint">one knob, one step at a time · reverted if it doesn't help</span></h2><div id="council-tuner"></div></section>
+      <section class="card s7"><h2>Latest round <span class="hint">one note per module</span></h2><div id="council-latest"></div></section>
+      <section class="card s12"><h2>All notes <span class="hint">newest first</span></h2><div class="chips" id="council-filter"></div><div id="council-notes" class="story"></div></section>
+    </div>
   </main>
 <div class="tip" id="tip"></div>
 </div>
@@ -1616,6 +1625,63 @@ function intelTab(d, M) {
     : `<div class="empty">No listings yet.</div>`;
 }
 
+// ---------- council ----------
+const COUNCIL_ICON = { trader: "💱", haggler: "🤝", market: "🏪", guard: "🛡", agent: "⚙️", tuner: "🎛", wtb: "🔎", duels: "⚔️" };
+const KNOB_NAME = { trade_ask_start: "Spare asking price (× book)", trade_bid_start: "Opening bid (× book)" };
+const METRIC_NAME = { ask_sell_through: "of our listed spares sold", bid_fill: "of our bids filled" };
+let councilFilter = "all";
+function councilTab(d) {
+  const C = d.council || {}, notes = C.notes || [], st = C.state || {}, rules = C.rules || {};
+  const pct = x => x == null ? "–" : `${Math.round(x * 100)}%`;
+  const ago = ts => { const m = Math.round((Date.now() / 1000 - ts) / 60); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)}h ${m % 60}m ago`; };
+  const last = notes[notes.length - 1];
+  const tick = d.clock?.tick ?? 0;
+  const running = last && Date.now() / 1000 - last.ts < (C.cycle_seconds || 600) * 2;
+  $("council-head").innerHTML = notes.length
+    ? `<div class="sec" style="font-size:13px;line-height:1.5"><span class="dot" style="display:inline-block;background:${running ? "var(--good)" : "var(--critical)"}"></span>
+       ${running ? "Running" : "No recent round: is <code>council.py run</code> up?"} · ${notes.length} notes · last round ${ago(last.ts)} · a new round every ${Math.round((C.cycle_seconds || 600) / 60)} min.
+       Post your own: <code>../.venv/bin/python council.py post &lt;author&gt; "lesson"</code></div>`
+    : `<div class="empty">No notes yet. Start it from team13/: <code>../.venv/bin/python council.py run</code></div>`;
+  // self-tuning: current value, latest metric vs target band, running trial or cooldown
+  const latestEv = topic => [...notes].reverse().find(n => n.author === "trader" && n.topic === topic)?.evidence || {};
+  const metricNow = { ask_sell_through: latestEv("selling").ask_sell_through, bid_fill: latestEv("buying").bid_fill };
+  const cur = SD?.current || {};
+  const trial = st.trial;
+  $("council-tuner").innerHTML = Object.entries(rules).map(([k, r]) => {
+    const v = metricNow[r.metric], inBand = v != null && v >= r.low && v <= r.high;
+    const touched = (st.touched || {})[k], cool = touched != null ? Math.max(0, (C.cooldown_ticks || 150) - (tick - touched)) : 0;
+    let status;
+    if (trial && trial.knob === k) status = `<b style="color:var(--series-1)">Trial running</b>: ${trial.old} → ${trial.new} (${pct(trial.before)} before) · judged in ~${Math.max(0, (C.trial_ticks || 90) - (tick - trial.tick))} ticks`;
+    else if (v == null) status = `<span class="muted">Not enough data yet (needs 6+ cards)</span>`;
+    else if (inBand) status = `<span style="color:var(--good)">✓ In the target band, no change needed</span>`;
+    else if (cool) status = `<span class="muted">Off target, but resting for ${cool} more ticks after the last change</span>`;
+    else if (trial) status = `<span class="muted">Off target, waiting for the current trial to finish</span>`;
+    else status = `<span style="color:var(--warning)">Off target: will move one step next round</span>`;
+    const W = 100, x = p => Math.max(0, Math.min(1, p)) * W;
+    const bar = `<svg viewBox="0 0 ${W} 10" width="100%" height="10" style="margin:6px 0 2px"><rect x="0" y="3" width="${W}" height="4" rx="2" fill="var(--surface-2)"/>
+      <rect x="${x(r.low)}" y="3" width="${x(r.high) - x(r.low)}" height="4" fill="var(--good)" opacity=".45"/>
+      ${v != null ? `<circle cx="${x(v)}" cy="5" r="3.5" fill="${inBand ? "var(--good)" : "var(--warning)"}"/>` : ""}</svg>`;
+    return `<div class="move"><div class="ic">🎛</div><div style="flex:1"><div class="t">${esc(KNOB_NAME[k] || k)}: <b>${cur[k] ?? "–"}</b>
+      <span class="muted" style="font-weight:400;font-size:12px">(allowed ${r.safe[0]}–${r.safe[1]})</span></div>
+      <div class="d">${pct(v)} ${esc(METRIC_NAME[r.metric] || r.metric)} · target ${pct(r.low)}–${pct(r.high)}</div>${bar}<div class="d">${status}</div></div></div>`;
+  }).join("") + ([...notes].reverse().filter(n => n.author === "tuner" && n.topic === "strategy").slice(0, 4).map(n =>
+    `<div class="lesson">${esc(n.lesson)} <span class="muted" style="font-size:11px">· tick ${n.tick ?? "–"}</span></div>`).join("")
+    || `<div class="muted" style="font-size:12px;margin-top:6px">No strategy changes yet.</div>`);
+  // latest note per author/topic from the newest round
+  const seen = new Set(), latest = [];
+  for (const n of [...notes].reverse()) { const key = n.author + "/" + n.topic; if (n.author === "tuner" || seen.has(key)) continue; seen.add(key); latest.push(n); }
+  $("council-latest").innerHTML = latest.slice(0, 10).map(n => `<div class="lesson"><b>${COUNCIL_ICON[n.author] || "📝"} ${esc(n.author)}</b>
+    <span class="muted" style="font-size:11px">${esc(n.topic)} · tick ${n.tick ?? "–"} · ${ago(n.ts)}</span><br>${esc(n.lesson)}</div>`).join("")
+    || `<div class="empty">Waiting for the first round…</div>`;
+  const authors = ["all", ...new Set(notes.map(n => n.author))];
+  $("council-filter").innerHTML = authors.map(a => `<button class="btn ${a === councilFilter ? "on" : ""}" data-a="${esc(a)}">${a === "all" ? "All" : (COUNCIL_ICON[a] || "📝") + " " + esc(a)}</button>`).join("");
+  $("council-filter").querySelectorAll("[data-a]").forEach(b => b.onclick = () => { councilFilter = b.dataset.a; councilTab(d); });
+  $("council-notes").innerHTML = [...notes].reverse().filter(n => councilFilter === "all" || n.author === councilFilter).slice(0, 150).map(n =>
+    `<div class="ev"><div class="tm">${hm(new Date(n.ts * 1000))}</div><div class="ic">${COUNCIL_ICON[n.author] || "📝"}</div>
+     <div><b>${esc(n.author)}</b> <span class="muted" style="font-size:11px">${esc(n.topic)}${n.tick != null ? ` · tick ${n.tick}` : ""}</span><div>${esc(n.lesson)}</div></div></div>`).join("")
+    || `<div class="empty">Nothing here yet.</div>`;
+}
+
 // ---------- main loop ----------
 function showTab() {
   const id = (location.hash || "#overview").slice(1);
@@ -1646,12 +1712,12 @@ async function refresh() {
     if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
     if (!ok(d.catalog)) { $("err").textContent = "⚠ waiting for catalog…"; return; }
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
-      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
+      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length, d.council?.notes?.length, d.council?.state]);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
-      () => threads(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M)];
+      () => threads(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable — open http://localhost:8765"; }
 }

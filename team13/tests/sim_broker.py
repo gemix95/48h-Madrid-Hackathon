@@ -48,7 +48,7 @@ def run(seed, strategy, n=10, ticks=16, arrivals=True, server="quotes"):
             plan = sb.smart_bench_plan({}, tracker, tick, lambda p: 0)
             plan = sb.stall_floor(book_dict, plan, lambda p: 0)
             if strategy == "probe":
-                probes = sb.probe_plan(tracker, {i for s, b, _ in plan for i in (s, b)}, lambda p: 0)
+                probes = sb.probe_plan(tracker, {i for s, b, _ in plan for i in (s, b)}, lambda p: 0, tick)
         elif strategy == "stall":
             plan = starter_plans.bench_plan(book_dict)
         else:  # oracle: knows limits and departures

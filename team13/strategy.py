@@ -114,6 +114,8 @@ KNOBS = {
     "api_credit_usd": (0, 0, 1000, 1, "AI", "Claude API credit when you set this ($)",
                        "Copy your balance from console.anthropic.com > Billing. The dashboard subtracts what the agent spends "
                        "from here on (the API cannot report the balance with a user key). 0 = not set."),
+    "ladder_sell": (1, 0, 1, 1, "Modules", "Ladder sales to level-3+ dealers",
+                    "Sell up to 3 cards we value least (never from a complete or 8/10 page) to fill the level's best-three."),
     "reserve_cash": (270, 0, 400, 10, "Market", "Cash kept for the market bond (P)",
                      "The bond is 250 + 20. Set 0 to spend everything on deals."),
 }

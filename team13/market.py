@@ -36,7 +36,7 @@ PRE_TEST = ("Market Test soon: list on Mercado Trece ({venue}) now — {fee} fee
             "Don't leave liquidity on El Rastro.")
 # appended to announcements only while we still have a spare to give and rewards left today (a true claim)
 REWARD_PITCH = (" Club welcome: your first trade on Mercado Trece today earns a private offer of one of our spare "
-                "commons at {price} P (they trade at 8-10 P elsewhere).")
+                "commons at {price} P on El Rastro (they trade at 8-10 P).")
 REWARD_PRICE = 5             # commons trade at 8-10 P between teams; only spares worth <= 3 P to us qualify
 REWARD_MIN_GAIN = 2          # every reward is still a sale that gains us value
 REWARDS_PER_DAY = 4
@@ -55,6 +55,7 @@ class Market:
     def __init__(self, ctx):
         self.ctx = ctx
         self.broker_thread = None
+        self.broker_lock = None
 
     def step(self):
         ctx, S = self.ctx, self.ctx.S
@@ -190,10 +191,15 @@ class Market:
 
     # ------------------------------------------------------------------ broker (Market Test + real offers)
     def ensure_broker(self):
+        """Run the broker in a thread unless the standalone broker (smart_broker.py, survives agent restarts) runs."""
         key = self.ctx.state.get("broker_key")
         if not key or (self.broker_thread and self.broker_thread.is_alive()):
             return
         import smart_broker
+        if getattr(self, "broker_lock", None) is None:
+            self.broker_lock = smart_broker.take_lock()
+            if self.broker_lock is None:
+                return
         self.broker_thread = threading.Thread(target=smart_broker.run, args=(self.ctx.raw.url, key), daemon=True)
         self.broker_thread.start()
         self.ctx.log("market", "broker_started", venue=self.ctx.state.get("venue"))
@@ -267,12 +273,8 @@ class Market:
         return best
 
     def reward_venue(self):
-        """A 0%-fee market that is not ours (self_venue), busiest first; El Rastro as a last resort."""
-        mine = self.ctx.state.get("venue")
-        free = [v for v in (getattr(self.ctx, "venues", None) or []) if v.get("status") == "open" and v.get("venue") != mine
-                and not v.get("fee_bps") and not v.get("fee_per_card") and v.get("venue") != "rastro"]
-        free.sort(key=lambda v: -(v.get("volume") or 0))
-        return free[0]["venue"] if free else "rastro"
+        """El Rastro: value created on a rival's venue scores market points for that rival, the house scores nobody."""
+        return "rastro"
 
     def reward_traders(self, tick):
         """Teams whose trade settled on our venue today get one private offer of a spare common at REWARD_PRICE."""
@@ -380,7 +382,7 @@ class Market:
                                    "matching": "smart broker every tick, fair midpoint, best pairs first",
                                    "market_test_soon": bool(self.bench_soon()),
                                    **({"club_welcome": f"their first trade on Mercado Trece today earns a private offer of "
-                                                       f"one of our spare commons at {REWARD_PRICE} P (commons trade at 8-10 P)"}
+                                                       f"one of our spare commons at {REWARD_PRICE} P on El Rastro (commons trade at 8-10 P)"}
                                       if reward else {})},
                          "instruction": "Write a short, friendly invitation. Only state the facts given. No price needed. Create FOMO without false claims."}
             text, _, _ = ctx.speak(situation, (0, 0), (text, 0))

@@ -156,19 +156,23 @@ def smart_bench_plan(book, tracker, tick, fee):
 
 PROBES_PER_TICK = 3     # match attempts per tick on pairs whose quotes do not cross yet (rate limit: 5 req/s)
 PROBE_GIVEUP = 6        # refusals with no acceptance at all: the server checks quotes, stop probing
+PROBE_MIN_AGE = 2       # a trader is probed once it has quoted this many ticks (its shading is learned) ...
+PROBE_AFTER = 0.5       # ... or once this share of the session has passed (sim: beats the stall with and without arrivals)
 _probe = {"on": True, "accepted": 0, "refused": 0, "tries": {}}
 
 
-def probe_plan(tracker, used, fee, max_n=PROBES_PER_TICK):
+def probe_plan(tracker, used, fee, tick, max_n=PROBES_PER_TICK):
     """Pairs whose quotes do not cross but whose estimated limits do, priced at the midpoint of the estimates.
 
     The Market Test scores gains between TRUE limits; if the server checks a match against those limits rather than
-    the quotes, these are trades the stall never makes (firm traders never relax into a cross)."""
+    the quotes, these are trades the stall never makes (firm traders never relax into a cross). Probing a newcomer
+    pairs it before better partners arrive, hence the age / session-progress gate."""
     if not _probe["on"]:
         return []
     out, runs = [], {}
     for oid, s in tracker.seen.items():
-        if oid not in used:
+        progress = (tick - tracker.run_start.get(s["run"], tick)) / SESSION_TICKS
+        if oid not in used and (progress >= PROBE_AFTER or tick - s["first"] >= PROBE_MIN_AGE):
             runs.setdefault(s["run"], {"ask": [], "bid": []})[s["side"]].append((oid, s))
     for run, sides in runs.items():
         sh = tracker.shade(run)
@@ -236,7 +240,28 @@ def log_fee_blocks(book, fee):
             log(event="fee_blocked", sell=sell, buy=buy, ask=ask, bid=bid)
 
 
+def take_lock():
+    """One broker per venue: the standalone process or the agent's thread, whichever holds logs/broker.lock.
+    Returns the open lock file (keep it alive) or None if another broker already runs."""
+    import fcntl
+    LOG.parent.mkdir(exist_ok=True)
+    f = open(LOG.parent / "broker.lock", "a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        f.close()
+        return None
+    f.seek(0)
+    f.truncate()
+    f.write(str(os.getpid()))
+    f.flush()
+    return f
+
+
 def main():
+    lock = take_lock()  # noqa: F841 (held until exit)
+    if lock is None:
+        raise SystemExit("Another broker already runs for our venue (logs/broker.lock).")
     url = os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai")
     key = os.environ.get("BROKER_KEY")
     if not key:
@@ -309,7 +334,7 @@ def run(url, key):
                         log(event="match_refused", tick=tick, sell=sell, buy=buy, price=price, error=str(e))
                 if bench:
                     used = {oid for s, b, _ in plan for oid in (s, b)}
-                    for sell, buy, price in probe_plan(tracker, used, fee):
+                    for sell, buy, price in probe_plan(tracker, used, fee, tick):
                         try:
                             broker.match(sell, buy, price)
                             probe_result(sell, buy, True)

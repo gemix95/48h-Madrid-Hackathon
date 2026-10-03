@@ -129,6 +129,15 @@ class Haggler:
             hi_ask = self._opening(stats.get(key), {"list_price": book}, side="sell")
             return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": floor, "hi": hi_ask,
                                                    "list": book, "asset": a["id"], "ref": a["ref"]}
+        ladder = self._ladder_card(dealer, buys) if S.get("ladder_sell", 1) else None
+        if ladder:  # 2b) higher-level dealers we cannot buy from: three sales fill the level's best-three
+            a, book = ladder
+            key = f"{dealer['id']}:sell:{a['rarity']}"
+            if key not in unsupported:
+                hi_ask = self._opening(stats.get(key), {"list_price": book}, side="sell")
+                return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": math.ceil(book * 0.6),
+                                                       "hi": hi_ask, "list": book, "asset": a["id"], "ref": a["ref"],
+                                                       "ladder": True}
         for s in menu.get("sells", []):  # 3) buy single cards we want, cheaply
             if can_buy and S["haggle_buy_cards"] and s.get("rarity") and cash > 15 and item_cap >= 5:
                 for ref, gain in ctx.values.wishlist():
@@ -144,6 +153,30 @@ class Haggler:
                     return {"buy": {"card": ref}}, {"side": "buy", "key": key, "lo": min(lo, hi), "hi": hi,
                                                     "list": s.get("list_price"), "ref": ref}
         return None
+
+    def _ladder_card(self, dealer, buys):
+        """For a level-3+ dealer with fewer than three deals: the uncommon/rare she buys that costs us least.
+        Private values only score in trades with teams, so a dealer sale costs no points; complete pages and pages
+        one card from complete are never touched (their completer is the big team-trade gain)."""
+        ctx, v = self.ctx, self.ctx.values
+        if (dealer.get("level") or 0) < 3:
+            return None
+        if sum(1 for t in ctx.threads if t.get("with") == dealer["id"] and t["status"] == "deal") >= 3:
+            return None
+        locked, best = ctx.locked_assets(), None
+        for a in v.assets:
+            if a.get("kind") != "card" or a.get("rarity") not in buys or a.get("rarity") not in ("uncommon", "rare"):
+                continue
+            card = v.cards.get(a["ref"]) or {}
+            if a["id"] in locked or not card.get("page"):
+                continue
+            page = v.page_cards(card["set"])
+            if sum(1 for r in page if v.held[r] > 0) >= len(page) - 1:
+                continue
+            loss = v.loss_of_removing([a["ref"]])
+            if best is None or loss < best[1]:
+                best = (a, loss)
+        return (best[0], v.book(best[0]["ref"])) if best else None
 
     def _intel(self, dealer_id, plan):
         """Attach what other teams got for this kind of item: a target to close at, a cap never to exceed."""

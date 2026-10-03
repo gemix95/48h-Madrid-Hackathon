@@ -36,9 +36,12 @@ class Guard:
         except BazaarError:
             offers = ctx.my_offers
         caps = team_caps()
+        plans = ctx.state.get("plans", {})
         for o in offers:
             if o.get("maker") != ctx.me.get("id") or o.get("status", "open") != "open":
                 continue
+            if o.get("thread") and (plans.get(str(o["thread"])) or {}).get("ladder"):
+                continue  # a dealer ladder sale: private values only score in trades with teams
             g, w = o.get("give") or {}, o.get("want") or {}
             if any(not t.startswith("card:") for t in (g.get("types") or []) + (w.get("types") or [])):
                 continue
