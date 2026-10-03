@@ -183,8 +183,8 @@ def waiting(offers: list, me_id: str) -> int:
 
 def auto_bar(n_waiting: int, min_gain: float) -> tuple:
     """How good a swap must be to send itself, for us (exact) and for them (estimate). It rises with every swap of
-    ours already waiting, so a run of borderline swaps cannot pile up: 0 waiting -> +5 / +2, 4 waiting -> +13 / +6."""
-    return max(min_gain, 5) + 2 * n_waiting, 2 + n_waiting
+    ours already waiting, so a run of borderline swaps cannot pile up: 0 waiting -> +3 / +2, 4 waiting -> +7 / +4."""
+    return max(min_gain, 3) + n_waiting, 2 + n_waiting / 2
 
 
 class Auto:

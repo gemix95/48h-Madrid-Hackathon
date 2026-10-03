@@ -43,6 +43,17 @@ import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, a
 import workshop_panel as workshop_tab  # noqa: E402  (El Taller tab; team13/workshop.py is the agent module)
 HAND_LOG = HERE.parent / "logs" / "hand.jsonl"
 AUTO = swaps.Auto(on=os.environ.get("AUTO_SWAPS", "1") != "0")  # AUTO_SWAPS=0: this dashboard never sends swaps by itself
+
+
+def _restore_longshots():
+    """Long shots sent before a restart must not raise the auto bar for good-for-both swaps: read them from the hand log."""
+    try:
+        for line in HAND_LOG.read_text().splitlines()[-2000:]:
+            rec = json.loads(line)
+            if rec.get("ev") == "swap_offer" and rec.get("auto") == "longshot" and (rec.get("r") or {}).get("offer"):
+                AUTO.longshot_ids.add(rec["r"]["offer"])
+    except (OSError, ValueError):
+        pass
 # the bots' own logs, so they only exist on the laptop that runs them: agent.py writes decisions.jsonl, agent/hand.py hand.jsonl
 INDEX = LogIndex({"agent": DECISIONS, "manual": HERE.parent / "logs" / "hand.jsonl"})
 
@@ -519,6 +530,7 @@ if __name__ == "__main__":
     council.start_sync()  # the shared board (council branch): pulled every 15 s, so every laptop sees every agent's notes
     threading.Thread(target=listen, daemon=True).start()
     threading.Thread(target=advise, daemon=True).start()
+    _restore_longshots()
     threading.Thread(target=autosend, daemon=True).start()
     print(f"Team 13 war room on http://localhost:{PORT}")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
