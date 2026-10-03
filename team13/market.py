@@ -25,7 +25,8 @@ PITCH = ("Hola! Team 13 — Mercado Trece ({venue}). {fee} fee, no per-card char
          "Smart broker matches every tick, best pairs first; earliest offers get matched first. "
          "List or bid on Mercado Trece and keep the primas.")
 ANNOUNCE = [
-    "Mercado Trece: {fee} fee, no per-card charge, smart broker matching every tick. List now.",
+    "Mercado Trece ({venue}) is now {fee}, no per-card charge (the '1%' in our name is out of date: open markets "
+    "can't be renamed). El Rastro takes 5% + 1 P per card.",
     "Still on El Rastro? 5% + 1 P per card vs Mercado Trece at {fee}. Same cards, more primas left.",
     "Mercado Trece matches every tick (best pairs first). First come, first matched — get on the book.",
     "Leading team, zero cut: Mercado Trece is {fee}, no per-card fee. Where Madrid should trade.",
@@ -33,6 +34,13 @@ ANNOUNCE = [
 ]
 PRE_TEST = ("Market Test soon: list on Mercado Trece ({venue}) now — {fee} fee, smart broker, matched every tick. "
             "Don't leave liquidity on El Rastro.")
+# appended to announcements only while we still have a spare to give and rewards left today (a true claim)
+REWARD_PITCH = (" Club welcome: your first trade on Mercado Trece today earns a private offer of one of our spare "
+                "commons at {price} P (they trade at 8-10 P elsewhere).")
+REWARD_PRICE = 5             # commons trade at 8-10 P between teams; only spares worth <= 3 P to us qualify
+REWARD_MIN_GAIN = 2          # every reward is still a sale that gains us value
+REWARDS_PER_DAY = 4
+REWARD_TICKS = 60
 
 ANNOUNCE_EVERY = 20          # normal cadence (ticks)
 ANNOUNCE_PRETEST_EVERY = 10  # denser reminders when a bench session is near
@@ -61,6 +69,7 @@ class Market:
         every = ANNOUNCE_PRETEST_EVERY if self.bench_soon() else ANNOUNCE_EVERY
         if tick - st.get("announce_tick", -99) >= every:
             self.announce(tick)
+        self.reward_traders(tick)
         self.invite(tick)
 
     # ------------------------------------------------------------------ opening
@@ -224,6 +233,8 @@ class Market:
             text = PRE_TEST.format(fee=ft, venue=venue)
         else:
             text = ANNOUNCE[(st.get("announce_n", 0)) % len(ANNOUNCE)].format(fee=ft, venue=venue)
+        if self.rewards_left() and self.reward_spare():
+            text += REWARD_PITCH.format(price=REWARD_PRICE)
         try:
             Broker(ctx.raw.url, st["broker_key"]).announce(text)
             st["announce_tick"], st["announce_n"] = tick, st.get("announce_n", 0) + 1
@@ -231,6 +242,70 @@ class Market:
         except BazaarError as e:
             st["announce_tick"] = tick  # do not retry every tick (respect API limits)
             ctx.log("market", "announce_refused", error=str(e)[:200])
+
+    # ------------------------------------------------------------------ club welcome: reward teams that trade on our venue
+    def rewards_left(self):
+        day = self.ctx.clock.get("today", "day")
+        given = self.ctx.state.get("club_rewards", {})
+        return REWARDS_PER_DAY - sum(1 for d in given.values() if d == day)
+
+    def reward_spare(self, exclude=()):
+        """Our cheapest-to-lose spare common that still sells at REWARD_PRICE with REWARD_MIN_GAIN, or None."""
+        ctx, v = self.ctx, self.ctx.values
+        if not v:
+            return None
+        locked = ctx.locked_assets()
+        best = None
+        for a in v.assets:
+            if a.get("kind") != "card" or a.get("rarity") != "common" or a["id"] in locked or a["id"] in exclude:
+                continue
+            if v.held[a["ref"]] < 2:  # duplicates only: never touch a page
+                continue
+            loss = v.loss_of_removing([a["ref"]])
+            if REWARD_PRICE - loss >= REWARD_MIN_GAIN and (best is None or loss < best[1]):
+                best = (a, loss)
+        return best
+
+    def reward_venue(self):
+        """A 0%-fee market that is not ours (self_venue), busiest first; El Rastro as a last resort."""
+        mine = self.ctx.state.get("venue")
+        free = [v for v in (getattr(self.ctx, "venues", None) or []) if v.get("status") == "open" and v.get("venue") != mine
+                and not v.get("fee_bps") and not v.get("fee_per_card") and v.get("venue") != "rastro"]
+        free.sort(key=lambda v: -(v.get("volume") or 0))
+        return free[0]["venue"] if free else "rastro"
+
+    def reward_traders(self, tick):
+        """Teams whose trade settled on our venue today get one private offer of a spare common at REWARD_PRICE."""
+        ctx, st = self.ctx, self.ctx.state
+        intel, venue = getattr(ctx, "intel", None), st.get("venue")
+        if not intel or not venue or self.rewards_left() <= 0:
+            return
+        day, me = ctx.clock.get("today", "day"), ctx.me["id"]
+        given = st.setdefault("club_rewards", {})
+        for e in list(intel.events.values())[-300:]:
+            p = e.get("payload") or {}
+            if e.get("type") != "settlement" or p.get("venue") != venue or p.get("kind") != "trade":
+                continue
+            if tick - (p.get("tick") or e.get("tick") or 0) > 240:  # today's trades only
+                continue
+            for team in p.get("parties") or []:
+                if team == me or given.get(team) == day or self.rewards_left() <= 0:
+                    continue
+                spare = self.reward_spare()
+                if not spare:
+                    return
+                a, loss = spare
+                where = self.reward_venue()
+                try:
+                    o = ctx.api.list_offer({"assets": [a["id"]]}, {"cash": REWARD_PRICE}, venue=where, to=team,
+                                           expires_in_ticks=REWARD_TICKS)
+                    given[team] = day
+                    ctx.log("market", "club_reward", team=team, ref=a["ref"], price=REWARD_PRICE, our_loss=round(loss, 1),
+                            venue=where, offer=o.get("id"), settlement=p.get("settlement"))
+                except BazaarError as err:
+                    given[team] = day  # one attempt per team per day
+                    ctx.log("market", "club_reward_refused", team=team, error=str(err)[:200])
+                return  # one reward per tick: the offer budget is shared with the trader
 
     def invite_targets(self, inv, day):
         """Teams to invite today, active El Rastro listers / holders first, then the rest of the board.
@@ -294,12 +369,19 @@ class Market:
         text = PITCH.format(venue=venue, fee=ft)
         if self.bench_soon():
             text = PRE_TEST.format(venue=venue, fee=ft) + " " + text
+        reward = bool(self.rewards_left() > 0 and self.reward_spare())
+        if reward:
+            text += REWARD_PITCH.format(price=REWARD_PRICE)
         if ctx.S.get("llm_negotiator", 1):
             situation = {"counterparty": f"team {target}", "goal": "invite them to list and trade on our market Mercado Trece",
                          "facts": {"our_market": "Mercado Trece", "venue_id": venue, "fee": ft + " (no per-card charge)",
+                                   "name_note": "the '1%' in our market's name is out of date; open markets cannot be renamed",
                                    "el_rastro_fee": "5% + 1 P per card",
                                    "matching": "smart broker every tick, fair midpoint, best pairs first",
-                                   "market_test_soon": bool(self.bench_soon())},
+                                   "market_test_soon": bool(self.bench_soon()),
+                                   **({"club_welcome": f"their first trade on Mercado Trece today earns a private offer of "
+                                                       f"one of our spare commons at {REWARD_PRICE} P (commons trade at 8-10 P)"}
+                                      if reward else {})},
                          "instruction": "Write a short, friendly invitation. Only state the facts given. No price needed. Create FOMO without false claims."}
             text, _, _ = ctx.speak(situation, (0, 0), (text, 0))
         try:

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import urllib.request
 import sys
@@ -84,6 +85,8 @@ class Context:
     # ---------------------------------------------------------------- logging & state
     def log(self, module, action, **detail):
         rec = {"ts": round(time.time(), 1), "tick": self.clock.get("tick"), "module": module, "action": action, **detail}
+        # browsers reject bare Infinity/NaN, so non-finite numbers (a protected card's loss) are logged as null
+        rec = {k: None if isinstance(v, float) and not math.isfinite(v) else v for k, v in rec.items()}
         line = json.dumps(rec, default=str)
         self._logf.write(line + "\n")
         print(line[:300], flush=True)
