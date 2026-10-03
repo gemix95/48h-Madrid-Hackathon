@@ -124,6 +124,10 @@ class Duels:
         seller = role.startswith("sell")
         two_issue = "days" in (d.get("issues") or []) or d.get("your_days_weight") is not None
         w = float(first(d, "your_days_weight", "days_weight", default=0) or 0)
+        if not seller:
+            # Saturday Duels II results: a buyer scored margin - weight x days, a seller margin + weight x days (e.g.
+            # buyer 5620: 38 - 4.18 x 10 = -3.8; seller 5621: 45 + 1.81 x 10 = 63.1). Each later day costs the buyer.
+            w = -w
         decay = float(first(d, "decay", "decay_per_round", default=0.06) or 0.06)
 
         msgs = first(d, "messages", "history", default=[]) or []

@@ -64,5 +64,17 @@ c = Ctx(); Duels(c).play(duel("seller", 76, 1.28, 56, 0, rounds=6, deadline=103)
 p, d = c.said[-1] if c.said else (None, None)
 ok = (not c.accepted) and d == 10 and p is not None and 77 <= p <= 90
 print(f"last-chance takeable: price {p} days {d} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(5)
+
+# 6) Saturday Duels II: the API's your_days_weight is positive for both roles, but each day costs the buyer
+#    (buyer 5629: limit 148, price 140, 10 days at 7.99 scored -60.8). A buyer with w=+8 asks for day 0, and never
+#    accepts a price inside its limit at day 10 when the days cost more than the margin.
+c = Ctx(); Duels(c).play(duel("buyer", 148, 7.99))
+p, d = c.said[-1]
+print(f"buyer w=+7.99 opening: price {p} days {d} -> {'ok' if d == 0 else 'FAIL'}"); d == 0 or fails.append(6)
+c = Ctx(); Duels(c).play(duel("buyer", 148, 7.99, 140, 10, rounds=7, deadline=101))
+print(f"buyer rival 140 at day 10 (scores 8 - 79.9): accepted {bool(c.accepted)} -> {'ok' if not c.accepted else 'FAIL'}"); c.accepted and fails.append(7)
+c = Ctx(); Duels(c).play(duel("seller", 100, 2.0))
+p, d = c.said[-1]
+print(f"seller w=+2 opening: days {d} -> {'ok' if d == 10 else 'FAIL'}"); d == 10 or fails.append(8)
 print("ALL OK" if not fails else f"FAILED {fails}")
 sys.exit(1 if fails else 0)
