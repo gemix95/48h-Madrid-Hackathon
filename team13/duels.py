@@ -216,7 +216,10 @@ class Duels:
             last_chance = ticks_left <= 2  # practice: two duels ended no_deal with a rival offer inside our limit
             # mid-fight: if the gap is small vs our surplus, bank it before the next 6% melt
             gap_ok = abs(price - r_price) <= max(3, 0.04 * max(price, r_price))
-            if u_r > 0 and (last_chance or u_r >= accept_th * u_next or k >= ROUNDS or (gap_ok and u_r >= 0.35 * max(u_next, 1))):
+            # the price itself must be inside our limit: days may add to the deal, never excuse a price past it
+            # (a deal outside the limit loses points, and the rules speak of the limit as a price)
+            price_ok = (r_price >= limit) if seller else (r_price <= limit)
+            if price_ok and u_r > 0 and (last_chance or u_r >= accept_th * u_next or k >= ROUNDS or (gap_ok and u_r >= 0.35 * max(u_next, 1))):
                 if ctx.take_accept(kind="duel"):
                     ctx.api.duel_accept(d["id"])
                     ctx.log("duel", "accept", duel=d["id"], price=r_price, days=r_days, our_surplus=round(u_r, 1),
@@ -244,7 +247,8 @@ class Duels:
                         their_msgs=len(theirs), unanswered=unanswered, rival=rival_name)
             return
 
-        if util(price, days) <= 0:  # would cross our limit: hold at a safe price instead
+        # never offer a price past our limit, whatever the days are worth (the days bump above can push it there)
+        if ((price - limit) if seller else (limit - price)) <= 0 or util(price, days) <= 0:
             price = math.ceil(limit + 1) if seller else math.floor(limit - 1)
         last = ctx.state.setdefault("duel_last", {}).get(str(d["id"]))
         if last and last == [price, days, r_price]:
