@@ -94,7 +94,7 @@ KNOBS = {
     "longshot_swaps": (1, 0, 1, 1, "Trading", "Dashboard: send long-shot swaps",
                        "Swaps only good for us (the holder loses by our guess) sent anyway, one per 90 s: a refusal costs nothing."),
     "longshot_min_us": (9, 3, 40, 1, "Trading", "Long shots: least we gain (P)", "Only long shots worth at least this to us."),
-    "longshot_max_waiting": (16, 0, 26, 1, "Trading", "Long shots: most swaps waiting", "No long shot while this many swaps of ours wait for an answer."),
+    "longshot_max_waiting": (3, 0, 26, 1, "Trading", "Long shots: most swaps waiting", "No long shot while this many swaps of ours wait for an answer."),
     "loan_cap": (60, 0, 200, 5, "Trading", "Loan desk: total principal out (P)", "All open loans together; cash after a loan stays above the reserve."),
     "loan_rate": (0.10, 0.02, 0.5, 0.01, "Trading", "Loan desk: minimum interest", "Repayment is at least principal x (1 + this) and principal + 2."),
     "loan_safety": (0.10, 0.0, 1.0, 0.05, "Trading", "Loan desk: collateral margin",
