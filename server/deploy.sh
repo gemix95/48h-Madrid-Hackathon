@@ -3,7 +3,7 @@
 # Never touches server-only files: strategy.json, state.json, *.env, logs. Defers broker restarts during a Market Test.
 set -u
 SRC=/home/bazaar/src; APP=/home/bazaar/app; BRK=/home/bazaar/broker; LOG=/home/bazaar/deploy.log
-export GIT_SSH_COMMAND="ssh -i /home/bazaar/.ssh/github_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+export GIT_SSH_COMMAND="ssh -i /home/bazaar/.ssh/github_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/home/bazaar/.ssh/known_hosts"
 say() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 cd "$SRC" || exit 0
 export HOME=/root
