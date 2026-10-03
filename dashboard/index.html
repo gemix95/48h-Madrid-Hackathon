@@ -1368,6 +1368,15 @@ function strategyPlan(d, M) {
           Your Claude.ai plan usage isn't available through the API: check claude.ai → Settings → Usage.</div></div>`; })()}
     ${d.agent_running ? "" : `<div class="muted" style="font-size:12px;margin-top:8px">Agent is stopped. Run it with <code>.venv/bin/python team13/agent.py</code> (the AI needs the .venv).</div>`}`;
   $("llm-toggle").onchange = async e => { await post("/strategy", { ...SD.current, llm_negotiator: e.target.checked ? 1 : 0 }); await loadStrategy(); };
+  // reasoning effort: one click on the card (saved to strategy.json, the agent uses it from the next message)
+  const eff = ["low", "medium", "high"], cur = eff[S.llm_effort || 0];
+  const hint = { low: "~4 s · ~$0.0075/msg · fits 15 s ticks", medium: "more careful · slower · ~2x cost", high: "most careful · may miss short ticks · ~4x cost" };
+  $("llm").insertAdjacentHTML("beforeend", `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--grid)">
+    <div class="sec" style="font-size:12px;font-weight:600;margin-bottom:6px">Reasoning level</div>
+    <div style="display:flex;gap:6px">${eff.map((e, i) => `<button class="btn ${e === cur ? "on" : ""}" data-eff="${i}" style="flex:1">${e[0].toUpperCase() + e.slice(1)}</button>`).join("")}</div>
+    <div class="muted" style="font-size:11px;margin-top:6px">${esc(hint[cur])}</div></div>`);
+  $("llm").querySelectorAll("[data-eff]").forEach(b => b.onclick = async () => {
+    await post("/strategy", { ...SD.current, llm_effort: +b.dataset.eff }); await loadStrategy(); strategyPlan(D, model(D)); });
 
   // market
   const mk = recs.filter(r => r.module === "market");
