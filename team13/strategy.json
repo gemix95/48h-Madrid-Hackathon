@@ -33,6 +33,7 @@
  "max_dealer_buy": 40,
  "reserve_cash": 270,
  "seek_keep_cash": 100,
+ "ladder_sell": 0,
  "trade_all_markets": 0,
  "trade_ask_start": 1.05,
  "trade_bid_share": 0.4,
