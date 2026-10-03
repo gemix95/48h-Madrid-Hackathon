@@ -92,6 +92,37 @@ def announce_every(tick_seconds, pretest=False) -> int:
     return min(every, ANNOUNCE_PRETEST_EVERY) if pretest else every
 
 
+def rastro_fee(price) -> int:
+    return math.ceil(500 * price / 10000) + 1  # El Rastro: 5% + 1 P a card, paid by the side that accepts
+
+
+def stuck_pairs(board: list, me: str | None = None) -> list:
+    """Cards with an ask and a bid from different makers on El Rastro that the house fee keeps apart: the bid reaches
+    the ask, or falls short by less than the fee the accepting side would pay. On a 0% market they would trade.
+    Returns [(gap_after_fee, ref, ask, bid)], the closest first."""
+    asks, bids = {}, {}
+    for o in board or []:
+        if o.get("to") or o.get("maker") == me:
+            continue
+        g, w = o.get("give") or {}, o.get("want") or {}
+        gives = [a["ref"] for a in g.get("assets") or []] + [t[5:] for t in g.get("types") or [] if t.startswith("card:")]
+        wants = [a["ref"] for a in w.get("assets") or []] + [t[5:] for t in w.get("types") or [] if t.startswith("card:")]
+        if len(gives) == 1 and not wants and w.get("cash"):
+            asks.setdefault(gives[0], []).append((w["cash"], o.get("maker")))
+        elif len(wants) == 1 and not gives and g.get("cash"):
+            bids.setdefault(wants[0], []).append((g["cash"], o.get("maker")))
+    out = []
+    for ref in set(asks) & set(bids):
+        (ask, seller), (bid, buyer) = min(asks[ref]), max(bids[ref])
+        if seller != buyer and ask - rastro_fee(ask) < bid and bid < ask + rastro_fee(ask):
+            out.append((ask - bid, ref, ask, bid))
+    return sorted(out)
+
+
+MATCH_PITCH = ("{ref} on El Rastro: ask {ask}, bid {bid}. The 5% + 1 P house fee keeps them apart there. Post both on "
+               "{venue} (0% fee, 0 P per card) and our broker crosses them at the midpoint next tick.")
+
+
 def fee_text(bps) -> str:
     return "0%" if not bps else f"{bps / 100:g}%"
 
@@ -289,7 +320,14 @@ class Market:
         ft = fee_text(int(ctx.S["venue_fee_bps"]))
         venue = st.get("venue") or "v03"
         cashback = self.cashback_active()
-        if self.bench_soon():
+        pairs = stuck_pairs(ctx.boards.get("rastro"), ctx.me.get("id")) if not int(ctx.S["venue_fee_bps"]) else []
+        recent = st.setdefault("pitched", {})
+        pairs = [p for p in pairs if tick - recent.get(p[1], -999) >= 60]  # one pitch per card an hour at most
+        if pairs:
+            _, ref, ask, bid = pairs[0]
+            text = MATCH_PITCH.format(ref=ref, ask=ask, bid=bid, venue=venue)
+            recent[ref] = tick
+        elif self.bench_soon():
             text = PRE_TEST.format(fee=ft, venue=venue)
         elif cashback:
             text = self.cashback_announcement()
