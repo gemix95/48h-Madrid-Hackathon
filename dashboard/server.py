@@ -40,6 +40,7 @@ BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 import council  # noqa: E402  (team13/council.py: El Consejo, the board where our agents post what they learnt)
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
 import arbview  # noqa: E402  (dashboard/arbview.py: data for the Arbitrage tab)
+import visits  # noqa: E402  (our own visit counter for the public board)
 import auctions  # noqa: E402  (team13/auctions.py: lots on our market, seller accepts the best open bid)
 import board  # noqa: E402  (dashboard/board.py: the public El Club board at /board)
 import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, and the one write the dashboard makes)
@@ -482,6 +483,18 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return True
+        if path == "/board/ping":  # the page's visit counter (no cookies, no IP kept)
+            from urllib.parse import urlparse, parse_qs
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
+            try:
+                visits.record(q, ip, self.headers.get("User-Agent") or "")
+            except OSError as e:
+                print("visits:", repr(e)[:120], flush=True)
+            self.send_response(204)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return True
         if path in ("/board/auction", "/board/lots.json"):  # open a lot (public, validated) / every lot with its ranking
             from urllib.parse import urlparse, parse_qs
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -550,7 +563,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._authorized():
             return
-        if self.path.startswith("/logs"):
+        if self.path.startswith("/board-stats"):  # behind the password: who uses the public board
+            self._send(200, "application/json", json.dumps(visits.summary(), indent=1).encode())
+        elif self.path.startswith("/logs"):
             self._send(200, "application/json", json.dumps(logs_view()).encode())
         elif self.path.startswith("/data"):
             logs = logs_view()

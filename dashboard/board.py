@@ -404,7 +404,7 @@ def _auctions_html(data, vid):
            f"YOUR_TEAM_ID like t07.\n\nWhen it closes, accept the best bid still on the book within {grace} ticks:\n\n"
            f'curl -X POST $BAZAAR_URL/api/offers/OFFER_ID/accept -H "X-Team-Key: $BAZAAR_KEY" '
            f"-H \"Content-Type: application/json\" -d '{{\"assets\":[YOUR_ASSET_ID]}}'")
-    steps = (f'<div class="box rules"><b>How an auction works</b><ol>'
+    steps = (f'<details class="box rules"><summary><b>How an auction works</b> <span class="dim small">· 5 rules, nothing to trust us for</span></summary><ol>'
              f'<li><b>The seller keeps the card.</b> No ask is posted, so nobody can buy it around the auction.</li>'
              f'<li><b>Bids are ordinary open bids on {vid}</b> (cash for that card, at least the reserve). Everyone sees every bid: '
              f'<code>GET /api/venues/{vid}/offers</code>. Raise with a higher bid, withdraw by cancelling.</li>'
@@ -412,7 +412,7 @@ def _auctions_html(data, vid):
              f'here and in <a href="/board/lots.json">/board/lots.json</a>. Compare it with the book yourself.</li>'
              f'<li><b>The seller accepts the best bid still on the book</b> within {grace} ticks. The winner pays its own bid, 0% fee.</li>'
              f'<li>If the seller does not accept, nothing trades and every bid stays yours to cancel. We never touch the card or the cash; '
-             f'Team 13 cannot bid or sell on its own market.</li></ol></div>')
+             f'Team 13 cannot bid or sell on its own market.</li></ol></details>')
     return (f'<h2 id="auctions">Auctions <span class="dim" style="font-weight:400;font-size:14px">· on {vid}: open bids, '
             f'the seller accepts the best, you pay your own bid</span></h2>{steps}{table}{results}'
             f'<div style="margin:8px 0 18px">{_button(how, "Auction your card in 1 call")}</div>')
@@ -449,7 +449,7 @@ def render(data: dict) -> str:
         def side(c, sell):
             price, count = _side_top(c, sell)
             none = " none" if price == "–" else ""
-            return (f'<td class="side" data-ref="{html.escape(c["ref"])}" data-side="{"sell" if sell else "buy"}">'
+            return (f'<td class="side" data-ref="{html.escape(c["ref"])}" data-side="{"sell" if sell else "buy"}" data-label="{"Sell it" if sell else "For sale"}">'
                     f'<div class="price{none}">{price}</div><div class="dim small count">{count}</div>{_howto(c, vid, deadline, sell)}</td>')
 
         def row(c):
@@ -509,8 +509,8 @@ td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 :root{{--font-display:"Big Shoulders Display",system-ui,sans-serif;--font-sans:Manrope,system-ui,sans-serif;--color-gold:#e0b45a;--color-muted:#9a958a;--color-base:#1b0c22}}
 table.deck{{table-layout:fixed;width:100%;min-width:720px}}table.deck td{{vertical-align:middle;overflow-wrap:anywhere}}table.deck.sets th:nth-child(1){{width:30%}}table.deck.sets th:nth-child(n+2){{width:35%}}table.deck.lots th:nth-child(1){{width:24%}}table.deck.lots th:nth-child(2){{width:11%}}table.deck.lots th:nth-child(3){{width:23%}}table.deck.lots th:nth-child(4){{width:14%}}table.deck.lots th:nth-child(5){{width:28%}}td.cardcell{{display:flex;gap:12px;align-items:center}}
 .thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
-.cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
-td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.hint{{width:100%}}.hist{{margin-top:4px;color:var(--dim)}}.hist .spark{{display:block;margin-bottom:2px}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
+.cardtxt{{min-width:0;overflow-wrap:anywhere}}.cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
+td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.hint{{width:100%}}.hist{{margin-top:4px;color:var(--dim)}}.sparkwrap{{position:relative;display:block;width:max-content;cursor:zoom-in;outline:none}}.sparkwrap>svg{{display:block;margin-bottom:2px}}.sparkbig{{display:none;position:absolute;left:0;top:24px;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 8px 4px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:276px}}.sparkwrap:hover .sparkbig,.sparkwrap:focus .sparkbig,.sparkwrap:focus-within .sparkbig{{display:block}}@media (max-width:640px){{.steps{{display:none}}.hero{{font-size:17px}}table.deck.sets,table.deck.lots{{min-width:0;table-layout:auto}}table.deck.sets thead,table.deck.lots thead{{display:none}}table.deck.sets tr,table.deck.lots tr{{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:12px;border-bottom:1px solid var(--line)}}table.deck.sets td,table.deck.lots td{{display:block;padding:0;border:0;width:auto}}table.deck td.cardcell{{grid-column:1/-1;display:flex}}table.deck.lots td:last-child{{grid-column:1/-1}}td.side::before{{content:attr(data-label);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}}td.side.open{{grid-column:1/-1}}.thumb{{width:60px;height:84px}}.thumb .cromo{{font-size:3.75px}}.sparkbig{{left:-72px}}}}.rules summary{{cursor:pointer}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
 .setnav{{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;margin:6px 0 4px;background:var(--bg)}}
 .setnav a{{text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;font-size:13px}}
 .setnav a:hover{{border-color:var(--gold);color:var(--gold)}}.setnav .n{{color:var(--dim);margin-left:6px;font-size:12px}}
@@ -557,7 +557,19 @@ JSON: <a href="board.json">board.json</a> · <a href="board/live.json">live.json
 </main>
 <script>
 let busyUntil = 0;
+const PHONE = matchMedia("(max-width:640px)").matches ? "1" : "0";
+function ping(e, b) {{
+  const q = new URLSearchParams({{e, m: PHONE}});
+  const td = b && b.closest("td"), side = td && td.dataset.side;
+  const ref = td && (td.dataset.ref || td.closest("tr")?.querySelector("[data-card]")?.dataset.card);
+  if (ref) q.set("ref", ref);
+  if (side) q.set("side", side); else if (b) q.set("side", b.closest("table.lots") ? "lot" : "auction");
+  if (b) q.set("l", b.textContent.trim());
+  try {{ navigator.sendBeacon("/board/ping?" + q); }} catch (err) {{}}
+}}
+ping("view");
 async function copyOut(box, text) {{
+  ping("copy", box.previousElementSibling);
   const pre = box.querySelector("pre"), lbl = box.querySelector(".lbl");
   pre.textContent = text; pre.hidden = false; lbl.hidden = false;
   try {{ await navigator.clipboard.writeText(text); lbl.querySelector(".ok").textContent = "copied ✓"; }}
@@ -575,6 +587,8 @@ function checkPrice(raw, min) {{
 }}
 document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click", () => {{
   const box = b.nextElementSibling, form = box.querySelector("form.pricef");
+  b.closest("td")?.classList.add("open");
+  ping("click", b);  // on a phone the request takes the row's full width
   box.hidden = false; busyUntil = Date.now() + 120000;
   if (!b.dataset.min) {{ copyOut(box, b.dataset.text); return; }}
   const inp = form.querySelector("input");

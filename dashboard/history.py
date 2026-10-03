@@ -106,17 +106,31 @@ def line(s) -> str:
     return f'last {s["last"]} P · usual {usual}{tail} · {s["trades"]} trade{"s" if s["trades"] != 1 else ""}{arrow}'
 
 
-def spark(s, w=84, h=20) -> str:
-    """A tiny SVG of the recent prices: team trades gold, dealer trades grey."""
-    if not s or len(s["recent"]) < 2:
-        return ""
+def _svg(s, w, h, big):
     pts = s["recent"]
     lo, hi = min(p[1] for p in pts), max(p[1] for p in pts)
     span = (hi - lo) or 1
-    xy = [(round(2 + i * (w - 4) / (len(pts) - 1), 1), round(h - 3 - (p[1] - lo) * (h - 6) / span, 1)) for i, p in enumerate(pts)]
-    path = " ".join(f"{x},{y}" for x, y in xy)
-    dots = "".join(f'<circle cx="{x}" cy="{y}" r="1.8" fill="{"var(--gold)" if p[2] == "team" else "var(--dim)"}"/>'
-                   for (x, y), p in zip(xy, pts))
-    title = f"recent prices: {', '.join(str(p[1]) for p in pts)} P (gold: between teams, grey: with a dealer)"
-    return (f'<svg class="spark" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" aria-label="{title}"><title>{title}</title>'
-            f'<polyline points="{path}" fill="none" stroke="var(--line)" stroke-width="1.2"/>{dots}</svg>')
+    pad_l, pad_r, pad_y = (34, 10, 14) if big else (2, 2, 3)
+    xy = [(round(pad_l + i * (w - pad_l - pad_r) / (len(pts) - 1), 1), round(h - pad_y - (p[1] - lo) * (h - 2 * pad_y) / span, 1))
+          for i, p in enumerate(pts)]
+    r = 3.2 if big else 1.8
+    dots = "".join(f'<circle cx="{x}" cy="{y}" r="{r}" fill="{"var(--gold)" if p[2] == "team" else "var(--dim)"}"><title>{p[1]} P · tick {p[0]} · '
+                   f'{"between teams" if p[2] == "team" else "with a dealer"}</title></circle>' for (x, y), p in zip(xy, pts))
+    out = f'<polyline points="{" ".join(f"{x},{y}" for x, y in xy)}" fill="none" stroke="var(--line)" stroke-width="{1.6 if big else 1.2}"/>{dots}'
+    if big:  # the price scale and the last price
+        out = (f'<line x1="{pad_l - 4}" y1="{pad_y}" x2="{w - pad_r}" y2="{pad_y}" stroke="var(--line)" stroke-dasharray="2 3"/>'
+               f'<line x1="{pad_l - 4}" y1="{h - pad_y}" x2="{w - pad_r}" y2="{h - pad_y}" stroke="var(--line)" stroke-dasharray="2 3"/>'
+               f'<text x="{pad_l - 8}" y="{pad_y + 4}" text-anchor="end" font-size="11" fill="var(--dim)">{hi}</text>'
+               f'<text x="{pad_l - 8}" y="{h - pad_y + 4}" text-anchor="end" font-size="11" fill="var(--dim)">{lo}</text>' + out +
+               f'<text x="{xy[-1][0]}" y="{xy[-1][1] - 7}" text-anchor="end" font-size="11" font-weight="700" fill="var(--ink)">{pts[-1][1]} P</text>')
+    return f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}">{out}</svg>'
+
+
+def spark(s, w=84, h=20) -> str:
+    """A tiny chart of the recent prices (team trades gold, dealer trades grey); hover or tap shows a big one with the
+    price scale."""
+    if not s or len(s["recent"]) < 2:
+        return ""
+    big = (f'<span class="sparkbig"><span class="small dim">last {len(s["recent"])} trades · gold: between teams, grey: with a dealer</span>'
+           f'{_svg(s, 260, 110, True)}</span>')
+    return f'<span class="sparkwrap" tabindex="0" aria-label="price chart">{_svg(s, w, h, False)}{big}</span>'
