@@ -3,6 +3,8 @@ end, never below `--floor` P, at most `--rounds` price steps, then withdraw.
 
     cd team13 && source ../bazaar.env && python3 ../agent/sell.py MAL-09 --start 200 --floor 140 --rounds 8 --ticks 5
     ... --to t10  also negotiates with that team in a thread: every step goes to it as a structured offer
+    ... --to t10 --direct --no-public   one single offer open at any time: addressed to t10 on El Rastro (the only market
+                  some teams read), a text-only note in a thread says it was updated
     ... --dry     prints the schedule and what it would do, writes nothing
 
 The hard rules live in code, not in a prompt:
@@ -43,6 +45,14 @@ TEXTS = [
     "Hi again, I can do {p} P for the MAL-09. Offer attached, it settles on the next tick.",
     "Still happy to sell the MAL-09, now at {p} P (offer attached, no fee here).",
     "A step down for you: {p} P for MAL-09, offer attached. Free market, no commission.",
+]
+
+
+NOTES = [
+    "Hola Team 13 again! Posted the MAL-09 on El Rastro, addressed to you: {p} P.",
+    "Updated my offer on El Rastro for you: MAL-09 at {p} P.",
+    "A step down on El Rastro, addressed to Team 10: MAL-09 at {p} P.",
+    "New price on El Rastro for the MAL-09: {p} P, addressed to you.",
 ]
 
 
@@ -91,6 +101,8 @@ def main():
     ap.add_argument("--hold", type=int, default=1, help="extra steps at the floor before withdrawing")
     ap.add_argument("--avoid", default="t14,t10", help="teams that cannot take an ask on their own market")
     ap.add_argument("--to", default="", help="team to negotiate with in a thread, besides the public asks")
+    ap.add_argument("--direct", action="store_true", help="with --to: an offer addressed to that team on El Rastro, thread text only")
+    ap.add_argument("--no-public", action="store_true", help="no public asks: only what --to sends")
     ap.add_argument("--dry", action="store_true")
     a = ap.parse_args()
     api = Bazaar(os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai"), os.environ["BAZAAR_KEY"], wait_on_tick=False)
@@ -108,7 +120,9 @@ def main():
     venues = api.venues()["venues"]
     by_id = {x["venue"]: x for x in venues}
     free = free_venue(venues, api.leaderboard(), me_id, set(filter(None, a.avoid.split(","))))
-    where = ["rastro"] + ([free["venue"]] if free else [])
+    where = [] if a.no_public else ["rastro"] + ([free["venue"]] if free else [])
+    if a.direct and not a.to:
+        sys.exit("--direct needs --to")
     steps = []
     for k in range(a.rounds + 1):  # a step that would repeat the last price is skipped: it would only churn the offer
         p = price_at(k, a.start, a.floor, a.rounds)
@@ -151,10 +165,13 @@ def main():
             log(event="thread_refused", team=a.to, error=str(e)[:160])
 
     def thread_say(p, tick):
-        text = TEXTS[k % len(TEXTS)].format(p=p)
+        if a.direct:  # the offer is the directed one on El Rastro; the thread only says it moved
+            text, offer = NOTES[k % len(NOTES)].format(p=p), None
+        else:
+            text, offer = TEXTS[k % len(TEXTS)].format(p=p), {"give": {"assets": [asset]}, "want": {"cash": p}}
         try:
-            api.say(talk["id"], text, offer={"give": {"assets": [asset]}, "want": {"cash": p}})
-            log(event="thread_offer", tick=tick, step=k, price=p, thread=talk["id"])
+            api.say(talk["id"], text, **({"offer": offer} if offer else {}))
+            log(event="thread_offer" if offer else "thread_note", tick=tick, step=k, price=p, thread=talk["id"])
         except BazaarError as e:
             log(event="thread_offer_refused", tick=tick, step=k, price=p, error=str(e)[:160])
 
@@ -213,22 +230,25 @@ def main():
                     return
                 p = steps[k]
                 assert p >= a.floor and p - cost >= MIN_GAIN, "hard rule: never below the floor"
-                fresh = {}
-                for vid in where:
-                    try:
-                        o = api.list_offer({"assets": [asset]}, {"cash": p}, venue=vid, expires_in_ticks=a.ticks + 2)
-                        fresh[vid] = o["id"]
-                        log(event="ask", tick=tick, step=k, price=p, venue=vid, offer=o["id"], expires=o.get("expires_tick"))
-                    except BazaarError as e:
-                        log(event="ask_refused", tick=tick, step=k, price=p, venue=vid, error=str(e)[:160])
-                for vid, oid in open_offers.items():  # the lower ask is up: take the higher one down
+                for vid, oid in list(open_offers.items()):  # never two offers for the card: the old one comes down first
                     try:
                         api.cancel(oid)
                     except BazaarError:
                         pass
+                    open_offers.pop(vid)
+                targets = [(vid, {}) for vid in where] + ([("to:" + a.to, {"to": a.to})] if a.direct else [])
+                for key, extra in targets:
+                    vid = "rastro" if key.startswith("to:") else key
+                    try:
+                        o = api.list_offer({"assets": [asset]}, {"cash": p}, venue=vid, expires_in_ticks=a.ticks + 2, **extra)
+                        open_offers[key] = o["id"]
+                        log(event="ask", tick=tick, step=k, price=p, venue=vid, to=extra.get("to"), offer=o["id"], expires=o.get("expires_tick"))
+                    except BazaarError as e:
+                        log(event="ask_refused", tick=tick, step=k, price=p, venue=vid, error=str(e)[:160])
+                if not open_offers:
+                    continue  # nothing is up: try the same step again on the next tick
                 if talk["id"]:
                     thread_say(p, tick)
-                open_offers = fresh
                 started, k = tick, k + 1
         except BazaarError as e:
             log(event="api_error", error=str(e)[:160])
