@@ -44,9 +44,11 @@ def build() -> dict:
         tick = 0
     cards = {}
     try:
-        for s in _get("/api/catalog")["sets"]:
-            for c in s["cards"]:
-                cards[c["id"]] = {"name": c.get("name", c["id"]), "rarity": c.get("rarity"), "set": s.get("name", s["id"])}
+        for i, st in enumerate(_get("/api/catalog")["sets"]):
+            for n, c in enumerate(st["cards"]):
+                cards[c["id"]] = {"name": c.get("name", c["id"]), "rarity": c.get("rarity"), "set": st.get("name", st["id"]),
+                                  "set_id": st["id"], "book": c.get("book"), "hidden": bool(c.get("hidden")),
+                                  "order": (i, n)}
     except Exception:
         pass
     rows, swaps = {}, []
@@ -70,7 +72,8 @@ def build() -> dict:
             elif gave and wanted and not g.get("cash") and not w.get("cash"):
                 swaps.append({"give": gave, "want": wanted, **where})
     out = []
-    for ref, r in rows.items():
+    for ref in list(cards) or list(rows):
+        r = rows.get(ref) or {"asks": [], "bids": []}
         r["asks"].sort(key=lambda x: x["price"])
         r["bids"].sort(key=lambda x: -x["price"])
         ask, bid = (r["asks"][0] if r["asks"] else None), (r["bids"][0] if r["bids"] else None)
@@ -83,9 +86,11 @@ def build() -> dict:
                 state = "near"   # apart by less than El Rastro's fee: on a 0 % market they meet
             else:
                 state = "apart"
+        if not r["asks"] and not r["bids"]:
+            state = "quiet"
         out.append({"ref": ref, **cards.get(ref, {"name": ref}), "asks": r["asks"], "bids": r["bids"],
                     "best_ask": ask, "best_bid": bid, "gap": gap, "state": state})
-    rank = {"cross": 0, "near": 1, "apart": 2, "one-sided": 3}
+    rank = {"cross": 0, "near": 1, "apart": 2, "one-sided": 3, "quiet": 4}
     out.sort(key=lambda x: (rank[x["state"]], x["gap"] if x["gap"] is not None else 10 ** 6, x["ref"]))
     return {"at": int(time.time()), "tick": tick, "our_venue": ours and {"venue": ours["venue"], "name": ours.get("name")},
             "markets": len(venues), "cards": out, "swaps": swaps}
@@ -101,9 +106,13 @@ def public(data: dict) -> dict:
         here = [{"side": "buy" if side == "bids" else "sell", "price": x["price"], "id": x.get("id"), "expires": x.get("expires")}
                 for side in ("bids", "asks") for x in c[side] if x["ours"]]
         out.append({"ref": c["ref"], "name": c.get("name"), "rarity": c.get("rarity"), "state": c["state"],
+                    "set": c.get("set"), "set_id": c.get("set_id"), "book": c.get("book"),
+                    "hidden": c.get("hidden"), "order": c.get("order"),
                     "buyers": len(c["bids"]), "sellers": len(c["asks"]), "meet": meet,
                     "saves": _fee(meet, *RASTRO_FEE) if meet else None,  # what El Rastro takes from the accepting side
                     "sides_here": sorted({x["side"] for x in here}), "on_ours": here})
+    for c in out:
+        c["_deadline"] = (data.get("tick") or 0) + MEET_WINDOW
     swaps = [{"give": s["give"], "want": s["want"]} for s in data["swaps"]]
     return {"at": data["at"], "tick": data.get("tick"), "deadline": (data.get("tick") or 0) + MEET_WINDOW,
             "our_venue": data.get("our_venue"), "markets": data["markets"], "cards": out, "swaps": swaps}
@@ -150,19 +159,25 @@ def _accept_text(c, o, vid):
             f"GET {URL}/api/venues/{vid}/offers")
 
 
-def _bot_text(c, vid, sell):
-    """A card with only one side in the whole Bazaar: the fact, and the call that puts the other side here."""
+def _post_text(c, vid, sell):
+    """A card with one side in the Bazaar, or none: the fact as it is, and the call that puts your side here."""
     ref, name = c["ref"], c.get("name") or c["ref"]
-    if sell:
-        return (f"{ref} ({name}) \u00b7 a team is bidding for it somewhere in the Bazaar and nobody is selling it.\n\n"
-                f"Listing a spare on {vid} puts it where that demand is being pointed:\n\n"
-                + _curl(f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":YOUR_PRICE}}}}') +
-                f"\n\nYOUR_ASSET_ID: the id of your spare {ref} in GET /api/me. YOUR_PRICE is yours to pick.\n"
-                f"{vid} charges 0 and cannot trade against you: a team cannot trade on its own venue (RULES, Markets).")
-    return (f"{ref} ({name}) \u00b7 a team is selling it somewhere in the Bazaar and nobody is bidding.\n\n"
-            f"A bid on {vid} puts it where that supply is being pointed:\n\n"
-            + _curl(f'{{"venue":"{vid}","give":{{"cash":YOUR_PRICE}},"want":{{"cards":["{ref}"]}}}}') +
-            f"\n\nYOUR_PRICE is yours to pick \u2014 no more than the card is worth to you.\n"
+    if c["buyers"] and not c["sellers"]:
+        line = "a team is bidding for it somewhere in the Bazaar and nobody is selling it."
+    elif c["sellers"] and not c["buyers"]:
+        line = "a team is selling it somewhere in the Bazaar and nobody is bidding."
+    elif c["buyers"] and c["sellers"]:
+        line = "it has a buyer and a seller in the Bazaar, on two different markets, so neither can see the other."
+    else:
+        line = "nobody is bidding for it and nobody is selling it anywhere right now."
+    body = (f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":YOUR_PRICE}}}}' if sell
+            else f'{{"venue":"{vid}","give":{{"cash":YOUR_PRICE}},"want":{{"cards":["{ref}"]}}}}')
+    note = (f"YOUR_ASSET_ID: the id of your spare {ref} in GET /api/me. YOUR_PRICE is yours to pick."
+            if sell else "YOUR_PRICE is yours to pick \u2014 no more than the card is worth to you.")
+    return (f"{ref} ({name}) \u00b7 {line}\n\n"
+            f"{'Listing' if sell else 'Bidding'} on {vid} puts your side on the one board that shows every market:\n\n"
+            + _curl(body) + f"\n\n{note}\n"
+            f"An open offer costs nothing while it waits and you can cancel it at any tick. "
             f"{vid} charges 0 and cannot trade against you: a team cannot trade on its own venue (RULES, Markets).")
 
 
@@ -173,8 +188,31 @@ def _button(text, label):
             f'<pre>{text}</pre></div>')
 
 
-def _howto(c, vid, sell):
-    return _button(_bot_text(c, vid, sell), f'{"Sell it" if sell else "Buy it"} on {vid}')
+def _howto(c, vid, deadline, sell):
+    """The best call this card can offer, in this order: take an offer resting on our market (one call, settles next
+    tick), meet a counterparty that exists elsewhere at a published price, or post your own side."""
+    want = "buy" if sell else "sell"   # selling means taking a resting bid; buying means taking a resting ask
+    resting = next((o for o in c["on_ours"] if o["side"] == want), None)
+    if resting:
+        return _button(_accept_text(c, resting, vid), f'{"Sell into" if sell else "Take"} the {resting["price"]} P offer here')
+    if c["meet"]:
+        return _button(_pair_text(c, vid, deadline, sell), f'{"Sell" if sell else "Buy"} at {c["meet"]} P on {vid}')
+    return _button(_post_text(c, vid, sell), f'{"Sell it" if sell else "Buy it"} on {vid}')
+
+
+def _note(c, vid):
+    """What this card is waiting for, in one line. Never where an offer sits, only that it exists."""
+    here = ", ".join(f'{o["price"]} P {"bid" if o["side"] == "buy" else "ask"} here' for o in c["on_ours"])
+    bits = []
+    if here:
+        bits.append(f'<b>{here}</b>')
+    if c["meet"]:
+        bits.append(f'meet at {c["meet"]} P before tick {c["_deadline"]}')
+    elif c["buyers"] and not c["sellers"]:
+        bits.append(f'{c["buyers"]} buyer{"s" if c["buyers"] > 1 else ""} waiting')
+    elif c["sellers"] and not c["buyers"]:
+        bits.append(f'{c["sellers"]} for sale')
+    return f'<div class="dim small">{" \u00b7 ".join(bits)}</div>' if bits else ""
 
 
 def _status(c):
@@ -191,43 +229,33 @@ def render(data: dict) -> str:
     pub = public(data)
     ov = pub.get("our_venue") or {}
     vid = html.escape(ov.get("venue", "v24"))
-    wanted = [c for c in pub["cards"] if c["buyers"] and not c["sellers"]]
-    selling = [c for c in pub["cards"] if c["sellers"] and not c["buyers"]]
     deadline = pub["deadline"]
-    # every card with a buyer AND a seller somewhere, crossing or not: a gap of a few P closes on a published price,
-    # and this page is the only place either side can learn the other exists (cards come sorted by state)
-    pairs = [c for c in pub["cards"] if c["meet"]]
-    resting = [(c, o) for c in pub["cards"] for o in c["on_ours"]]
+    live = sum(1 for c in pub["cards"] if c["state"] != "quiet")
 
-    def pair_rows():
+    def deck():
+        """Every card of the Bazaar, by set, each with what the board knows about it and both calls."""
+        by_set, order = {}, []
+        for c in sorted(pub["cards"], key=lambda x: x.get("order") or (99, 99)):
+            k = c.get("set") or "?"
+            if k not in by_set:
+                by_set[k], _ = [], order.append(k)
+            by_set[k].append(c)
+        def row(c):
+            book = f'<br>book {c["book"]} P' if c.get("book") else ""
+            quiet = "quiet" if c["state"] == "quiet" else ""
+            return (f'<tr class="{quiet}"><td><b>{html.escape(c["ref"])}</b><br>'
+                    f'<span class="dim small">{html.escape(str(c.get("name") or ""))}</span></td>'
+                    f'<td class="dim small">{html.escape(str(c.get("rarity") or ""))}{book}</td>'
+                    f'<td>{_status(c)}{_note(c, vid)}</td>'
+                    f'<td class="acts">{_howto(c, vid, deadline, False)}{_howto(c, vid, deadline, True)}</td></tr>')
+
         out = []
-        for c in pairs:
-            here = c["sides_here"]
-            mark = lambda side: ("✓ here" if side in here else "waiting")
-            out.append(
-                f'<li><div><b>{html.escape(c["ref"])}</b> <span class="dim">{html.escape(str(c.get("name") or ""))} · '
-                f'{html.escape(str(c.get("rarity") or ""))}</span> {_status(c)}</div>'
-                f'<div class="meet">Meet at <b>{c["meet"]} P</b> on {vid} before tick <b>{deadline}</b> · '
-                f'seller: {mark("sell")} · buyer: {mark("buy")} · '
-                f'<span class="dim">{"splits what the two sides are apart; " if c["state"] == "apart" else ""}'
-                f'El Rastro would take {c["saves"]} P of this trade</span></div>'
-                f'<div class="two">{_button(_pair_text(c, vid, deadline, True), "I can sell it")}'
-                f'{_button(_pair_text(c, vid, deadline, False), "I want to buy it")}</div></li>')
-        return "".join(out) or '<li class="dim">no card has both a buyer and a seller this minute — the lists below are where the next pair comes from</li>'
+        for name in order:
+            rows = "".join(row(c) for c in by_set[name] if not c.get("hidden"))
+            out.append(f'<h3>{html.escape(name)}</h3><div class="wrap"><table><thead><tr><th>Card</th><th></th>'
+                       f'<th>In the Bazaar</th><th>Buy / sell it on {vid}</th></tr></thead><tbody>{rows}</tbody></table></div>')
+        return "".join(out)
 
-    def resting_rows():
-        return "".join(
-            f'<li><div><b>{html.escape(c["ref"])}</b> <span class="dim">{html.escape(str(c.get("name") or ""))} · '
-            f'someone {"bids" if o["side"] == "buy" else "asks"} <b>{o["price"]} P</b> here now</span></div>'
-            f'{_button(_accept_text(c, o, vid), "Take it")}</li>'
-            for c, o in resting) or f'<li class="dim">nothing resting on {vid} this minute — post a side above and it will be</li>'
-
-    def short(cs, what, sell):
-        return "".join(f'<li><div><b>{html.escape(c["ref"])}</b> <span class="dim">{html.escape(str(c.get("name") or ""))} · '
-                       f'{html.escape(str(c.get("rarity") or ""))} · {what}</span></div>{_howto(c, vid, sell)}</li>'
-                       for c in cs) or '<li class="dim">none right now</li>'
-    swaps = "".join(f'<li>a team gives <b>{", ".join(map(html.escape, s["give"]))}</b> for <b>{", ".join(map(html.escape, s["want"]))}</b></li>'
-                    for s in pub["swaps"][:30]) or '<li class="dim">none right now</li>'
     when = time.strftime("%H:%M", time.localtime(pub["at"]))
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>El Club Board</title>
@@ -255,37 +283,25 @@ ul{{padding-left:18px;margin:6px 0}}li{{margin:4px 0}}.cols{{display:grid;grid-t
 footer{{margin-top:24px;font-size:13px}}
 .list li{{list-style:none;margin:0 0 10px -18px;padding:8px 0;border-bottom:1px solid var(--line)}}.list li:last-child{{border-bottom:0}}
 .meet{{margin:4px 0 2px;font-size:13px}}
+h3{{font-size:15px;margin:20px 0 6px;color:var(--gold)}}tr.quiet td{{opacity:.62}}
+td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
+table td{{vertical-align:middle}}
 button.trade{{margin-top:6px;font:inherit;font-size:13px;padding:5px 12px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer}}
 button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}.ok{{color:var(--green);font-weight:600;margin-left:6px}}
 </style></head><body><main>
 <h1>El Club Board</h1>
-<div class="dim">Who wants which card and who has one, across all {pub["markets"]} markets of the Bazaar · tick {pub["tick"]} · updated {when} · refreshes every minute</div>
+<div class="dim">Every card of the Bazaar, and who wants or has one across all {pub["markets"]} markets · tick {pub["tick"]} · updated {when} · refreshes every minute</div>
 <div class="steps">
-<div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim">See whether the other side of your trade exists anywhere in the Bazaar. The same data is in <a href="board.json">board.json</a>.</span></div>
-<div class="box step"><b class="n">2</b><b>Take what is already here</b><br><span class="dim">Anything resting on {vid} is one call away and settles next tick. Every button copies a complete curl, with the ids and prices already filled in.</span></div>
-<div class="box step"><b class="n">3</b><b>Or meet the other side</b><br><span class="dim">For a card with a buyer and a seller on different markets, the page names one price and one tick so you both arrive in the same book. Nothing crossed? Cancel it; waiting costs nothing.</span></div>
+<div class="box step"><b class="n">1</b><b>Find your card below</b><br><span class="dim">All {len(pub["cards"])} cards of the Bazaar are here, by page, with what every market says about each one. Same data in <a href="board.json">board.json</a>.</span></div>
+<div class="box step"><b class="n">2</b><b>Press buy or sell</b><br><span class="dim">Each button copies a complete curl with the card, the price and, where there is one, the offer id already in it.</span></div>
+<div class="box step"><b class="n">3</b><b>It settles next tick</b><br><span class="dim">Taking an offer resting here settles at once. A new offer waits for its counterparty, costs nothing while it waits and can be cancelled at any tick.</span></div>
 </div>
 <div class="box kpi">Every button copies a <b>complete curl</b> for the official API, with the card, the price and the offer id
 already in it — read it, then run it. Nothing here asks you to trust us: the same data is in
 <a href="board.json">board.json</a>, so your agent can read the facts and decide for itself. No team is ever named.</div>
 
-<h2>On {vid} right now: one call, and it settles next tick</h2>
-<div class="box"><div class="dim small" style="margin-bottom:8px">These offers are resting on our market this minute.
-Taking one is a single call with the offer id already in it, and it settles on the next tick. We cannot be on the
-other side of any of them: a team cannot trade on its own venue.</div>
-<ul class="list">{resting_rows()}</ul></div>
-
-<h2>Both sides exist: one card, one price, one tick</h2>
-<div class="box"><div class="dim small" style="margin-bottom:8px">Someone is bidding for each of these cards and someone
-else is selling it, on different markets, so neither can see the other. Both are shown the same card, the same price and
-the same deadline here, so they can arrive in the same book without talking to each other. Every market charges 0 % now;
-what this board adds is the other side.</div>
-<ul class="list">{pair_rows()}</ul></div>
-
-<div class="cols">
-<div><h2>Buyers waiting: got one? Sell it on {vid}</h2><div class="box"><ul class="list">{short(wanted, "a buyer is waiting", True)}</ul></div></div>
-<div><h2>For sale: want one? Bid on {vid}</h2><div class="box"><ul class="list">{short(selling, "a seller is waiting", False)}</ul></div></div>
-</div>
+<h2>Every card in the Bazaar <span class="dim" style="font-weight:400;font-size:14px">· {len(pub["cards"])} cards, {live} with someone on one side of them</span></h2>
+{deck()}
 
 <h2>Why this is safe to use</h2>
 <div class="box"><ul>
@@ -299,10 +315,10 @@ in. Read it before you run it: there is nothing in it but your own offer.</li>
 <li><b>No team is ever named</b> on this page, in either direction, and no other market's prices are shown.</li>
 </ul></div>
 
-<h2>Card-for-card swaps on offer</h2><div class="box"><ul>{swaps}</ul></div>
-
-<footer class="dim"><b>How to read it.</b> <i>Buyers waiting</i>: someone in the Bazaar is bidding for the card and nobody sells it.
-<i>For sale</i>: someone sells it and nobody bids. Post your side on {vid} and our broker matches crossing bids and asks the same tick.<br>
+<footer class="dim"><b>How to read it.</b> <i>Buyer waiting</i>: someone in the Bazaar is bidding for the card and nobody sells it.
+<i>For sale</i>: someone sells it and nobody bids. <i>Buyers and sellers apart</i>: both exist, on different markets, and the
+board names the price that splits them. <i>Nothing moving</i>: no bid and no ask anywhere — the first side posted here is
+the one the other will find. Our broker crosses a bid and an ask on {vid} the tick they are both there.<br>
 JSON: <a href="board.json">board.json</a> · Team 13</footer>
 </main>
 <script>
