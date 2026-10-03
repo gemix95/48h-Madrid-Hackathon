@@ -444,6 +444,7 @@ class Trader:
         text = (f"Hi! We'd buy your {H['ref']} for {p} primas, settled at once." if buy
                 else f"Hi! We have the {H['ref']} you want: {p} primas and it's yours.")
         situation = {"counterparty": f"another team ({H['maker']}) on market {H['venue']}",
+                     "notes_from_our_other_agents": (ctx.state.get("peer_lessons") or [])[:4],
                      "we_are": "buying" if buy else "selling", "card": H["ref"], "their_posted_price": H["posted"],
                      "our_structured_offer": offer, "round": r + 1,
                      "history": [{"us" if m.get("sender") == ctx.me["id"] else "them":

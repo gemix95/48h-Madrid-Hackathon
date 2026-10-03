@@ -351,6 +351,17 @@ class Context:
                     self.state["learned_first"] = m.get("best_first")
                     self.log("learn", "model", conversations=m["n"], deals=m["deals"], best_first=m.get("best_first"),
                              final_max=m.get("final_max_vs_opening"), ours=m.get("ours"), lessons=m.get("lessons"))
+                if getattr(self, "shared", False) and m.get("lessons"):
+                    sig = (m.get("n"), m.get("best_first"), m.get("deals"))
+                    if self.state.get("council_learn_sig") != sig:
+                        self.state["council_learn_sig"] = sig
+                        council.post("haggler", "learn", " ".join(m["lessons"][:2]),
+                                     {"n": m.get("n"), "best_first": m.get("best_first"), "deals": m.get("deals"),
+                                      "capture": m.get("dealer_capture")},
+                                     tick=self.clock.get("tick", 0))
+        if getattr(self, "shared", False) and self.clock.get("tick", 0) % 8 == 0:
+            self.state["peer_claims"] = council.peer_claims(exclude_host=council.HOST)
+            self.state["peer_lessons"] = council.peer_lessons(exclude_host=council.HOST, n=8)
         self.threads = api.my_threads().get("threads", [])
         self.my_offers = api.my_offers().get("offers", [])
         self.read_markets()

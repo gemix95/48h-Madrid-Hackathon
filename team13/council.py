@@ -87,6 +87,52 @@ def post(author: str, topic: str, lesson: str, evidence: dict | None = None, tic
     return note
 
 
+def peer_claims(exclude_host: str | None = None, max_age_s: float = 2400) -> set:
+    """Plan keys (`dealer:buy:rare`, …) another agent is still negotiating (from haggler deal notes)."""
+    cutoff = time.time() - max_age_s
+    open_keys: dict = {}
+    for note in read(n=400):
+        if (note.get("ts") or 0) < cutoff:
+            continue
+        if exclude_host and note.get("host") == exclude_host:
+            continue
+        if note.get("author") != "haggler" or note.get("topic") != "deal":
+            continue
+        key = (note.get("evidence") or {}).get("key")
+        if not key:
+            continue
+        lesson = note.get("lesson") or ""
+        if lesson.startswith("Negotiating with"):
+            open_keys[key] = note
+        elif lesson.startswith("Deal with") or lesson.startswith("No deal with"):
+            open_keys.pop(key, None)
+    return set(open_keys)
+
+
+def peer_lessons(exclude_host: str | None = None, n: int = 10) -> list:
+    """Short strategy lines from other laptops' agents and the tuner (for Claude + logs)."""
+    want = {"learn", "dealers", "selling", "buying", "value", "duels", "our_market", "safety", "volume", "market"}
+    out, seen = [], set()
+    for note in reversed(read(n=250)):
+        if exclude_host and note.get("host") == exclude_host:
+            continue
+        top = note.get("topic") or ""
+        auth = note.get("author") or ""
+        if top not in want and auth not in ("haggler", "trader", "tuner", "market", "duels", "flipper"):
+            continue
+        if top == "deal" and auth == "haggler" and not (note.get("lesson") or "").startswith("Negotiating"):
+            continue  # closed haggles are coordination, not lessons
+        txt = (note.get("lesson") or "").strip()
+        if not txt or txt in seen:
+            continue
+        who = note.get("agent") or note.get("host") or "peer"
+        seen.add(txt)
+        out.append(f"{who}: {txt[:220]}")
+        if len(out) >= n:
+            break
+    return out
+
+
 def read(topic: str | None = None, n: int = 30) -> list:
     """The latest notes from every laptop (the board), this laptop's unpushed ones, and the old main-branch file."""
     files = [BOARD] + sorted(NOTES.glob("*.jsonl")) + sorted(SPOOL.glob("*.jsonl")) + sorted(SPOOL.glob("*.sending"))

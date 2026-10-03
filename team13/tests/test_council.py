@@ -57,5 +57,19 @@ results.append(check("old main-branch notes still read", any(x["lesson"] == "old
 results.append(check("every laptop's file read, oldest first", [x["ts"] for x in notes] == sorted(x["ts"] for x in notes)))
 results.append(check("each note read once", len(notes) == len({(x["ts"], x["lesson"]) for x in notes}), len(notes)))
 
+# peer coordination: another host's open haggle blocks the same plan key
+other = council.SPOOL / "Walton@MacBook-Pro-de-Sergio.jsonl"
+other.write_text(json.dumps({"ts": time.time(), "author": "haggler", "topic": "deal", "host": "MacBook-Pro-de-Sergio",
+                             "lesson": "Negotiating with Chato: buy rare, opening 40 P, cap 60 P.",
+                             "evidence": {"key": "chato:buy:rare"}, "agent": "Walton"}) + "\n")
+results.append(check("peer_claims sees another laptop's open deal",
+                     "chato:buy:rare" in council.peer_claims(exclude_host=council.HOST)))
+other.write_text(other.read_text() + json.dumps({"ts": time.time() + 1, "author": "haggler", "topic": "deal",
+                                                 "host": "MacBook-Pro-de-Sergio",
+                                                 "lesson": "Deal with Chato: rare for 45 P after 3 offers.",
+                                                 "evidence": {"key": "chato:buy:rare"}, "agent": "Walton"}) + "\n")
+results.append(check("peer_claims clears after deal note",
+                     "chato:buy:rare" not in council.peer_claims(exclude_host=council.HOST)))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

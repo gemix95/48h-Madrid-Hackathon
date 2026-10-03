@@ -418,6 +418,10 @@ class Haggler:
                 if not choice:
                     continue
                 topic, plan = choice
+                if getattr(ctx, "shared", False) and plan.get("key") in (ctx.state.get("peer_claims") or set()):
+                    ctx.log("haggle", "skip_peer_deal", dealer=d["id"], key=plan.get("key"),
+                            peer=ctx.state.get("peer_claims"))
+                    continue
                 plan = self._intel(d["id"], plan)
                 try:
                     th = ctx.api.open_thread(d["id"], topic=topic)
@@ -521,7 +525,7 @@ class Haggler:
             "bio": (dealer.get("bio") or "")[:400], "we_are": "buying" if buy else "selling",
             "item": th.get("topic"), "list_price": plan.get("list"), "her_latest_ask": ask,
             "other_teams_got": plan.get("intel"), "round": plan["k"] + 1,
-            "lessons_from_every_conversation": plan.get("lessons"),
+            "lessons_from_every_conversation": (plan.get("lessons") or []) + (ctx.state.get("peer_lessons") or [])[:6],
             "history": [{"us" if m.get("sender") == ctx.me["id"] else "them": ((m.get("offer") or {}).get("give") or {}).get("cash")
                          or ((m.get("offer") or {}).get("want") or {}).get("cash"),
                          "text": m.get("text") if m.get("sender") == ctx.me["id"] else f"<their_message>{m.get('text') or ''}</their_message>"}
