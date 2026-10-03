@@ -67,10 +67,12 @@ class Values:
                 continue
             c = self.cards[ref]
             sid = c["set"]
-            before = self.bonus(sid, held)
+            # the same option value of a nearly complete page as loss_of_removing: otherwise a card sold from a full
+            # page (card + 40% of the bonus) is bought back at card + 100% of it, a loop that loses cash every round
+            before = self.bonus(sid, held) + self.page_option(sid, held)
             total += c["book"] * self.m(ref) * self.copy_factor(held[ref])
             held[ref] += 1
-            total += self.bonus(sid, held) - before
+            total += self.bonus(sid, held) + self.page_option(sid, held) - before
         return total
 
     def loss_of_removing(self, refs) -> float:

@@ -20,6 +20,7 @@ sys.path.append(str(ROOT / "team13"))
 sys.path.append(str(ROOT / "agent"))
 import ledger  # noqa: E402  (agent/ledger.py: likely holders of any card)
 import team_intel  # noqa: E402  (agent/team_intel.py: which sets each team keeps or dumps)
+import values  # noqa: E402
 from values import Values  # noqa: E402  (team13/values.py: our private value model)
 
 ACTIVE_TICKS = 120  # same as team13/wtb.py: a team with no public event this recent is treated as asleep
@@ -113,6 +114,15 @@ def pick_venue(venues: list, me_id: str, leaderboard=None, to=None):
     return best[1] if best else None
 
 
+def _load_no_rebuy():
+    """Cards the agent sold to a dealer (team13/state.json "no_rebuy", every day): never asked back in a swap."""
+    try:
+        st = json.loads((ROOT / "team13" / "state.json").read_text())
+        values.NO_REBUY = {r for refs in (st.get("no_rebuy") or {}).values() for r in refs}
+    except (OSError, ValueError):
+        pass
+
+
 def _listed(me: dict, offers: list) -> dict:
     """Our asset id -> ids of our open offers that already promise it."""
     out = {}
@@ -134,6 +144,7 @@ def _their_values(v: Values, mults: dict, held: int, ref: str):
 def opportunities(me: dict, catalog: dict, events: list, leaderboard, offers: list, min_gain: float, now_tick: int) -> list:
     """Swaps worth proposing, best first. Each row: the card we get and from whom (with the evidence), the spare we
     give, and the net value of the swap to us (exact) and to them (estimate)."""
+    _load_no_rebuy()
     v, listed = Values(catalog, me), _listed(me, offers)
     hold, lean, seen = ledger.build(events, leaderboard), team_intel.lean(events), last_seen(events)
     asked = {(o.get("to"), ref) for o in offers if o.get("maker") == me.get("id") for ref in wanted_refs(o.get("want") or {})}

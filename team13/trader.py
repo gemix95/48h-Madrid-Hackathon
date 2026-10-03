@@ -142,12 +142,10 @@ class Trader:
             loss = v.loss_of_removing(they_want)
             if cash_in < loss:
                 return {"gain": None, "why": "below our worth (sale)"}
-            min_g = max(0.0, min(min_g, gain))
         if ctx.S.get("buy_max_worth", 1) and they_give and not they_want:
             worth = v.gain_of_adding(they_give)
             if cash_out > worth:
                 return {"gain": None, "why": "above our worth (buy)"}
-            min_g = max(0.0, min(min_g, gain))
         return {"gain": gain, "give": they_give, "want": they_want, "cash_in": cash_in, "cash_out": cash_out, "fee": f,
                 "min_gain": min_g}
 
@@ -347,7 +345,7 @@ class Trader:
                 ref, ask = g_refs[0], want["cash"]
                 value = v.gain_of_adding([ref])
                 bps, per = ctx.venue_fee(venue)
-                cap = value if S.get("buy_max_worth", 1) else value - S["trade_min_gain"]
+                cap = value - S["trade_min_gain"]  # worth minus the margin: a zero-gain buy only feeds the seller
                 p_max = math.floor((cap - per) / (1 + bps / 10000))
                 free = ctx.me["cash"] - ctx.reserve() - sum(L["price"] for L in ctx.state.get("listings", {}).values() if L["kind"] == "bid")
                 p_max = min(p_max, math.floor(free / (1 + bps / 10000)) - per)  # never promise cash we keep back
@@ -361,7 +359,7 @@ class Trader:
                 loss = v.loss_of_removing([ref])
                 bps, per = ctx.venue_fee(venue)
                 min_g = self.sale_min_gain([ref])
-                floor_w = math.ceil(loss) if S.get("sell_min_worth", 1) else math.ceil(loss + min_g)
+                floor_w = math.ceil(loss + min_g)  # worth plus the margin
                 p_min = math.ceil(floor_w + per + bps * bid / 10000)
                 # Dump sales: chase thin WTB bids further (up to 3×) so Retiro/Latina/extras clear.
                 stretch = 3.0 if v.dump_tier(ref) in ("hard", "extra") else 2.0
@@ -603,14 +601,14 @@ class Trader:
             min_g = self.sale_min_gain([a["ref"]])
             # Acceptor pays the venue fee: our floor is private-value loss + min gain (no fee pad on dumps).
             if dump:
-                floor = max(1, math.ceil(loss + (0 if S.get("sell_min_worth", 1) else min_g)))
+                floor = max(1, math.ceil(loss + min_g))
                 if S.get("sell_min_worth", 1):
                     floor = max(floor, math.ceil(loss))
                 start = max(floor, math.ceil(book * min(float(S["trade_ask_start"]), 1.0)))
                 reprice_every = min(REPRICE, DUMP_REPRICE_TICKS)
                 steps = DUMP_REPRICE_STEPS
             else:
-                floor = math.ceil(loss + (min_g if not S.get("sell_min_worth", 1) else 0) + self.fee_at(venue, book, 1))
+                floor = math.ceil(loss + min_g + self.fee_at(venue, book, 1))
                 if S.get("sell_min_worth", 1):
                     floor = max(floor, math.ceil(loss + self.fee_at(venue, book, 1)))
                 start = max(floor, math.ceil(max(loss, book) * S["trade_ask_start"]))
@@ -652,7 +650,7 @@ class Trader:
                 continue
             book = v.book(ref)
             venue = markets[len(bids) % min(2, len(markets))]
-            worth_cap = math.floor(gain) if S.get("buy_max_worth", 1) else math.floor(gain - MIN_GAIN)
+            worth_cap = math.floor(gain - MIN_GAIN)
             ceiling = min(worth_cap - self.fee_at(venue, book, 1), team_caps().get(ref, 10 ** 9))
             start = min(ceiling, math.floor(book * S["trade_bid_start"]))
             base = book * v.m(ref)
