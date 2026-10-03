@@ -1,0 +1,224 @@
+<title>Team 13 at the Bazaar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column of album "pages"; each idea is a sticker slot with its card code, claim and evidence. */
+:root {
+  --paper: #f4f6f9;
+  --sheet: #ffffff;
+  --ink: #14213d;
+  --muted: #55607a;
+  --rule: #d7dce6;
+  --gold: #c98a12;
+  --gold-soft: #fbf1dc;
+  --teal: #1f7a75;
+  --teal-soft: #e3f2f1;
+  --red: #b23a3a;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1626; --sheet: #172036; --ink: #e8ecf5; --muted: #a3adc4; --rule: #2c3753;
+    --gold: #e7b04a; --gold-soft: #3a2e14; --teal: #5cc2bb; --teal-soft: #15302f; --red: #e07a7a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1626; --sheet: #172036; --ink: #e8ecf5; --muted: #a3adc4; --rule: #2c3753;
+  --gold: #e7b04a; --gold-soft: #3a2e14; --teal: #5cc2bb; --teal-soft: #15302f; --red: #e07a7a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.6; }
+.wrap { max-width: 920px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.12; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5.2vw, 3.4rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.45rem, 3vw, 1.9rem); font-weight: 700; }
+h3 { font-size: 1.12rem; font-weight: 700; }
+p { margin: 0; max-width: 65ch; }
+.eyebrow { font-family: var(--mono); font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.code { font-family: var(--mono); font-size: .8rem; font-weight: 500; letter-spacing: .04em; }
+.num { font-variant-numeric: tabular-nums; }
+a { color: var(--teal); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 4px; }
+
+/* hero */
+.hero { display: grid; gap: 18px; }
+.lede { font-size: 1.15rem; color: var(--muted); }
+.thesis { font-family: var(--display); font-weight: 700; font-size: clamp(1.15rem, 2.6vw, 1.45rem); }
+.thesis em { font-style: normal; color: var(--gold); }
+.thesis b { color: var(--teal); font-weight: 700; }
+
+/* the stickers: our results, each a numbered slot like an album */
+.album { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.sticker { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px 16px; display: grid; gap: 6px; position: relative; }
+.sticker .slot { position: absolute; top: 10px; right: 12px; color: var(--muted); }
+.sticker .big { font-family: var(--display); font-size: 2rem; font-weight: 800; line-height: 1; }
+.sticker .label { color: var(--muted); font-size: .9rem; }
+.sticker.gold { background: var(--gold-soft); border-color: transparent; }
+
+section { display: grid; gap: 18px; }
+.ideas { display: grid; gap: 14px; }
+.idea { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; display: grid; grid-template-columns: 92px 1fr; gap: 6px 18px; }
+.idea .tag { grid-row: span 3; align-self: start; background: var(--teal-soft); color: var(--teal); border-radius: 6px; padding: 6px 8px; text-align: center; }
+.idea p { color: var(--ink); }
+.idea .proof { color: var(--muted); font-size: .95rem; }
+.idea .proof b { color: var(--ink); font-weight: 600; }
+@media (max-width: 560px) { .idea { grid-template-columns: 1fr; } .idea .tag { grid-row: auto; justify-self: start; } }
+
+.diagram { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; overflow-x: auto; }
+.diagram pre { margin: 0; }
+
+table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+.table { overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.when { white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: .85rem; }
+.bad { color: var(--red); font-weight: 600; }
+.good { color: var(--teal); font-weight: 600; }
+
+.lessons { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
+.lessons li { background: var(--sheet); border-left: 3px solid var(--gold); padding: 10px 14px; border-radius: 0 8px 8px 0; max-width: 72ch; }
+footer { color: var(--muted); font-size: .9rem; display: grid; gap: 6px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">The Bazaar · Cromos de Madrid · Team 13</div>
+    <h1>An agent that haggles in words and decides in structure</h1>
+    <p class="thesis">Claude writes every message. <em>Code picks every number.</em> <b>Only the structured offer binds.</b></p>
+    <p class="lede">We built one agent for all four arenas of the game: the dealer ladder, the duel tournament, trades with other teams and our own market, Mercado Trece (v03). Everything it knows about the other 17 teams comes from the public feed. It runs as one process on our own server, and a push to GitHub reaches it within a minute.</p>
+  </header>
+
+  <section aria-labelledby="results">
+    <div class="eyebrow">What we collected</div>
+    <h2 id="results">Results so far</h2>
+    <div class="album">
+      <div class="sticker gold"><span class="slot code">FRI</span><div class="big num">1st</div><div class="label">Friday round, negotiating 30.0 of 30</div></div>
+      <div class="sticker"><span class="slot code">SAL</span><div class="big num">10/10</div><div class="label">Salamanca page complete (our ×1.6 set)</div></div>
+      <div class="sticker"><span class="slot code">MAL</span><div class="big num">10/10</div><div class="label">Malasaña page complete (our ×1.3 set)</div></div>
+      <div class="sticker"><span class="slot code">v03</span><div class="big num">≈0.97</div><div class="label">Market Test efficiency once the broker moved to its own server</div></div>
+      <div class="sticker"><span class="slot code">DUEL</span><div class="big num">28/34</div><div class="label">scored duels closed in Duels I (82%), none past our limit</div></div>
+      <div class="sticker"><span class="slot code">LVL</span><div class="big num">3</div><div class="label">dealers unlocked: Abuela Carmen, El Chato, Doña Pilar</div></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="ideas">
+    <div class="eyebrow">Ideas, each with the evidence that shaped it</div>
+    <h2 id="ideas">How the agent thinks</h2>
+    <div class="ideas">
+
+      <article class="idea">
+        <div class="tag code">BAND</div>
+        <h3>Claude chooses words and a price inside a band the code allows</h3>
+        <p>For every message the rules compute a safe band (never past our limit, never past the rival's own offer). Claude writes the text and may move the price only inside it, with a time budget per tick so a slow call never costs a 30-second tick.</p>
+        <p class="proof">Log line from a live haggle: band <b class="num">202–226</b>, rule price <b class="num">214</b>, Claude chose <b class="num">220</b>.</p>
+      </article>
+
+      <article class="idea">
+        <div class="tag code">GUARD</div>
+        <h3>A guard runs last every tick and cancels anything that loses value</h3>
+        <p>Every open offer is re-priced at our private values, including what a nearly complete page is worth before it is complete. Anything that gives away more than it brings, breaks a team price cap, or bids for a card we already own is cancelled.</p>
+        <p class="proof">It stopped offers selling <b>SAL-07</b> and <b>SAL-08</b> (cards of our 9/10 page) for 46 P while the page made them worth <b class="num">71.8</b> to us, and a second <b>SAL-10</b> bid once the first one filled.</p>
+      </article>
+
+      <article class="idea">
+        <div class="tag code">FEED</div>
+        <h3>Reading 17 rivals from the public feed</h3>
+        <p>Every team's buys, bids, listings and dealer asks lean toward the sets it values. From that we infer who collects what, a ledger of who probably holds each card, and who to ask for it. We checked the method on ourselves first: blind to our values, it read us as collectors of Salamanca and Malasaña and dumpers of La Latina, which is exactly our ×1.6 / ×1.3 / ×0.5.</p>
+        <p class="proof">It led to the trades that made Friday: LAT-09 sold for <b class="num">65</b> (worth 35 to us), SAL-09 for <b class="num">74</b> and SAL-10 for <b class="num">70</b> to finish the Salamanca page.</p>
+      </article>
+
+      <article class="idea">
+        <div class="tag code">DEAL</div>
+        <h3>A model of each dealer, measured on other teams' conversations</h3>
+        <p>Abuela concedes a step or two and then holds a floor; repeating a price earns nothing. El Chato mirrors the size of our step ("Six from you. Six from me."), so a deal lands near the midpoint of the two openings: to land at X, open near 2X minus his opening.</p>
+        <p class="proof">Rebuilt from <b class="num">60</b> Abuela threads and every Chato thread in the feed before we spent a single move with him.</p>
+      </article>
+
+      <article class="idea">
+        <div class="tag code">FLAG</div>
+        <h3>Flags only for lies the dealer's own offer proves</h3>
+        <p>A wrong flag costs points, so the agent flags automatically only a stated price or card code that the structured offer contradicts. Bluffs ("not one more", then a better offer in the same thread) are kept as candidates until the rule is confirmed.</p>
+        <p class="proof"><b class="num">912</b> dealer messages on Friday, <b>0</b> provable lies. Saturday: one bluff candidate, Doña Pilar "seventeen primas, not one more" followed by 18.</p>
+      </article>
+
+      <article class="idea">
+        <div class="tag code">v03</div>
+        <h3>A market that charges nothing and never feeds a rival</h3>
+        <p>Fees never score and round up per match, so 1% is at least 1 P on every trade and blocks thin Market Test pairs: we run v03 at 0%. A trade on a team's market scores for that team, so our own offers go only to markets of teams well behind us, or to El Rastro, where value scores nobody.</p>
+        <p class="proof">On Saturday we found <b class="num">16</b> of our <b class="num">21</b> open offers sitting on rivals' markets, two trades already settled on the second-placed team's market. Fixed within the hour.</p>
+      </article>
+
+      <article class="idea">
+        <div class="tag code">DAYS</div>
+        <h3>Duels: the price is a hard limit, delivery days only add value</h3>
+        <p>Two-issue duels score price plus a private weight per delivery day. The agent trades days it cares little about for price, but never lets attractive days excuse a price past its limit, and takes any offer inside the limit in the last two ticks instead of walking away with nothing.</p>
+        <p class="proof">The practice round lost two deals with the rival inside our limit at the deadline; the last-chance rule now accepts both on replay.</p>
+      </article>
+
+    </div>
+  </section>
+
+  <section aria-labelledby="arch">
+    <div class="eyebrow">One writer per key</div>
+    <h2 id="arch">How it runs</h2>
+    <p>Two processes writing with one team key fight over the single accept per tick and repeat each other's prices to dealers; we learned that the hard way twice. So exactly one process writes with the key, on a small server in Europe, 40 ms from the game in Madrid.</p>
+    <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  GH["GitHub main"] -->|"every minute: compile, import check, deploy, roll back if the agent dies"| D["auto-deploy"]
+  D --> A
+  subgraph S["our server (systemd, restarts on failure)"]
+    A["agent: duels, dealers, trades, wtb, flipper, guard, flags, market"]
+    B["broker for v03 (broker key only)"]
+    T["duel tuner: learns duel knobs from finished duels"]
+    N["Radio Rastro watcher"]
+    W["war-room dashboard (password)"]
+  end
+  A -->|"team key, the only writer"| G["The Bazaar API (Madrid)"]
+  B -->|"broker key"| G
+  T -. "writes duel knobs" .-> A
+  W -. "Strategy tab writes knobs" .-> A
+</pre>
+    </div>
+  </section>
+
+  <section aria-labelledby="log">
+    <div class="eyebrow">What went wrong, and what we changed</div>
+    <h2 id="log">Saturday morning, in the log</h2>
+    <div class="table">
+      <table>
+        <thead><tr><th>When</th><th>What we saw</th><th>What we changed</th></tr></thead>
+        <tbody>
+          <tr><td class="when">09:51</td><td>The broker ran inside the agent and restarted ten times; it read the Market Test book twice and made two matches. <span class="bad">Efficiency 0.399.</span></td><td>Broker moved to its own service on the server. <span class="good">Next test ≈0.97.</span></td></tr>
+          <tr><td class="when">10:40</td><td>355 trades skipped as "maker cannot pay": our cash estimate for other teams came from a feed with gaps.</td><td>Solvency check switched off by default; each skip logged once.</td></tr>
+          <tr><td class="when">12:47</td><td>With a Claude key present the agent crashed at start and restarted in a loop.</td><td>Logging before the context existed fixed; deploys now roll back automatically.</td></tr>
+          <tr><td class="when">12:55</td><td>A laptop process offered SAL-03, a card of our complete page, for LAV-07.</td><td>Cancelled; every process with the key moved to the server.</td></tr>
+          <tr><td class="when">15:00</td><td>Our offers created trades on rivals' markets.</td><td>Offers go only to markets of teams well behind us.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="lessons">
+    <div class="eyebrow">For the next team</div>
+    <h2 id="lessons">What we would tell another team</h2>
+    <ul class="lessons">
+      <li>Offers inside threads expire after two ticks. Ask with a direct offer on a market (<span class="code">to: tXX</span>, long expiry) and let the other agent take its time.</li>
+      <li>A settlement's <span class="code">price</span> is the total for all its items, and <span class="code">/api/feed</span> serves only the last 500 events: collect the feed from the first minute.</li>
+      <li>Measure a dealer on other teams' threads before spending your own moves on it.</li>
+      <li>Decide where your trades happen: every trade on a team's market is market-making points for that team.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <div>We also handed the organisers a short report of what we observed in the API while playing normally: a market name that can misstate its fee, undocumented two-tick thread offers, the feed's 500-event cap, and the duel payload's field names.</div>
+    <div class="code">Team 13 · Anton Karzhavin · Emmanuele Corporente · Sergio · built with Claude</div>
+  </footer>
+</div>
