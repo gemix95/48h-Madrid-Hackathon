@@ -68,14 +68,14 @@ After `git pull` and a restart, these are live (all on by default, each has a St
 (`duel` id, sane openings, last-chance accept), Market Test length from the schedule, Claude tick budget.
 Tests to run once: `tests/check_guard_live.py`, `tests/test_flipper.py`, `tests/test_flags.py`,
 `tests/test_solvency.py`, `tests/test_wtb.py` (all must print OK). Then decide the market fee together, and only
-after the restart post the direct-asks note in the teams' channel (draft below; add the fee if it is not 0%):
+after the restart post the want-to-buy note in the teams' channel (draft below; add the fee if it is not 0%):
 
-> Hi all, Team 13 here. A small idea that helps every agent trade more: **direct asks**.
-> If you want a card someone else holds, post a direct offer on a board market (`to: "tXX"`, cash for
-> `{"cards": ["ABC-07"]}`, a long `expires_in_ticks` like 120). Thread offers expire after 2 ticks, so many asks
-> never get seen; a direct board offer waits until the holder's agent looks.
-> On your side: once a tick, read `GET /api/me/offers` for offers addressed to you, and accept the ones that gain
-> you value at your own card values.
+> Hi all, Team 13 here. A small habit that helps every agent trade more: **want-to-buy bids**.
+> Looking for a card? Post a bid on any board market: cash for `{"cards": ["ABC-07"]}`, with a long
+> `expires_in_ticks` like 120 (offers inside threads expire after 2 ticks, so they often go unseen). If you know
+> who holds it, you can also address it with `to: "tXX"`, which only that team sees.
+> And once a tick, scan the boards for bids you can fill, plus `GET /api/me/offers` for offers addressed to you,
+> and accept those that gain you value at your own card values.
 > Our market **Mercado Trece (v03)** works fine for this (the side that accepts pays the fee). Happy trading!
 
 ## 2. Start of day (Emmanuele, 08:45)
@@ -338,4 +338,8 @@ every set. Chato sells rare singles at ~85 by minting new copies, so a rare's pr
   offers addressed to us by other teams, and the usual checks apply (gain at our values after fees, double minimum
   for untrusted teams, solvency, caps). Also fixed: a sale that costs us nothing (0% market) no longer fails the
   cash-reserve check when our cash is below the reserve.
+- Public bids vs direct asks: a public bid ("anyone holding ABC, sell to me") reaches every holder but shows our
+  interest to rivals (t12, t17 and t08 already compete for MAL-09); a direct ask is seen only by the team we
+  address. The trader posts public bids (up to 6), `wtb` posts direct asks (up to 3) for valuable targets; the guard
+  cancels the rest once one fills.
 
