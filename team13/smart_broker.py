@@ -326,6 +326,11 @@ def run(url, key):
                 if bench and tick % 4 == 0:
                     log(event="book", tick=tick, bench=len(bench), sample=bench[:2], keys=sorted(book),
                         fee_bps=fee_bps, fee_per_card=per_card)
+                if bench:  # every quote change: how bench traders arrive, relax and leave (to calibrate the plan)
+                    log(event="bench_book", tick=tick,
+                        offers=[[o["id"], "ask" if (o.get("want") or {}).get("cash") else "bid",
+                                 (o.get("want") or {}).get("cash") or (o.get("give") or {}).get("cash"),
+                                 o.get("expires_tick")] for o in bench])
                 for sell, buy, price in plan:
                     try:
                         broker.match(sell, buy, price)
