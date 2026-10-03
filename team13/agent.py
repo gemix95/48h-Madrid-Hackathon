@@ -505,6 +505,14 @@ def parse_role(role: str) -> set:
 
 
 def main():
+    # Laptop processes share the team key with the server agents. While this file exists they exit
+    # before any trade. Remove it only to run a local agent on purpose.
+    stop = Path(__file__).resolve().parent / "logs" / "STOP_LOCAL_AGENTS"
+    if stop.exists():
+        raise SystemExit(
+            f"local agent stopped ({stop.name}); server runs bazaar-agent@emmanuele (chato, picaros) "
+            "and bazaar-agent@sergio (abuela, pilar)"
+        )
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-trade", action="store_true", help="skip team trading")

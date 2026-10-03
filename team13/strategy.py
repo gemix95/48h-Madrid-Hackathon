@@ -76,6 +76,8 @@ KNOBS = {
     "haggle_sell_spares": (1, 0, 1, 1, "Dealers", "Sell spares to dealers",
                            "Sell duplicates/low-value cards to dealers (only above the workshop reserve)."),
     "haggle_buy_cards": (1, 0, 1, 1, "Dealers", "Buy single cards", "Buy cards we value most (Salamanca, Malasaña)."),
+    "haggle_level_filter": ("", 0, 0, 0, "Dealers", "Dealer levels only (comma-separated)",
+                           "Empty = all unlocked. Example 2,4 for El Chato and Los Pícaros only."),
     "workshop_spares": (8, 0, 30, 1, "Trading", "Spares kept for the workshop",
                         "After a full trio exists, never sell or list this many cheapest dump/duplicate cards. "
                         "0 = no reserve."),
@@ -207,6 +209,12 @@ def clean(raw: dict) -> dict:
     out = {}
     for k, v in (raw or {}).items():
         if k not in KNOBS:
+            continue
+        if k == "haggle_level_filter":
+            if isinstance(v, list):
+                out[k] = ",".join(str(int(x)) for x in v)
+            else:
+                out[k] = str(v).strip() if v is not None else ""
             continue
         d, lo, hi, step, *_ = KNOBS[k]
         try:

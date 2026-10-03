@@ -2,14 +2,16 @@
 
 - Pull before you start whenever there are no conflicts; push after every change.
 
-## Who runs which agent (one key, disjoint roles)
+## Who runs which agent (one key, one agent per person, on the server)
 
-- **Sergio's Mac: `AGENT_ROLE=market`** (venue, trader, flipper, wtb), since Saturday 11:40.
-- **Emmanuele's laptop may run two agents at once** (disjoint modules, separate state files):
-  `./team13/run_split_agents.sh` or two terminals with `AGENT_ROLE=dealers` and `AGENT_ROLE=market`
-  (locks `agent-dealers.lock` / `agent-market.lock`, state `state-dealers.json` / `state-market.json`).
-  They coordinate through **El Consejo** (deals, learn notes, peer_claims). Still do not run the same role twice
-  (here + server). Pull before start; push after changes.
+Do not start `agent.py` on a laptop. Both agents run on the server as `bazaar-agent@<name>` and share the team key.
+A local process would trade as the same team. `pkill -f agent.py` then `pgrep -fl agent.py` must print nothing.
+
+- **Sergio** (`server/agents/sergio.env`): L1 Abuela + L3 Pilar, 30 P per 2 game hours, accepts on odd ticks (`AGENT_SLOT=1`).
+- **Emmanuele** (`server/agents/emmanuele.env`): L2 Chato + L4 Pícaros, 30 P per 2 game hours, accepts on even ticks (`AGENT_SLOT=0`).
+- Scope and budget live in `/home/bazaar/agents/<name>.env` on the server (root). Changing them is a server edit, not a laptop restart.
+- Code changes go to `main`. Auto-deploy restarts both agents.
+- Emmanuele's log: `ssh <you>@217.160.143.83 'tail -f /home/bazaar/app/team13/logs/decisions.jsonl' | grep '"agent": "emmanuele"'`
 - The AI negotiator is Claude Opus 5.5 at medium effort (`llm_effort` 1). It needs the `anthropic` SDK and the key
   in `anthropic.env` at the repo root (git-ignored). The agent picks the key up within 30 s, with no restart.
 

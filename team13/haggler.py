@@ -26,27 +26,42 @@ import random
 
 from bazaar_sdk import BazaarError
 
+
+def allowed_dealer_levels(S: dict) -> set[int] | None:
+    """Non-empty set when strategy limits which dealer levels we haggle with (e.g. 2,4)."""
+    raw = S.get("haggle_level_filter") or ""
+    if not raw:
+        return None
+    if isinstance(raw, (list, tuple)):
+        return {int(x) for x in raw}
+    return {int(x.strip()) for x in str(raw).split(",") if x.strip()}
+
 KIND_BUY = [
-    "¡Hola, {name}! Qué cartas tan bonitas. ¿Le parecería bien {p} primas? Muchas gracias.",
-    "Thank you for your patience, {name}. Could we say {p} primas? It would make my afternoon.",
-    "{name}, you are very kind. My little budget stretches to {p} primas, would that be all right?",
+    "¡Hola, {name}! Qué alegría verle. ¿Le parecería bien {p} primas? Muchas gracias, de verdad.",
+    "Gracias por su paciencia, {name}. ¿Podríamos quedar en {p} primas? Me haría muy feliz.",
+    "{name}, usted es muy amable. Mi presupuesto llega a {p} primas, ¿le iría bien?",
     "Me encanta su puesto, {name}. ¿Y si lo dejamos en {p}? Gracias de corazón.",
-    "I really appreciate it, {name}. {p} primas, and I will tell all my friends about your stall.",
+    "Se lo agradezco mucho, {name}. {p} primas, y hablaré bien de su puesto a todo el mundo.",
     "Usted es un encanto, {name}. ¿Podría ser por {p} primas?",
-    "Thank you, {name}! I can come up a little: {p} primas?",
-    "Gracias por todo, {name}. Subo un poquito: {p} primas, ¿vale?",
+    "¡Gracias, {name}! Subo un poquito con cariño: {p} primas, ¿le parece?",
+    "Gracias por todo, {name}. {p} primas, ¿vale? Con mucho respeto.",
     "Ay, {name}, es para mi nieta, que colecciona estas cartas. ¿Me la dejaría en {p} primas?",
-    "{name}, I counted my purse twice: {p} primas is what I have today. Would you be so kind?",
+    "{name}, he contado el monedero dos veces: hoy tengo {p} primas. ¿Sería tan amable?",
     "En el Rastro me la dejaban más barata, pero prefiero comprársela a usted, {name}. ¿{p} primas?",
     "Es mi último día en Madrid, {name}. ¿{p} primas y me llevo un recuerdo precioso de su puesto?",
-    "My grandmother had a stall just like yours, {name}. Could you do {p} primas for me?",
+    "Mi abuela tenía un puesto como el suyo, {name}. ¿Me haría el favor de {p} primas?",
+    "Qué gusto tratar con alguien tan serio, {name}. ¿Le cuadrarían {p} primas?",
+    "Con su permiso, {name}, me acerco a {p} primas. Mil gracias por escucharme.",
 ]
 KIND_SELL = [
-    "¡Hola, {name}! Tengo una carta preciosa para usted. ¿{p} primas le parece bien?",
-    "Thank you, {name}. This one is in lovely condition. Would {p} primas be fair?",
-    "{name}, for you I can come down a little: {p} primas. Muchas gracias.",
-    "Gracias, {name}. ¿Lo dejamos en {p}? Me haría muy feliz.",
-    "You are very kind, {name}. {p} primas and it is yours.",
+    "¡Hola, {name}! Qué alegría saludarle. Traigo una carta preciosa; ¿{p} primas le parecen justas?",
+    "Gracias, {name}. Está en muy buen estado. ¿Le irían bien {p} primas?",
+    "{name}, por usted bajo un poquito con cariño: {p} primas. Muchas gracias.",
+    "Gracias, {name}. ¿Lo dejamos en {p}? Me haría ilusión cerrar con usted.",
+    "Usted es muy amable, {name}. {p} primas y es suya con mucho gusto.",
+    "Confío en su criterio, {name}. ¿Podríamos quedar en {p} primas?",
+    "Para su álbum, {name}, le propongo {p} primas. Gracias de corazón.",
+    "Es un placer negociar con usted, {name}. ¿{p} primas le cuadrarían?",
 ]
 
 
@@ -415,10 +430,13 @@ class Haggler:
     # ------------------------------------------------------------------ the loop
     def step(self):
         ctx = self.ctx
+        levels = allowed_dealer_levels(ctx.S)
         dealers = [d for d in ctx.dealers if d.get("status") == "active" and d.get("id") in ctx.me.get("unlocked", [])]
         scope = getattr(ctx, "dealer_scope", None)
         if scope:  # AGENT_DEALERS: this agent opens, talks to and trades only with its own dealers
             dealers = [d for d in dealers if d.get("id") in scope]
+        if levels is not None:
+            dealers = [d for d in dealers if (d.get("level") or 0) in levels]
         open_threads = {t["with"]: t for t in ctx.threads if t.get("kind") == "persona" and t["status"] == "open"}
         for d in dealers:
             th = open_threads.get(d["id"])

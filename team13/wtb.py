@@ -90,8 +90,11 @@ class Asker:
         asks = ctx.state.setdefault("wtb", {})  # "team:ref" -> tick asked
         open_cash = sum((o.get("give") or {}).get("cash") or 0 for o in ctx.my_offers
                         if o.get("maker") == me and o.get("to") and not (o.get("give") or {}).get("assets"))
+        pledged = {a["id"] if isinstance(a, dict) else a for o in ctx.my_offers if o.get("maker") == me
+                   for a in (o.get("give") or {}).get("assets") or []}
         free = ctx.me.get("cash", 0) - ctx.reserve() - open_cash
         locked = ctx.locked_assets() if hasattr(ctx, "locked_assets") else set()
+        locked = set(locked) | pledged
         out = []
         rival = self._rival_bids(events, now)
         pending = {t[5:] for o in ctx.my_offers if o.get("maker") == me and o.get("to")
