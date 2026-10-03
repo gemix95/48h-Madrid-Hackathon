@@ -9,6 +9,9 @@ Strategy, from the rules and the kickoff deck:
 - A final offer ("final": true) is take-it-or-walk: we take it when it is inside our cap.
 - If the dealer's standing ask is already at or below what we would offer next, we take it instead of overpaying.
 - After every conversation we remember the outcome per dealer and item, and open the next one lower if we did well.
+- Never sell a card for less than it is worth to us (NEGO hard limit, every path: spares, ladder, finals, Claude's
+  band): the floor is what giving it up costs us at our private values, page bonus included, plus sell_min_gain.
+  Above the floor we concede Boulware-style from an ambitious ask, over the rounds this dealer usually takes.
 - Never pay more than the item is worth to us: open buy_open_margin under our value (lower if the list-price rule
   opens lower) and concede Boulware-style up to (1 - buy_value_margin) of it, reaching that cap at the round this
   dealer usually names its final: the mean over every team's conversations with it (intel.rounds), our last offer
@@ -113,6 +116,11 @@ class Haggler:
         rtf = L.model.get("rounds_to_final") if L and getattr(L, "model", None) else None
         return max(2, round(rtf) - 1) if rtf else int(self.ctx.S["haggle_rounds"])
 
+    def _sell_floor(self, ref: str) -> int:
+        """Least price for selling one copy of `ref`: what giving it up costs us at our private values (page bonus and
+        the near-complete page option included) plus sell_min_gain. Nothing may sell below it."""
+        return math.ceil(self.ctx.values.loss_of_removing([ref]) + self.ctx.S.get("sell_min_gain", 3))
+
     def _counts(self, dealer: str) -> dict:
         h = self.ctx.state.setdefault("dealer_hours", {}).setdefault(dealer, {})
         return h.setdefault(str(self._hour()), {"packs": 0, "deals": 0, "opened": 0})
@@ -188,12 +196,14 @@ class Haggler:
             if key in unsupported:
                 continue
             book = ctx.values.book(a["ref"])
-            floor = max(math.ceil(ctx.values.loss_of_removing([a["ref"]]) + 1), math.ceil(book * 0.35))
+            floor = max(self._sell_floor(a["ref"]), math.ceil(book * 0.35))
             if floor >= book:
                 continue
             hi_ask = self._opening(stats.get(key), {"list_price": book}, side="sell")
             return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": floor, "hi": hi_ask,
-                                                   "list": book, "asset": a["id"], "ref": a["ref"]}
+                                                   "list": book, "asset": a["id"], "ref": a["ref"],
+                                                   "cost": round(ctx.values.loss_of_removing([a["ref"]]), 1),
+                                                   "rounds": self._rounds(dealer["id"])}
         ladder = self._ladder_card(dealer, buys) if S.get("ladder_sell", 1) else None
         if ladder:  # 2b) higher-level dealers we cannot buy from: three sales fill the level's best-three
             a, book = ladder
@@ -205,11 +215,14 @@ class Haggler:
                 # a level with fewer than three deals scores 0 for each missing one: any price above the dealer's
                 # opening (negotiate() keeps lo >= opening + 2) fills a slot; after that, beat the third-best
                 floor = (done[2] + 1) if len(done) >= 3 else 1
+                floor = max(floor, self._sell_floor(a["ref"]))  # hard limit: never below what the card is worth to us
                 if floor >= hi_ask:
+                    ctx.log("haggle", "sale_skipped_below_value", dealer=dealer["id"], ref=a["ref"], floor=floor, ask=hi_ask)
                     return None
                 return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": floor,
                                                        "hi": hi_ask, "list": book, "asset": a["id"], "ref": a["ref"],
-                                                       "ladder": True}
+                                                       "ladder": True, "cost": round(ctx.values.loss_of_removing([a["ref"]]), 1),
+                                                       "rounds": self._rounds(dealer["id"])}
         # 3) one card: the copy worth most to us that we can actually close.
         # Saturday: 8 closes out of 81 uncommon threads. Almost all of those were El Retiro / La Latina,
         # worth 12–17 P to us, while every team closes uncommons at 20–26. We walked, the hourly quota
@@ -477,6 +490,12 @@ class Haggler:
             ask = (last.get("want") or {}).get("cash") if plan["side"] == "buy" else (last.get("give") or {}).get("cash")
         plan["asks"] = plan.get("asks", []) + ([ask] if ask is not None and (not plan.get("asks") or plan["asks"][-1] != ask) else [])
         buy = plan["side"] == "buy"
+        if not buy and plan.get("ref"):  # hard limit, re-checked every tick: our values move as we trade
+            floor = self._sell_floor(plan["ref"])
+            if floor > plan["lo"]:
+                plan["lo"] = floor
+                plan["hi"] = max(plan["hi"], math.ceil(floor * 1.3))
+                ctx.log("haggle", "sell_floor_raised", thread=th["id"], ref=plan["ref"], floor=floor)
         nxt = self._next_price(plan)
 
         def good(p):  # inside our limits, and (buying) within today's budget and never with the cash we keep
@@ -628,7 +647,9 @@ class Haggler:
             c["deals"] += 1
             if plan.get("pack"):
                 c["packs"] += 1
-            ctx.log("haggle", "deal", thread=th["id"], price=price, list=plan.get("list"), rounds=plan["k"], key=plan["key"])
+            sale = {"side": "sell", "ref": plan.get("ref"), "cost": plan.get("cost"),
+                    "net": round(price - plan["cost"], 1)} if plan.get("side") == "sell" and price and plan.get("cost") is not None else {}
+            ctx.log("haggle", "deal", thread=th["id"], price=price, list=plan.get("list"), rounds=plan["k"], key=plan["key"], **sale)
             opening = (plan.get("asks") or [None])[0]
             Learner_reward(ctx, plan, price, opening)
             ctx.open_new_packs()

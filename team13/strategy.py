@@ -71,6 +71,8 @@ KNOBS = {
     "abuela_haggle_per_hour": (6, 0, 10, 1, "Dealers", "Abuela haggles per hour",
                                "Her quota is 10 conversations an hour; haggling stops here so a gift visit always has room."),
     "haggle_buy_packs": (1, 0, 1, 1, "Dealers", "Buy packs", "Packs: 3 per hour from Abuela."),
+    "sell_min_gain": (3, 0, 30, 1, "Dealers", "Least gain on a dealer sale (P)",
+                      "Hard floor: a card never sells below what giving it up costs us (page bonus included) plus this."),
     "haggle_sell_spares": (1, 0, 1, 1, "Dealers", "Sell spares to dealers",
                            "Sell duplicates/low-value cards to dealers (only above the workshop reserve)."),
     "haggle_buy_cards": (1, 0, 1, 1, "Dealers", "Buy single cards", "Buy cards we value most (Salamanca, Malasaña)."),
