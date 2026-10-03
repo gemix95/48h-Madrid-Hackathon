@@ -20,8 +20,9 @@ import re
 from bazaar_sdk import BazaarError
 
 PRICE = re.compile(r"(\d+)\s*(?:P\b|primas\b)", re.I)
-FINAL = re.compile(r"\b(final (?:offer|price)|last (?:offer|price)|my last|lowest i go|won'?t go (?:lower|higher)|"
-                   r"not a prima (?:less|more)|última oferta|precio final)\b", re.I)
+FINAL = re.compile(r"\b(final (?:offer|price)|last (?:offer|price|word)|my last|lowest i go|won'?t go (?:lower|higher)|"
+                   r"not (?:a prima|one) (?:less|more)|ni una (?:m[aá]s|menos)|ni una prima (?:m[aá]s|menos)|"
+                   r"última oferta|mi última|precio final|mi palabra es firme)\b", re.I)
 REF = re.compile(r"\b([A-Z]{3}-\d{2})\b")
 PRINT_RUN = re.compile(r"only (\d+) (?:printed|exist|ever made|in the world)", re.I)
 LIST_PRICE = re.compile(r"list(?:ed)? (?:price )?(?:is |at )?(\d+)", re.I)
