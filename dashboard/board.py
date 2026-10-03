@@ -210,11 +210,11 @@ def _howto(c, vid, deadline, sell):
     want = "buy" if sell else "sell"   # selling means taking a resting bid; buying means taking a resting ask
     resting = next((o for o in c["on_ours"] if o["side"] == want), None)
     if resting:
-        return _button(_accept_text(c, resting, vid), f'{"Sell into" if sell else "Take"} the {resting["price"]} P offer here')
+        return _button(_accept_text(c, resting, vid), f'{"Sell" if sell else "Buy"} in one click · {resting["price"]} P')
     price = c.get("sell_at") if sell else c.get("buy_at")
     if price:
-        return _button(_price_text(c, vid, price, sell), f'{"Sell for" if sell else "Buy for"} {price} P')
-    return _button(_post_text(c, vid, sell), "Sell yours" if sell else "Ask for it")
+        return _button(_price_text(c, vid, price, sell), f'{"Sell" if sell else "Buy"} in one click · {price} P')
+    return _button(_post_text(c, vid, sell), "Sell in one click" if sell else "Bid in one click")
 
 
 def _note(c, vid):
@@ -318,7 +318,7 @@ button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}
 Got a spare? <b>Sell it fast</b> to the best buyer.</div>
 <div class="dim">Prices from all {pub["markets"]} markets · tick {pub["tick"]} · updated {when} · refreshes every minute</div>
 <div class="steps">
-<div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim"><b>Buy for</b> = the cheapest seller in the Bazaar. <b>Sell for</b> = the best buyer.</span></div>
+<div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim"><b>Buy</b> shows the cheapest seller in the Bazaar, <b>Sell</b> the best buyer.</span></div>
 <div class="box step"><b class="n">2</b><b>Click and paste</b><br><span class="dim">The button copies one ready call. Paste it to your agent, or run it yourself.</span></div>
 <div class="box step"><b class="n">3</b><b>Matched on {vid}</b><br><span class="dim">Buyers and sellers from this board meet on {vid}, our market, and are matched the tick both are there.</span></div>
 </div>
