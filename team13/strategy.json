@@ -49,5 +49,7 @@
  "wtb_max_open": 3,
  "wtb_price_share": 0.9,
  "wtb_swaps": 1,
- "wtb_ticks": 120
+ "wtb_ticks": 120,
+ "buy_open_margin": 0.6,
+ "buy_value_margin": 0.15
 }

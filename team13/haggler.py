@@ -4,19 +4,20 @@ level), and three negotiated deals unlock the next dealer early.
 Strategy, from the rules and the kickoff deck:
 - Dealers move only when we move, small steps earn small steps, the same price twice earns nothing. So we use a
   Boulware schedule: open low, concede slowly at first and faster near our cap, a new price every message.
-- Abuela likes kindness: every message is polite, and the words vary so no message repeats.
+- Abuela likes kindness: every message is polite, and the words vary so no message repeats. The words bargain
+  kindly with small white lies about ourselves (a tight purse, a gift for a granddaughter, a cheaper stall nearby).
 - A final offer ("final": true) is take-it-or-walk: we take it when it is inside our cap.
 - If the dealer's standing ask is already at or below what we would offer next, we take it instead of overpaying.
 - After every conversation we remember the outcome per dealer and item, and open the next one lower if we did well.
 - Never pay more than the item is worth to us: open buy_open_margin under our value (lower if the list-price rule
   opens lower) and concede Boulware-style up to (1 - buy_value_margin) of it, reaching that cap at the round this
-  dealer usually names its final. A pack's worth is an expectation (we cannot know what it holds), hence the margin.
+  dealer usually names its final: the mean over every team's conversations with it (intel.rounds), our last offer
+  before her usual final being the cap. A pack's worth is an expectation (we cannot know what it holds), hence the margin.
 """
 from __future__ import annotations
 
 import math
 import random
-import statistics
 
 from bazaar_sdk import BazaarError
 
@@ -29,6 +30,11 @@ KIND_BUY = [
     "Usted es un encanto, {name}. ¿Podría ser por {p} primas?",
     "Thank you, {name}! I can come up a little: {p} primas?",
     "Gracias por todo, {name}. Subo un poquito: {p} primas, ¿vale?",
+    "Ay, {name}, es para mi nieta, que colecciona estas cartas. ¿Me la dejaría en {p} primas?",
+    "{name}, I counted my purse twice: {p} primas is what I have today. Would you be so kind?",
+    "En el Rastro me la dejaban más barata, pero prefiero comprársela a usted, {name}. ¿{p} primas?",
+    "Es mi último día en Madrid, {name}. ¿{p} primas y me llevo un recuerdo precioso de su puesto?",
+    "My grandmother had a stall just like yours, {name}. Could you do {p} primas for me?",
 ]
 KIND_SELL = [
     "¡Hola, {name}! Tengo una carta preciosa para usted. ¿{p} primas le parece bien?",
@@ -72,15 +78,14 @@ class Haggler:
                 max(0, math.floor(worth * (1 - S.get("buy_value_margin", 0.1)))))
 
     def _rounds(self, dealer_id: str) -> int:
-        """How many offers of ours a conversation with this dealer usually takes before it names its final: our own
-        deals with it, else every team's conversations (learner), else the haggle_rounds knob."""
-        rs = [r for k, st in self.ctx.state.get("dealer_stats", {}).items() if k.startswith(f"{dealer_id}:")
-              for r in st.get("rounds", []) if r]
-        if len(rs) >= 3:
-            return max(2, round(statistics.mean(rs)))
+        """Boulware rounds for this dealer: she names her final after ~N offers (mean over every team's conversations
+        with her), so our offer number N, index N - 1, is the cap. Fallbacks: every dealer together (learner), the knob."""
+        r = self.ctx.intel.rounds(dealer_id) if S_use_intel(self.ctx) else {}
+        if (r.get("n") or 0) >= 3:
+            return max(2, round(r["mean"]) - 1)
         L = getattr(self.ctx, "learner", None)
         rtf = L.model.get("rounds_to_final") if L and getattr(L, "model", None) else None
-        return max(2, round(rtf)) if rtf else int(self.ctx.S["haggle_rounds"])
+        return max(2, round(rtf) - 1) if rtf else int(self.ctx.S["haggle_rounds"])
 
     def _counts(self, dealer: str) -> dict:
         h = self.ctx.state.setdefault("dealer_hours", {}).setdefault(dealer, {})
@@ -284,6 +289,7 @@ class Haggler:
                         ctx.state.setdefault("dealer_blocked", {})[d["id"]] = ctx.clock.get("tick", 0) + 5
                     continue
                 rounds, curve = self._pace(d, ctx.state.get("dealer_stats", {}).get(plan["key"]))
+                rounds = min([x for x in (rounds, plan.get("rounds")) if x] or [None])  # strict pace or her usual final, the sooner
                 plan.update(k=0, offers=[], dealer=d["id"], name=d.get("name", d["id"]).split()[0], rounds=rounds, curve=curve)
                 ctx.state.setdefault("plans", {})[str(th["id"])] = plan
                 self._counts(d["id"])["opened"] += 1

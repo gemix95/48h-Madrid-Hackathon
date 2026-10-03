@@ -416,6 +416,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
       </section>
       <section class="card s7"><h2>Rivals at the dealers <span class="hint">negotiated = not the fixed first deal</span></h2><div id="intel-teams"></div></section>
       <section class="card s5"><h2>Latest market listings</h2><div id="intel-listings"></div></section>
+      <section class="card s12"><h2>How long each dealer haggles <span class="hint">offers a team makes before the dealer names its final · our agent reaches its cap by then</span></h2><div id="intel-rounds"></div></section>
     </div>
   </main>
 
@@ -1735,6 +1736,15 @@ function intelTab(d, M) {
   $("intel-teams").innerHTML = `<table><thead><tr><th>Team</th><th class="num">Talks</th><th class="num">Deals</th><th class="num">Haggled</th><th class="num">Spent</th><th class="num">Gifts</th><th class="num">Listings</th></tr></thead><tbody>`
     + Object.entries(I.teams).sort((a, b) => b[1].negotiated - a[1].negotiated || b[1].deals - a[1].deals).map(([t, v]) =>
       `<tr${t === d.me.id ? ' style="font-weight:700"' : ""}><td>${esc(nm(t) === "us" ? "Team 13 (us)" : nm(t))}</td><td class="num">${v.conversations}</td><td class="num">${v.deals}</td><td class="num">${v.negotiated}</td><td class="num">${v.spent} P</td><td class="num">${v.gifts}</td><td class="num">${v.listings}</td></tr>`).join("") + `</tbody></table>`;
+  // rounds until each dealer's final, every team together (what our agent uses) and per team
+  const RD = I.rounds || {}, ds = Object.keys(RD).sort((a, b) => RD[b].n - RD[a].n);
+  const tms = [...new Set(ds.flatMap(x => Object.keys(RD[x].teams)))]
+    .sort((a, b) => (b === d.me.id) - (a === d.me.id) || ds.reduce((s, x) => s + (RD[x].teams[b]?.n || 0) - (RD[x].teams[a]?.n || 0), 0));
+  const cell = r => r ? `${fmt(r.mean, 1)} <span class="muted">(${r.n})</span>` : "–";
+  $("intel-rounds").innerHTML = ds.length ? `<table><thead><tr><th>Team</th>${ds.map(x => `<th class="num">${esc(dealerName(x))}</th>`).join("")}</tr></thead><tbody>`
+    + `<tr style="font-weight:700"><td>All teams <span class="muted">· our agent</span></td>${ds.map(x => `<td class="num" title="${RD[x].finals ? "offers until her final" : "fewer than 3 finals: offers until the conversation ended"} · our cap at offer ${Math.max(3, Math.round(RD[x].mean))}">${cell(RD[x])}</td>`).join("")}</tr>`
+    + tms.map(t => `<tr${t === d.me.id ? ' style="font-weight:700"' : ""}><td>${esc(nm(t) === "us" ? "Team 13 (us)" : nm(t))}</td>${ds.map(x => `<td class="num">${cell(RD[x].teams[t])}</td>`).join("")}</tr>`).join("")
+    + `</tbody></table>` : `<div class="empty">No finished dealer conversations yet.</div>`;
   const side = x => x ? [...(x.assets || []).map(a => a.ref), ...(x.types || []).map(t => t.split(":").pop()), x.cash ? `${x.cash} P` : ""].filter(Boolean).join(" + ") || "–" : "–";
   $("intel-listings").innerHTML = (I.listings || []).length ? `<table><thead><tr><th>Tick</th><th>Team</th><th>Gives</th><th>Wants</th></tr></thead><tbody>`
     + I.listings.slice(-15).reverse().map(l => `<tr><td class="num">${l.tick}</td><td>${esc(nm(l.maker))}</td><td>${esc(side(l.give))}</td><td>${esc(side(l.want))}</td></tr>`).join("") + `</tbody></table>`
