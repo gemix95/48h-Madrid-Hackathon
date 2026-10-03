@@ -21,21 +21,22 @@ VENUE_NAME = "El Club · Where Madrid Trades"      # chosen by the team; used on
 DESCRIPTION = ("Madrid's top-tier market: {fee} fee, no per-card charge, a smart broker matching every tick, best "
                "pairs first. Built by the team leading the board.")
 # FOMO, but only true claims: fee comparison, matching every tick, first come first matched, no per-card charge
-PITCH = ("Hola! Team 13 — Mercado Trece ({venue}). {fee} fee, no per-card charge (El Rastro takes 5% + 1 P per card). "
-         "Smart broker matches every tick, best pairs first; earliest offers get matched first. "
-         "List or bid on Mercado Trece and keep the primas.")
+BRAND = "El Club"          # what we call v03 everywhere; the listed name stays "Mercado Trece · 1% fee" until we reopen
+PITCH = ("Hola! Team 13 here — welcome to El Club ({venue}, listed as 'Mercado Trece'). {fee} fee, no per-card charge "
+         "(El Rastro takes 5% + 1 P per card). Smart broker matches every tick, best pairs first; earliest offers get "
+         "matched first. Join El Club and keep the primas.")
 ANNOUNCE = [
-    "Mercado Trece ({venue}) is now {fee}, no per-card charge (the '1%' in our name is out of date: open markets "
-    "can't be renamed). El Rastro takes 5% + 1 P per card.",
-    "Still on El Rastro? 5% + 1 P per card vs Mercado Trece at {fee}. Same cards, more primas left.",
-    "Mercado Trece matches every tick (best pairs first). First come, first matched — get on the book.",
-    "Leading team, zero cut: Mercado Trece is {fee}, no per-card fee. Where Madrid should trade.",
-    "Card-for-card swaps on Mercado Trece: no per-card charge. {fee} fee on cash legs. Are you in?",
+    "El Club ({venue}, listed as 'Mercado Trece') is {fee}, no per-card charge — the '1%' in the listed name is out of "
+    "date (open markets can't be renamed). El Rastro takes 5% + 1 P per card.",
+    "Still on El Rastro? 5% + 1 P per card vs El Club ({venue}) at {fee}. Same cards, more primas left.",
+    "El Club ({venue}) matches every tick, best pairs first. First come, first matched — get on the book.",
+    "Leading team, zero cut: El Club ({venue}) is {fee}, no per-card fee. Where Madrid trades.",
+    "Card-for-card swaps at El Club ({venue}): no per-card charge, {fee} fee on cash legs. Are you in?",
 ]
-PRE_TEST = ("Market Test soon: list on Mercado Trece ({venue}) now — {fee} fee, smart broker, matched every tick. "
-            "Don't leave liquidity on El Rastro.")
+PRE_TEST = ("Market Test soon: list at El Club ({venue}, 'Mercado Trece') now — {fee} fee, smart broker, matched every "
+            "tick. Don't leave liquidity on El Rastro.")
 # appended to announcements only while we still have a spare to give and rewards left today (a true claim)
-REWARD_PITCH = (" Club welcome: your first trade on Mercado Trece today earns a private offer of one of our spare "
+REWARD_PITCH = (" Club welcome: your first trade at El Club today earns a private offer of one of our spare "
                 "commons at {price} P on El Rastro (they trade at 8-10 P).")
 REWARD_PRICE = 5             # commons trade at 8-10 P between teams; only spares worth <= 3 P to us qualify
 REWARD_MIN_GAIN = 2          # every reward is still a sale that gains us value
@@ -375,13 +376,14 @@ class Market:
         if reward:
             text += REWARD_PITCH.format(price=REWARD_PRICE)
         if ctx.S.get("llm_negotiator", 1):
-            situation = {"counterparty": f"team {target}", "goal": "invite them to list and trade on our market Mercado Trece",
-                         "facts": {"our_market": "Mercado Trece", "venue_id": venue, "fee": ft + " (no per-card charge)",
-                                   "name_note": "the '1%' in our market's name is out of date; open markets cannot be renamed",
+            situation = {"counterparty": f"team {target}", "goal": f"invite them to join and trade on our market {BRAND}",
+                         "facts": {"our_market": BRAND, "venue_id": venue, "fee": ft + " (no per-card charge)",
+                                   "name_note": "listed on the big screen as 'Mercado Trece · 1% fee'; the '1%' is out of "
+                                                "date and open markets cannot be renamed",
                                    "el_rastro_fee": "5% + 1 P per card",
                                    "matching": "smart broker every tick, fair midpoint, best pairs first",
                                    "market_test_soon": bool(self.bench_soon()),
-                                   **({"club_welcome": f"their first trade on Mercado Trece today earns a private offer of "
+                                   **({"club_welcome": f"their first trade at {BRAND} today earns a private offer of "
                                                        f"one of our spare commons at {REWARD_PRICE} P on El Rastro (commons trade at 8-10 P)"}
                                       if reward else {})},
                          "instruction": "Write a short, friendly invitation. Only state the facts given. No price needed. Create FOMO without false claims."}
