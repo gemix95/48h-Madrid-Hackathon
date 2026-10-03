@@ -20,14 +20,15 @@ import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
-URL = "https://bazaar.causaprima.ai"
+API = "https://bazaar.causaprima.ai"
+URL = "$BAZAAR_URL"  # in the copied calls: the kit's variable, next to $BAZAAR_KEY, keeps them short
 ME = "t13"
 RASTRO_FEE = (500, 1)  # 5 % + 1 P a card: the friction that keeps near-crossing pairs apart on El Rastro
 MEET_WINDOW = 20       # ticks: the deadline the board gives both sides of a pair, so they arrive in the same book
 
 
 def _get(path):
-    with urllib.request.urlopen(URL + path, timeout=15) as r:
+    with urllib.request.urlopen(API + path, timeout=15) as r:
         return json.load(r)
 
 
@@ -351,14 +352,14 @@ def _auctions_html(data, vid):
                     f'<td class="small">{bid_list(rk, win)}{gone_txt}</td>'
                     f'<td><div class="dim small">closed at tick {lot["closed_tick"]}</div><div class="small">{esc(state)}</div></td><td></td></tr>')
     head = '<thead><tr><th>Lot</th><th>Reserve</th><th>Bids on the book (offer id · price)</th><th>Ends</th><th></th></tr></thead>'
-    table = (f'<div class="wrap"><table class="deck">{head}<tbody>{"".join(rows)}</tbody></table></div>' if rows
+    table = (f'<div class="wrap"><table class="deck lots">{head}<tbody>{"".join(rows)}</tbody></table></div>' if rows
              else '<div class="box dim">No open lot right now. Be the first: auction a card below.</div>')
-    results = (f'<h3>Results</h3><div class="wrap"><table class="deck">{head}<tbody>{"".join(done)}</tbody></table></div>' if done else "")
+    results = (f'<h3>Results</h3><div class="wrap"><table class="deck lots">{head}<tbody>{"".join(done)}</tbody></table></div>' if done else "")
     how = (f"Auction a card on {vid}: one call, no ask, the card stays with you until you accept a bid.\n\n"
            f'curl "http://217.160.143.83/board/auction?card=CARD_ID&reserve=RESERVE&ticks=30&seller=YOUR_TEAM_ID"\n\n'
            f"CARD_ID like LAT-10; RESERVE = the least you accept; ticks 8 to 60 (30 ticks = 7.5 minutes); "
            f"YOUR_TEAM_ID like t07.\n\nWhen it closes, accept the best bid still on the book within {grace} ticks:\n\n"
-           f'curl -X POST https://bazaar.causaprima.ai/api/offers/OFFER_ID/accept -H "X-Team-Key: $BAZAAR_KEY" '
+           f'curl -X POST $BAZAAR_URL/api/offers/OFFER_ID/accept -H "X-Team-Key: $BAZAAR_KEY" '
            f"-H \"Content-Type: application/json\" -d '{{\"assets\":[YOUR_ASSET_ID]}}'")
     steps = (f'<div class="box rules"><b>How an auction works</b><ol>'
              f'<li><b>The seller keeps the card.</b> No ask is posted, so nobody can buy it around the auction.</li>'
@@ -422,7 +423,7 @@ def render(data: dict) -> str:
             rows = "".join(row(c) for c in cards)
             empty = " empty" if all(c["state"] == "quiet" for c in cards) else ""
             sid = html.escape(str(cards[0].get("set_id") or name)) if cards else html.escape(name)
-            out.append(f'<div class="set{empty}" id="set-{sid}"><h3>{html.escape(name)}</h3><div class="wrap"><table class="deck"><thead><tr>'
+            out.append(f'<div class="set{empty}" id="set-{sid}"><h3>{html.escape(name)}</h3><div class="wrap"><table class="deck sets"><thead><tr>'
                        f'<th>Card</th><th>For sale <span class="dim">· best price to buy</span></th>'
                        f'<th>Sell it <span class="dim">· best price you get</span></th></tr></thead><tbody>{rows}</tbody></table></div></div>')
         return "".join(out)
@@ -463,7 +464,7 @@ h3{{font-size:15px;margin:20px 0 6px;color:var(--gold)}}
 button.toggle{{float:right;font:inherit;font-size:12px;padding:3px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--dim);cursor:pointer}}
 td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 :root{{--font-display:"Big Shoulders Display",system-ui,sans-serif;--font-sans:Manrope,system-ui,sans-serif;--color-gold:#e0b45a;--color-muted:#9a958a;--color-base:#1b0c22}}
-table.deck td{{vertical-align:middle}}td.cardcell{{display:flex;gap:12px;align-items:center;min-width:240px}}
+table.deck{{table-layout:fixed;width:100%;min-width:720px}}table.deck td{{vertical-align:middle;overflow-wrap:anywhere}}table.deck.sets th:nth-child(1){{width:30%}}table.deck.sets th:nth-child(n+2){{width:35%}}table.deck.lots th:nth-child(1){{width:24%}}table.deck.lots th:nth-child(2){{width:11%}}table.deck.lots th:nth-child(3){{width:23%}}table.deck.lots th:nth-child(4){{width:14%}}table.deck.lots th:nth-child(5){{width:28%}}td.cardcell{{display:flex;gap:12px;align-items:center}}
 .thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
 .cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
 td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
@@ -480,6 +481,7 @@ button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}
 Got a spare? <b>Sell it fast</b> to the best buyer.</div>
 <div class="hero2">Not for sale anywhere? <b>Bid on {vid}</b>: we will find this card for you.
 Selling something nobody bids for? We ask the teams that collect its set.</div>
+<div class="dim small">The calls use your kit's <code>$BAZAAR_URL</code> (https://bazaar.causaprima.ai) and <code>$BAZAAR_KEY</code>.</div>
 <div class="dim">Prices from all {pub["markets"]} markets · tick <span id="tick">{pub["tick"]}</span> · updated <span id="upd">{when}</span> · live, every 15 s</div>
 <div class="steps">
 <div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim"><b>Buy</b> shows the cheapest seller in the Bazaar, <b>Sell</b> the best buyer.</span></div>
