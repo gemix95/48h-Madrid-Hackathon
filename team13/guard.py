@@ -40,6 +40,8 @@ class Guard:
         for o in offers:
             if o.get("maker") != ctx.me.get("id") or o.get("status", "open") != "open":
                 continue
+            if getattr(ctx, "shared", False) and not ctx.owns(o):
+                continue  # a teammate's agent made it (AGENT_ROLE split): its own guard watches it
             if o.get("thread") and (plans.get(str(o["thread"])) or {}).get("ladder"):
                 continue  # a dealer ladder sale: private values only score in trades with teams
             g, w = o.get("give") or {}, o.get("want") or {}

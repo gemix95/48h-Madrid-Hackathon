@@ -3,6 +3,12 @@
     source ../bazaar.env && python3 agent.py            # live
     source ../bazaar.env && python3 agent.py --dry-run  # decide and log, never write
 
+Several teammates on the same key (the server cannot tell agents apart): give each a disjoint role and its own budget,
+    AGENT_ROLE=dealers AGENT_BUDGET=60 python3 agent.py   # duels + haggler (+ flags)
+    AGENT_ROLE=market  AGENT_BUDGET=60 python3 agent.py   # venue + trader + flipper + wtb
+AGENT_ROLE is all (default), dealers, market, or a comma list of modules. With a split role, guard only cancels the
+offers this process made (threads it spoke in, offers it listed).
+
 Modules, in priority order each tick (one accept per team per tick is shared between them):
   duels    the tournament: never cross our limit, settle before the pie decays
   haggler  the dealer ladder: Boulware concessions, kind words, take finals inside our cap
@@ -65,13 +71,39 @@ class DryApi:
         return skipped
 
 
+class OwnedApi:
+    """Wraps the API: remembers the threads this process speaks in and the offers it lists, so that with several
+    agents on one key each one's guard only cancels what it made itself."""
+    def __init__(self, api, ctx):
+        self._api, self._ctx = api, ctx
+
+    def __getattr__(self, name):
+        return getattr(self._api, name)
+
+    def _remember(self, kind, value):
+        seen = self._ctx.state.setdefault("owned", {}).setdefault(kind, [])
+        if value is not None and value != -1 and value not in seen:
+            seen.append(value)
+            del seen[:-400]
+
+    def say(self, thread_id, *a, **k):
+        self._remember("threads", int(thread_id))
+        return self._api.say(thread_id, *a, **k)
+
+    def list_offer(self, *a, **k):
+        o = self._api.list_offer(*a, **k)
+        self._remember("offers", (o or {}).get("id"))
+        return o
+
+
 class Context:
     def __init__(self, api, dry=False):
         LOGS.mkdir(exist_ok=True)
         self._logf = open(LOGS / "decisions.jsonl", "a", buffering=1)
-        self.api = DryApi(api, self.log) if dry else api
-        self.raw = api
         self.state = json.loads(STATE.read_text()) if STATE.exists() else {}
+        self.api = OwnedApi(DryApi(api, self.log) if dry else api, self)
+        self.raw = api
+        self.shared = False  # True when AGENT_ROLE splits the modules with teammates' agents
         self.clock, self.me, self.threads, self.my_offers, self.board, self.dealers = {}, {}, [], [], [], []
         self.leaderboard = []
         self.venues, self.boards = [], {}
@@ -81,6 +113,7 @@ class Context:
         self.intel = None
         self.learner = Learner()
         self.llm = Negotiator(log=self.log)
+        self.agent_budget = None  # AGENT_BUDGET: this process's daily spend cap when teammates run agents too
 
     # ---------------------------------------------------------------- logging & state
     def log(self, module, action, **detail):
@@ -122,14 +155,23 @@ class Context:
         return self.state.setdefault("spent", {}).get(self.day_key(), 0)
 
     def budget_left(self):
-        """What we may still spend today: the day budget minus what we spent, never below the cash we keep."""
-        return max(0, min(self.S.get("day_budget", 120) - self.spent_today(), self.me.get("cash", 0) - self.reserve()))
+        """What we may still spend today: the day budget minus what we spent, never below the cash we keep.
+        With several agents on one key, AGENT_BUDGET caps this process's own daily spend (spent is per state.json)."""
+        day = self.S.get("day_budget", 120)
+        if self.agent_budget is not None:
+            day = min(day, self.agent_budget)
+        return max(0, min(day - self.spent_today(), self.me.get("cash", 0) - self.reserve()))
 
     def record_spend(self, amount, what):
         if amount and amount > 0:
             sp = self.state.setdefault("spent", {})
             sp[self.day_key()] = sp.get(self.day_key(), 0) + amount
             self.log("money", "spent", amount=amount, what=what, today=sp[self.day_key()], budget=self.S.get("day_budget", 120))
+
+    def owns(self, offer):
+        """Whether this process made the offer (listed it, or spoke in its thread)."""
+        own = self.state.get("owned", {})
+        return offer.get("id") in own.get("offers", []) or (offer.get("thread") or -1) in own.get("threads", [])
 
     def locked_assets(self):
         ids = set()
@@ -334,26 +376,57 @@ def single_instance():
     return f  # keep the file object alive for the life of the process
 
 
+# Several teammates may run an agent on the same key from different machines. The server cannot tell them apart,
+# so each agent owns a disjoint set of modules: two agents never haggle with the same dealer or hit the same offer.
+ROLES = {
+    "all": {"duels", "haggler", "venue", "trader", "flipper", "wtb"},
+    "dealers": {"duels", "haggler"},               # dealer ladder + tournament (+ flags on dealer messages)
+    "market": {"venue", "trader", "flipper", "wtb"},  # our market, team trades, flips, want-to-buy asks
+}
+
+
+def parse_role(role: str) -> set:
+    """A preset name (all, dealers, market) or a comma list of modules (e.g. "haggler,trader"). guard always runs."""
+    role = (role or "all").strip().lower()
+    if role in ROLES:
+        return set(ROLES[role])
+    mods = {m.strip() for m in role.split(",") if m.strip()}
+    unknown = mods - ROLES["all"]
+    if unknown or not mods:
+        raise SystemExit(f"AGENT_ROLE: unknown {sorted(unknown) or role!r}; use {sorted(ROLES)} or modules {sorted(ROLES['all'])}")
+    return mods
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-trade", action="store_true", help="skip team trading")
+    ap.add_argument("--role", default=os.environ.get("AGENT_ROLE", "all"),
+                    help="modules this agent runs: all | dealers | market | comma list (env AGENT_ROLE)")
+    ap.add_argument("--budget", type=int, default=int(os.environ["AGENT_BUDGET"]) if os.environ.get("AGENT_BUDGET") else None,
+                    help="most this agent spends per day, on top of day_budget (env AGENT_BUDGET)")
     args = ap.parse_args()
+    role = parse_role(args.role)
+    if args.no_trade:
+        role -= {"trader", "flipper", "wtb"}
     _lock = None if args.dry_run else single_instance()  # noqa: F841 (held until exit)
     api = Bazaar(os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai"), os.environ["BAZAAR_KEY"], wait_on_tick=False)
     ctx = Context(api, dry=args.dry_run)
-    modules = [("duels", Duels(ctx)), ("haggler", Haggler(ctx)), ("venue", Market(ctx))]
-    if not args.no_trade:
-        modules.append(("trader", Trader(ctx)))
-        modules.append(("flipper", Flipper(ctx)))  # buy below another team's bid, sell into it
-        modules.append(("wtb", Asker(ctx)))  # ask likely holders that do not collect a set for the cards we need
+    ctx.agent_budget = args.budget
+    ctx.shared = role != ROLES["all"]
+    build = [("duels", Duels), ("haggler", Haggler), ("venue", Market),
+             ("trader", Trader),
+             ("flipper", Flipper),  # buy below another team's bid, sell into it
+             ("wtb", Asker)]  # ask likely holders that do not collect a set for the cards we need
+    modules = [(name, cls(ctx)) for name, cls in build if name in role]
     modules.append(("guard", Guard(ctx)))  # last: undo anything this tick left open that loses value
     switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue",
               "guard": "enable_guard", "flipper": "enable_flipper",
               "wtb": "enable_wtb"}
     ctx.solvency = Solvency(ctx)  # public-feed cash bounds: skip offers whose maker cannot pay
     flagger = FlagHunter(ctx)  # proven bad faith in dealer messages to us: a correct flag scores
-    ctx.log("agent", "start", dry=args.dry_run)
+    ctx.log("agent", "start", dry=args.dry_run, role=sorted(role), agent_budget=args.budget)
+    flags = bool(role & {"duels", "haggler"})  # one flagger per team: the agent that talks to dealers
     last_tick, n = None, 0
     while True:
         try:
@@ -372,7 +445,7 @@ def main():
             ctx.tick_deadline = time.time() + 0.7 * float(ctx.clock.get("next_tick_in") or ctx.clock.get("tick_seconds") or 30)
             ctx.observe(full=(n % 20 == 0))
             n += 1
-            for extra in (ctx.watch_levels, ctx.maybe_flag, ctx.scan_manipulation, flagger.step):
+            for extra in (ctx.watch_levels, ctx.scan_manipulation) + ((ctx.maybe_flag, flagger.step) if flags else ()):
                 try:
                     extra()
                 except Exception as e:
