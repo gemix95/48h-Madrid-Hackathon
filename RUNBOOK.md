@@ -445,3 +445,34 @@ book in the last 2 minutes); otherwise it waits for the next run.
 Log: `ssh root@217.160.143.83 tail /home/bazaar/deploy.log` (DEPLOYED / SKIP / ROLLBACK lines).
 Needs a read-only **deploy key** on the GitHub repo (owner adds it: Settings -> Deploy keys).
 
+
+## 16. Loan desk: cash against a card (`team13/loans.py`, `agent/lend.py`)
+
+A loan is two ordinary offers, so nobody has to trust anybody:
+1. **Issue:** we send a direct offer, our P primas for the borrower's card X. Cash and card move in one settlement.
+2. **Buy-back:** once we hold X, we send a direct offer, X for R = P + interest, open for the term. If they accept,
+   they have their card back and we earned the interest. If the offer expires, we keep X.
+
+**Risk rules** (in code, a request that breaks one is logged as `loan rejected` with the reason):
+- X is worth at least P x 1.1 to us (`loan_safety`), so a default leaves us ahead;
+- R >= P x 1.1 (`loan_rate`) and R >= P + 2;
+- one open loan per team, total principal <= 60 P (`loan_cap`), cash stays above the reserve, never to an untrusted team;
+- offers go only to Rastro or a market of a team far behind (`venues.safe_markets`). The borrower pays the accept fee.
+- The guard never cancels the buy-back offer. The loan desk runs first each tick, so no module can sell a collateral
+  that just arrived.
+
+**How to make a loan** (the agent stays the only process with the key, a human only queues the request):
+
+```
+ssh -i ~/.ssh/bazaar_vps root@217.160.143.83 "sudo -u bazaar python3 /home/bazaar/app/agent/lend.py t07 LAV-09 50 56 120"
+```
+
+args: team, card, principal, repayment, term in ticks (Sunday tick 15 s: 120 ticks = 30 min; Saturday 30 s: 1 h).
+Watch the outcome: `grep '"loan"' /home/bazaar/app/team13/logs/decisions.jsonl | tail`. The states are offered ->
+active -> repaid | defaulted (we keep the card) | not_taken. Switch the desk off with `enable_loans 0` in the Strategy tab.
+
+**Text for the common channel:**
+> 🏦 Team 13 Pawn Desk is open: cash now, your card back later. Pawn a card with us: we pay up to 60 P for it, and you
+> get a direct offer to buy it back for +10% (at least +2 P) within the term you pick (30 min to 2 h). Buy it back,
+> or let it expire and we keep the card: no debt, nothing else owed. Every step is a normal game offer. One loan per
+> team. DM Anton (t13): card + amount + term.

@@ -12,6 +12,7 @@ Packs and other non-card items are left alone (dealer pack haggles).
 from __future__ import annotations
 
 from bazaar_sdk import BazaarError
+from loans import repay_offer_ids
 from trader import team_caps
 
 
@@ -37,11 +38,14 @@ class Guard:
             offers = ctx.my_offers
         caps = team_caps()
         plans = ctx.state.get("plans", {})
+        repays = repay_offer_ids(ctx.state)
         for o in offers:
             if o.get("maker") != ctx.me.get("id") or o.get("status", "open") != "open":
                 continue
             if getattr(ctx, "shared", False) and not ctx.owns(o):
                 continue  # a teammate's agent made it (AGENT_ROLE split): its own guard watches it
+            if str(o.get("id")) in repays:
+                continue  # a loan repayment: the borrower buys its collateral back at principal + interest
             if o.get("thread") and (plans.get(str(o["thread"])) or {}).get("ladder"):
                 continue  # a dealer ladder sale: private values only score in trades with teams
             g, w = o.get("give") or {}, o.get("want") or {}

@@ -36,6 +36,7 @@ from market import Market
 from haggler import Haggler
 from trader import Trader
 from guard import Guard
+from loans import LoanDesk
 from flipper import Flipper
 from wtb import Asker
 from flags import FlagHunter
@@ -386,9 +387,9 @@ def single_instance():
 # Several teammates may run an agent on the same key from different machines. The server cannot tell them apart,
 # so each agent owns a disjoint set of modules: two agents never haggle with the same dealer or hit the same offer.
 ROLES = {
-    "all": {"duels", "haggler", "venue", "trader", "flipper", "wtb"},
+    "all": {"duels", "haggler", "venue", "trader", "flipper", "wtb", "loans"},
     "dealers": {"duels", "haggler"},               # dealer ladder + tournament (+ flags on dealer messages)
-    "market": {"venue", "trader", "flipper", "wtb"},  # our market, team trades, flips, want-to-buy asks
+    "market": {"venue", "trader", "flipper", "wtb", "loans"},  # our market, team trades, flips, asks, loan desk
 }
 
 
@@ -415,13 +416,14 @@ def main():
     args = ap.parse_args()
     role = parse_role(args.role)
     if args.no_trade:
-        role -= {"trader", "flipper", "wtb"}
+        role -= {"trader", "flipper", "wtb", "loans"}
     _lock = None if args.dry_run else single_instance()  # noqa: F841 (held until exit)
     api = Bazaar(os.environ.get("BAZAAR_URL", "https://bazaar.causaprima.ai"), os.environ["BAZAAR_KEY"], wait_on_tick=False)
     ctx = Context(api, dry=args.dry_run)
     ctx.agent_budget = args.budget
     ctx.shared = role != ROLES["all"]
-    build = [("duels", Duels), ("haggler", Haggler), ("venue", Market),
+    build = [("loans", LoanDesk),  # first: lock a collateral that just arrived before any module could list it
+             ("duels", Duels), ("haggler", Haggler), ("venue", Market),
              ("trader", Trader),
              ("flipper", Flipper),  # buy below another team's bid, sell into it
              ("wtb", Asker)]  # ask likely holders that do not collect a set for the cards we need
@@ -429,7 +431,7 @@ def main():
     modules.append(("guard", Guard(ctx)))  # last: undo anything this tick left open that loses value
     switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue",
               "guard": "enable_guard", "flipper": "enable_flipper",
-              "wtb": "enable_wtb"}
+              "wtb": "enable_wtb", "loans": "enable_loans"}
     ctx.solvency = Solvency(ctx)  # public-feed cash bounds: skip offers whose maker cannot pay
     flagger = FlagHunter(ctx)  # proven bad faith in dealer messages to us: a correct flag scores
     # El Consejo: a unique id for this agent (fixed until it restarts), then announce every deal we make
