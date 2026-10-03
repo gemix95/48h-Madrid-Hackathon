@@ -214,9 +214,12 @@ class Auto:
             return "auto-send cancelled"
         if r["ours"] < bar[0] or r["theirs"] < bar[1]:
             return f"below the auto bar (us ≥ {bar[0]:g} P, them ≥ {bar[1]:g} P)"
-        if any(r["want"] in wanted_refs(o.get("want") or {}) for o in mine):
+        gives = lambda o: [a["id"] if isinstance(a, dict) else a for a in (o.get("give") or {}).get("assets") or []]
+        # a long shot never blocks a good swap: when both promise the same spare only one can settle
+        if any(r["want"] in wanted_refs(o.get("want") or {}) for o in mine
+               if o.get("id") not in self.longshot_ids or r["asset"] not in gives(o)):
             return "we already ask for this card"
-        if any(r["asset"] in [a["id"] for a in (o.get("give") or {}).get("assets") or []] for o in mine if swap_offer(o)):
+        if any(r["asset"] in gives(o) for o in mine if swap_offer(o) and o.get("id") not in self.longshot_ids):
             return "that spare is already in a swap"
         if len(mine) >= OFFER_LIMIT:
             return f"the game's limit of {OFFER_LIMIT} open offers"
