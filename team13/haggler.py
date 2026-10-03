@@ -103,8 +103,11 @@ class Haggler:
     def _value_band(self, worth: float):
         """(first offer, most we pay) from what the item is worth to us."""
         S = self.ctx.S
+        cap = math.floor(worth * (1 - S.get("buy_value_margin", 0.1)))
+        if S.get("buy_max_worth", 1):
+            cap = min(cap, math.floor(worth))
         return (max(1, math.floor(worth * (1 - S.get("buy_open_margin", 0.4)))),
-                max(0, math.floor(worth * (1 - S.get("buy_value_margin", 0.1)))))
+                max(0, cap))
 
     def _rounds(self, dealer_id: str) -> int:
         """Boulware rounds for this dealer: she names her final after ~N offers (mean over every team's conversations

@@ -57,9 +57,17 @@ class Guard:
             loss = v.loss_of_removing(out_refs) + (g.get("cash") or 0) if out_refs else (g.get("cash") or 0)
             gain = v.gain_of_adding(in_refs) + (w.get("cash") or 0)
             over_cap = not out_refs and len(in_refs) == 1 and in_refs[0] in caps and (g.get("cash") or 0) > caps[in_refs[0]]
-            if loss <= gain and not over_cap:
+            S = ctx.S
+            under_worth = S.get("sell_min_worth", 1) and out_refs and not in_refs and (w.get("cash") or 0) < v.loss_of_removing(out_refs)
+            over_worth = S.get("buy_max_worth", 1) and in_refs and not out_refs and (g.get("cash") or 0) > v.gain_of_adding(in_refs)
+            if loss <= gain and not over_cap and not under_worth and not over_worth:
                 continue
-            why = "over_team_cap" if over_cap else "loses_value"
+            if under_worth:
+                why = "below_worth"
+            elif over_worth:
+                why = "above_worth"
+            else:
+                why = "over_team_cap" if over_cap else "loses_value"
             try:
                 ctx.api.cancel(o["id"])
                 if o.get("thread"):
