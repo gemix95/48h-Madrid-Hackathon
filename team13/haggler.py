@@ -97,6 +97,35 @@ def short_name(dealer: dict) -> str:
     return name if first in ("El", "La", "Los", "Las", "Doña", "Don") else first
 
 
+def looks_spanish(text: str) -> bool:
+    low = (text or "").lower()
+    return any(w in low for w in ("gracias", "buenas", "usted", "le ", "por ", "con ", "qué", "ñ", "á", "é", "í", "ó", "ú", "¿"))
+
+
+# Don Ernesto (banco) is a treasury clerk: formal usted, never the Abuela lines, never English.
+BANCO_OPEN = [
+    "Don Ernesto, buenas tardes. Le presento mis respetos. Si es tan amable, ¿me diría qué ofrece hoy su mesa?",
+    "Don Ernesto, encantado de saludarle. Vengo con respeto a su despacho. ¿En qué términos está usted hoy?",
+    "Don Ernesto, buenas tardes. Abuela Carmen me habló de usted con cariño. ¿Tendría un momento para decirme qué guarda hoy?",
+]
+BANCO_DECLINE = [
+    "Don Ernesto, se lo agradezco muchísimo. Hoy no llego a esa cifra; ha sido un honor hablar con usted.",
+    "Don Ernesto, le quedo muy reconocido. Esa cantidad queda por encima de lo que puedo reunir hoy. Otro día, si usted me lo permite.",
+    "Don Ernesto, gracias de corazón por su tiempo. Hoy no me alcanza, y no quiero hacerle perder el suyo.",
+]
+BANCO_BUY = [
+    "Don Ernesto, con el debido respeto, ¿le parecerían bien {p} primas?",
+    "Don Ernesto, le agradezco su paciencia. Puedo ofrecerle {p} primas.",
+    "Don Ernesto, si le parece razonable, lo dejaríamos en {p} primas.",
+    "Don Ernesto, subo con respeto hasta {p} primas. Gracias por considerarlo.",
+]
+BANCO_SELL = [
+    "Don Ernesto, le traigo una carta que quizá merezca su reserva. ¿{p} primas le parecen justas?",
+    "Don Ernesto, con mucho respeto, pido {p} primas por esta pieza.",
+    "Don Ernesto, es una carta seria. ¿La dejaríamos en {p} primas?",
+]
+
+
 def S_use_intel(ctx) -> bool:
     return bool(ctx.S.get("use_intel", 1)) and getattr(ctx, "intel", None) is not None
 
@@ -432,6 +461,31 @@ class Haggler:
                                                              "key": "abuela:visit"}
         ctx.log("haggle", "visit", dealer=d["id"], thread=th["id"])
 
+    def _ernesto_due(self) -> bool:
+        """A formal Spanish call on Don Ernesto when we have nothing he will buy and cannot pay his price."""
+        now = self.ctx.clock.get("t_hours") or 0
+        return now - self.ctx.state.get("ernesto_talk_hours", -99) >= VISIT_HOURS and len(self._opens("banco")) < PERSONA_QUOTA
+
+    def _ernesto_open(self, d):
+        ctx = self.ctx
+        try:
+            th = ctx.api.open_thread(d["id"], topic={"buy": {"pack": "sobre_oro"}})
+        except BazaarError as e:
+            ctx.log("haggle", "ernesto_refused", dealer=d["id"], error=str(e)[:160])
+            ctx.state["ernesto_talk_hours"] = (ctx.clock.get("t_hours") or 0) - VISIT_HOURS + 0.25
+            return
+        n = ctx.state.get("ernesto_talk_n", 0)
+        text = BANCO_OPEN[n % len(BANCO_OPEN)]
+        ctx.api.say(th["id"], text)
+        ctx.state.update(ernesto_talk_hours=ctx.clock.get("t_hours") or 0, ernesto_talk_n=n + 1)
+        self._opens(d["id"]).append(ctx.clock.get("t_hours") or 0)
+        ctx.state.setdefault("plans", {})[str(th["id"])] = {
+            "ernesto": True, "side": "buy", "dealer": d["id"], "name": "Don Ernesto",
+            "key": "banco:talk", "tick": ctx.clock.get("tick", 0), "k": 0, "offers": [],
+            "lo": 1, "hi": 1, "list": 420,
+        }
+        ctx.log("haggle", "ernesto_open", dealer=d["id"], thread=th["id"], text=text[:200])
+
     # ------------------------------------------------------------------ the loop
     def step(self):
         ctx = self.ctx
@@ -458,6 +512,9 @@ class Haggler:
                     continue
                 if self._visit_due(d):
                     self._visit(d)
+                    continue
+                if d["id"] == "banco" and self._ernesto_due() and not self.choose_topic(d):
+                    self._ernesto_open(d)
                     continue
                 if d["id"] == "abuela" and len(self._opens(d["id"])) >= ctx.S.get("abuela_haggle_per_hour", 6):
                     continue  # keep the rest of her hourly quota for a visit
@@ -524,6 +581,27 @@ class Haggler:
             ask = (last.get("want") or {}).get("cash") if plan["side"] == "buy" else (last.get("give") or {}).get("cash")
         plan["asks"] = plan.get("asks", []) + ([ask] if ask is not None and (not plan.get("asks") or plan["asks"][-1] != ask) else [])
         buy = plan["side"] == "buy"
+        if plan.get("ernesto") and not plan.get("priced"):
+            if not (last and ask is not None):
+                return  # the greeting is out; wait for his price
+            affordable = ask <= ctx.budget_left() and ask <= max(plan.get("hi") or 0, ctx.budget_left())
+            if affordable:
+                plan["priced"] = True
+                plan["hi"] = max(plan.get("hi") or 0, ask)
+            elif not plan.get("ernesto_bye"):
+                text = BANCO_DECLINE[plan.get("k", 0) % len(BANCO_DECLINE)]
+                try:
+                    ctx.api.say(th["id"], text)
+                    plan.update(ernesto_bye=True, bye_tick=ctx.clock.get("tick", 0), k=plan.get("k", 0) + 1)
+                    ctx.log("haggle", "ernesto_decline", thread=th["id"], ask=ask, text=text[:200])
+                except BazaarError as e:
+                    ctx.log("haggle", "say_refused", thread=th["id"], error=str(e)[:160])
+                return
+            elif ctx.clock.get("tick", 0) - plan.get("bye_tick", 0) >= 1:
+                self._move_on(th, plan, f"Don Ernesto asks {ask} P, beyond what we can pay")
+                return
+            else:
+                return
         if not buy and plan.get("ref"):  # hard limit, re-checked every tick: our values move as we trade
             floor = self._sell_floor(plan["ref"])
             if floor > plan["lo"]:
@@ -563,7 +641,7 @@ class Haggler:
                 if plan["stuck"] >= 2:  # she stays above what it is worth to us: don't buy, move on
                     self._move_on(th, plan, f"her price {ask} P stays above our limit {plan['hi']} P")
             return
-        texts = KIND_BUY if buy else KIND_SELL
+        texts = BANCO_BUY if dealer.get("id") == "banco" and buy else BANCO_SELL if dealer.get("id") == "banco" else KIND_BUY if buy else KIND_SELL
         text = texts[(plan["k"] + random.randrange(len(texts))) % len(texts)].format(name=plan.get("name", "Carmen"), p=nxt)
         # the safe band around the rule price: always a new price, never past our cap or her ask
         last_ours = plan["offers"][-1] if plan["offers"] else None
@@ -585,6 +663,9 @@ class Haggler:
                         for m in th.get("messages", [])[-10:]],
         }
         text, nxt, source = ctx.speak(situation, (lo_b, hi_b), (text, nxt)) if lo_b <= hi_b else (text, nxt, "rules")
+        if dealer.get("id") == "banco" and not looks_spanish(text):
+            text = texts[(plan["k"] + 1) % len(texts)].format(name="Don Ernesto", p=nxt)
+            source = "rules-es"
         try:
             ctx.api.say(th["id"], text, price=nxt)
             plan["offers"].append(nxt)

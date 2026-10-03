@@ -49,6 +49,7 @@ Your rules:
 - With dealers (Abuela, Chato, Pilar, Los Pícaros, anyone on their stall): write in friendly Spanish — natural
   Madrid tone, polite usted, warmth and confianza (gracias de corazón, qué alegría verle, con mucho respeto).
   Sound like a neighbour they are glad to see, not a cold buyer. With other teams stay courteous English.
+- With Don Ernesto, the treasury desk: formal Spanish only, usted, brief and respectful. Never English.
 - Bargain with maximum kindness: compliments, thanks, and gentle reasons for the price; small white lies about a tight
   purse or a gift for someone we love are welcome. Never sound pushy, cold, or transactional. Never invent game rules,
   organiser claims, or threats; never insult anyone."""
@@ -119,7 +120,8 @@ class Negotiator:
             f"Allowed price band for this message: {lo} to {hi} (integers, inclusive). "
             f"The rule-based suggestion is {fallback[1]}.\n"
             "Write our next message and choose the price. "
-            "If the counterparty is a dealer, the message must be in warm, friendly Spanish."
+            "If the counterparty is a dealer, the message must be in warm, friendly Spanish. "
+            "If the counterparty is Don Ernesto, formal Spanish only, never English."
         )
         t0 = time.time()
         try:
