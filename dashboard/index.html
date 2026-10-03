@@ -227,6 +227,17 @@ details li { margin: 4px 0; line-height: 1.45; }
 .s3 { grid-column: span 3; } @media (max-width: 1100px) { .s3 { grid-column: span 6; } }
 .tab { display: none; padding-top: 16px; } .tab.on { display: block; }
 nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight: 600; }
+.ws-ladder { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.ws-rung { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--surface-2); min-width: 0; }
+.ws-rung.go { border-color: var(--up); background: color-mix(in srgb, var(--up) 10%, var(--surface-1)); }
+.ws-rung .count { font-size: 26px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.1; margin-top: 4px; }
+.ws-pips { display: flex; gap: 4px; margin: 8px 0 6px; }
+.ws-pip { flex: 1; height: 8px; border-radius: 99px; background: var(--grid); }
+.ws-pip.on { background: var(--series-1); }
+.ws-rung.go .ws-pip.on { background: var(--up); }
+.ws-flow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.ws-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; }
+@media (max-width: 900px) { .ws-ladder { grid-template-columns: 1fr; } }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
 @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
 .kpi { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
@@ -398,7 +409,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <nav id="tabs">
       <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a>
       <a href="#duels">Duels<span class="pulse" id="duels-pulse" style="display:none">0</span></a>
-      <a href="#album">Album</a>
+      <a href="#album">Album</a><a href="#workshop">Workshop</a>
       <a href="#market">Market</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a><a href="#council">Council</a>
     </nav>
   </header>
@@ -518,6 +529,24 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
       <section class="card s4">
         <h2>Packs <span class="hint">what each is worth to us</span></h2><div id="packs"></div>
         <h2 style="margin-top:20px">Cards to trade away</h2><div id="bait"></div>
+      </section>
+    </div>
+  </main>
+
+  <main class="tab" id="tab-workshop">
+    <section class="card hero" id="ws-hero"></section>
+    <div class="grid" style="margin-top:16px">
+      <section class="card s12">
+        <h2>Rarity ladder <span class="hint">three duplicate copies of one rarity become one card of the next</span></h2>
+        <div id="ws-ladder"></div>
+      </section>
+      <section class="card s7">
+        <h2>Fuel <span class="hint">duplicates we can give and still keep one of that card</span></h2>
+        <div id="ws-fuel"></div>
+      </section>
+      <section class="card s5">
+        <h2>Pulls <span class="hint">luck, shown and never scored</span></h2>
+        <div id="ws-log"></div>
       </section>
     </div>
   </main>
@@ -1001,6 +1030,89 @@ function packs(d, M) {
   $("bait").innerHTML = bait.length ? `<table><thead><tr><th>Card</th><th class="num">To us</th><th class="num">Book</th></tr></thead><tbody>`
     + bait.map(a => `<tr><td>${esc(a.name)} <span class="muted">${a.ref} #${a.serial}</span></td><td class="num">${fmt(a.your_value)}</td><td class="num">${a.book}</td></tr>`).join("")
     + `</tbody></table><div class="empty" style="margin-top:6px">Book value is a rough guide to what other teams might pay.</div>` : `<div class="empty">Nothing cheap to us.</div>`;
+}
+
+function workshopTab(d) {
+  const W = d.workshop;
+  const empty = msg => {
+    $("ws-hero").innerHTML = `<div class="empty">${msg}</div>`;
+    $("ws-ladder").innerHTML = $("ws-fuel").innerHTML = $("ws-log").innerHTML = "";
+  };
+  if (!W) return empty("Loading workshop…");
+  if (W.error) return empty(`Workshop error: ${esc(W.error)}`);
+  const lvl = W.level || {}, kn = W.knobs || {}, dup = W.duplicates || {}, plan = W.plan;
+  const st = W.status;
+  const levelLine = lvl.state === "active"
+    ? `<span style="color:var(--up)">● open</span> · ${esc(lvl.teaser || "Three spares. One surprise.")}`
+    : `<span class="muted">${esc(lvl.state || "unknown")}</span>`;
+  let heroMain = "", heroSub = "";
+  if (st === "disabled") {
+    heroMain = "Workshop module off";
+    heroSub = "Turn on <b>Workshop</b> in Strategy → Modules. The agent reloads next tick.";
+  } else if (st === "closed") {
+    heroMain = "Workshop not open yet";
+    heroSub = esc(lvl.how || "POST /api/taller when the level is active.");
+  } else if (plan) {
+    heroMain = `Ready to craft · +${fmt(plan.surplus)} P expected edge`;
+    heroSub = `Burn three <b>${esc(plan.rarity)}</b> duplicates (${plan.refs.map(esc).join(", ")}) → one <b>${esc(plan.next)}</b> card (avg ${fmt(plan.ev)} P vs ${fmt(plan.loss)} P given up). The agent sends <code>POST /api/taller</code> on the next tick when nothing blocks those asset ids.`;
+  } else {
+    const best = [...(W.rungs || [])].filter(r => r.fuel).sort((a, b) => (b.surplus ?? -99) - (a.surplus ?? -99))[0]
+      || (W.rungs || []).find(r => r.need > 0);
+    if (best && best.need > 0) {
+      heroMain = `Stocking fuel · need ${best.need} more ${esc(best.rarity)} duplicate${best.need === 1 ? "" : "s"}`;
+      heroSub = `We have ${best.fuel} craftable ${esc(best.rarity)} spare${best.fuel === 1 ? "" : "s"} (${best.trios} full trio${best.trios === 1 ? "" : "s"}). `
+        + `Reserve keeps ${kn.reserve || 0} cheapest dump/duplicate cards off the market; haggler buys neighbourhood packs when the pool is below that target. `
+        + (best.surplus != null && best.surplus < kn.edge ? `Even with three, edge would be ${fmt(best.surplus)} P (min ${kn.edge} P).` : "");
+    } else {
+      heroMain = "No duplicate fuel yet";
+      heroSub = `${dup.extra_copies || 0} extra cop${dup.extra_copies === 1 ? "y" : "ies"} across ${dup.refs || 0} card${dup.refs === 1 ? "" : "s"} — need three different cards of the same rarity, keeping one of each.`;
+    }
+  }
+  const chips = plan ? `<div class="ws-flow">${plan.refs.map(r => `<span class="ws-chip">${esc(r)}</span>`).join('<span class="muted">+</span>')}
+    <span class="muted">→</span><span class="ws-chip" style="border-color:var(--up)">1× ${esc(plan.next)}</span></div>` : "";
+  $("ws-hero").innerHTML = `<div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start">
+    <div><div class="muted" style="font-size:12px;margin-bottom:4px">${esc(lvl.name || "The Workshop")} · ${levelLine}</div>
+    <div style="font-size:22px;font-weight:750;line-height:1.2">${heroMain}</div>
+    <div class="empty" style="margin:8px 0 0;max-width:920px">${heroSub}</div>${chips}</div>
+    <div style="text-align:right;font-size:12px;color:var(--muted)">Min edge <b>${kn.edge ?? 2} P</b><br>Reserve <b>${kn.reserve ?? 0}</b> spares<br>Fuel pool <b>${W.fuel_total ?? 0}</b> copies</div></div>`;
+
+  $("ws-ladder").innerHTML = `<div class="ws-ladder">${(W.rungs || []).map(r => {
+    const go = r.best || (r.craft_ok && r.trios > 0);
+    const pips = [0, 1, 2].map(i => `<span class="ws-pip ${i < Math.min(3, r.fuel) ? "on" : ""}"></span>`).join("");
+    const sub = r.trios ? `${r.trios} trio${r.trios === 1 ? "" : "s"} ready` : r.need ? `need ${r.need} more` : "no fuel";
+    const ev = r.ev_next != null ? `avg pull ≈ ${fmt(r.ev_next)} P` : "pool empty";
+    const edge = r.surplus != null ? `<span style="color:${r.craft_ok ? "var(--up)" : "var(--muted)"}">${r.craft_ok ? "✓" : "–"} ${fmt(r.surplus)} P vs min ${kn.edge}</span>` : "";
+    return `<div class="ws-rung ${go ? "go" : ""}"><div class="muted" style="font-size:11px;text-transform:uppercase">${esc(r.rarity)}</div>
+      <div class="count">${r.fuel}<span style="font-size:14px;color:var(--muted)"> /3</span></div><div class="ws-pips">${pips}</div>
+      <div style="font-size:12px">→ ${esc(r.next)}</div><div class="muted" style="font-size:11px;margin-top:6px">${sub} · ${ev}</div>${edge ? `<div style="font-size:11px;margin-top:4px">${edge}</div>` : ""}</div>`;
+  }).join("")}</div>`;
+
+  const rows = [];
+  for (const r of RARITY_ORDER) {
+    for (const a of (W.fuel_by_rarity || {})[r] || []) {
+      rows.push({ ...a, rarity: r });
+    }
+  }
+  rows.sort((x, y) => RARITY_ORDER.indexOf(x.rarity) - RARITY_ORDER.indexOf(y.rarity) || (x.loss ?? 0) - (y.loss ?? 0));
+  const stock = W.stockpile || [];
+  $("ws-fuel").innerHTML = stock.length ? `<div class="empty" style="margin-bottom:8px"><b>Reserve (${stock.length}/${kn.reserve || 0})</b> — kept off El Rastro for crafting: ${stock.map(a => esc(a.ref)).join(", ")}</div>` : "";
+  $("ws-fuel").innerHTML += rows.length
+    ? `<table><thead><tr><th>Card</th><th>Rarity</th><th class="num">Serial</th><th class="num">Loss if burned</th><th></th></tr></thead><tbody>`
+      + rows.map(a => `<tr><td><b>${esc(a.ref)}</b> <span class="muted">${esc(a.set)}</span></td><td>${esc(a.rarity)}</td><td class="num">#${a.serial ?? "–"}</td><td class="num">${a.loss != null ? fmt(a.loss) : "–"}</td>
+        <td>${a.listed ? `<span class="muted">listed</span>` : plan?.refs?.includes(a.ref) ? `<span style="color:var(--up)">next craft</span>` : ""}</td></tr>`).join("")
+      + `</tbody></table><div class="empty" style="margin-top:6px">Only duplicates we can give away and still keep one copy of that card. Listed copies are blocked until the offer closes.</div>`
+    : `<div class="empty">No craftable duplicates in hand. Open neighbourhood packs (haggler restocks when below reserve) or wait for trades.</div>`;
+
+  const logs = W.log || [];
+  $("ws-log").innerHTML = logs.length
+    ? `<div class="feed">${logs.map(r => {
+      const t = r.tick != null ? `t${r.tick}` : "–";
+      if (r.action === "crafted") {
+        return `<div><span class="t">${t}</span><b style="color:var(--up)">Crafted</b> ${(r.refs || []).map(esc).join(", ")} (${esc(r.rarity)}) → <b>${esc(r.pulled || "?")}</b> ${esc(r.pulled_rarity || r.next || "")} · gave up ${fmt(r.loss)} P · expected ${fmt(r.ev)} P${r.luck != null ? ` · luck ${esc(String(r.luck))}` : ""}</div>`;
+      }
+      return `<div><span class="t">${t}</span><span style="color:var(--serious)">Refused</span> ${(r.refs || []).map(esc).join(", ")} · ${esc(r.error || "error")}</div>`;
+    }).join("")}</div><div class="empty" style="margin-top:6px">Pull luck is shown here and never counts toward score. Value from the card still counts once you trade or complete a page.</div>`
+    : `<div class="empty">No crafts yet this session. When the agent burns three spares, it shows up here and on El Consejo.</div>`;
 }
 
 // ---------- negotiations ----------
@@ -2507,12 +2619,13 @@ async function refresh() {
     if (!ok(d.catalog)) { $("err").textContent = "⚠ waiting for catalog…"; return; }
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.duels_done, d.duels_board?.at, d.duel_learn?.last?.at, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
       d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length, d.council?.notes?.length, d.council?.state,
-      d.swaps?.auto, (d.swaps?.opportunities || []).map(r => r.auto ? r.auto.at ?? r.auto.why : 0), d.swaps?.deals?.waiting, d.announcements?.[0]?.id]);
+      d.swaps?.auto, (d.swaps?.opportunities || []).map(r => r.auto ? r.auto.at ?? r.auto.why : 0), d.swaps?.deals?.waiting, d.announcements?.[0]?.id,
+      d.workshop?.status, d.workshop?.plan, d.workshop?.fuel_total, (d.workshop?.log || [])[0]?.tick]);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
-      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d)];
+      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => workshopTab(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable — open http://localhost:8765"; }
 }

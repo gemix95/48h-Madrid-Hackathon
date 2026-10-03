@@ -40,6 +40,7 @@ BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 import council  # noqa: E402  (team13/council.py: El Consejo, the board where our agents post what they learnt)
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
 import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, and the one write the dashboard makes)
+import workshop_panel as workshop_tab  # noqa: E402  (El Taller tab; team13/workshop.py is the agent module)
 HAND_LOG = HERE.parent / "logs" / "hand.jsonl"
 AUTO = swaps.Auto(on=os.environ.get("AUTO_SWAPS", "1") != "0")  # AUTO_SWAPS=0: this dashboard never sends swaps by itself
 # the bots' own logs, so they only exist on the laptop that runs them: agent.py writes decisions.jsonl, agent/hand.py hand.jsonl
@@ -111,6 +112,7 @@ def post(path, body):
 
 
 _swaps = {"key": None, "view": None}
+_workshop = {"key": None, "view": None}
 
 
 def swaps_view():
@@ -129,6 +131,32 @@ def swaps_view():
             _swaps["view"] = {"error": repr(e)[:200]}
         _swaps["key"] = key
     return _swaps["view"]
+
+
+def workshop_view():
+    """Workshop tab payload; recomputed when hand, offers, or strategy change."""
+    me, cat = cache.get("me"), cache.get("catalog")
+    offers = cache.get("offers")
+    threads = (cache.get("threads") or {}).get("threads")
+    if not (isinstance(me, dict) and me.get("assets") is not None and isinstance(cat, dict) and "sets" in cat):
+        return None
+    S = strategy.load()
+    tick = (cache.get("clock") or {}).get("tick") or me.get("tick") or 0
+    try:
+        st_mtime = STATE.stat().st_mtime
+    except OSError:
+        st_mtime = 0
+    offer_ids = tuple(sorted(o["id"] for o in (offers or {}).get("offers", []) if "id" in o))
+    key = (tick, len(me.get("assets", [])), offer_ids, S.get("workshop_edge"), S.get("workshop_spares"), S.get("enable_workshop"), st_mtime)
+    if _workshop["key"] != key:
+        try:
+            st = json.loads(STATE.read_text()) if STATE.exists() else {}
+            agent_bits = {k: st.get(k) for k in ("flip", "loans")}
+            _workshop["view"] = workshop_tab.view(me, cat, offers, threads, cache.get("levels"), S, agent_bits, tail(DECISIONS, 400))
+        except Exception as e:
+            _workshop["view"] = {"error": repr(e)[:200]}
+        _workshop["key"] = key
+    return _workshop["view"]
 
 
 def swaps_payload():
@@ -376,7 +404,7 @@ class Handler(BaseHTTPRequestHandler):
             with lock:
                 try:  # what the agent is doing right now (its own state file; read-only)
                     st = json.loads(STATE.read_text())
-                    agent_state = {k: st.get(k) for k in ("plans", "team_haggles", "listings", "bandit", "venue", "invites")}
+                    agent_state = {k: st.get(k) for k in ("plans", "team_haggles", "listings", "bandit", "venue", "invites", "flip", "loans")}
                     agent_state["plans"] = {k: v for k, v in (agent_state["plans"] or {}).items() if not v.get("done")}
                 except (OSError, ValueError):
                     agent_state = {}
@@ -402,7 +430,8 @@ class Handler(BaseHTTPRequestHandler):
                                    "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60),
                                    "origins": message_origins(INDEX, cache.get("threads"), (cache.get("me") or {}).get("id")),
                                    "log_sources": INDEX.status(), "guard": INDEX.recent_guard(), "swaps": swaps_payload(),
-                                   "announcements": announcements(), "duel_learn": duel_learn, "duels_board": duels_board}).encode()
+                                   "announcements": announcements(), "duel_learn": duel_learn, "duels_board": duels_board,
+                                   "workshop": workshop_view()}).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):
             self._send(200, "application/json", json.dumps(strategy.describe()).encode())
