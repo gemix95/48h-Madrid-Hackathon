@@ -116,6 +116,48 @@ def listen():
             time.sleep(5)
 
 
+PRICE_IN, PRICE_OUT = 4.0, 20.0  # Claude Opus 5.5, $ per million tokens (input, output incl. thinking)
+_spend = {"offset": 0, "calls": 0, "tin": 0, "tout": 0, "by_day": {}, "since": {}}
+
+
+def api_spend():
+    """Exact Claude spend from the agent's log (every call records its input/output tokens). Incremental read."""
+    if not DECISIONS.exists():
+        return {}
+    with DECISIONS.open("rb") as f:
+        f.seek(_spend["offset"])
+        chunk = f.read()
+        _spend["offset"] = f.tell()
+    for line in chunk.decode(errors="replace").splitlines():
+        if '"module": "llm"' not in line or '"action": "message"' not in line:
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        tin, tout = r.get("tokens_in") or 0, r.get("tokens_out") or 0
+        usd = tin * PRICE_IN / 1e6 + tout * PRICE_OUT / 1e6
+        day = time.strftime("%Y-%m-%d", time.localtime(r.get("ts", time.time())))
+        _spend["calls"] += 1
+        _spend["tin"] += tin
+        _spend["tout"] += tout
+        _spend["by_day"][day] = _spend["by_day"].get(day, 0.0) + usd
+        _spend.setdefault("events", []).append((r.get("ts", 0), usd))
+        del _spend["events"][:-20000]
+    total = sum(_spend["by_day"].values())
+    today = _spend["by_day"].get(time.strftime("%Y-%m-%d"), 0.0)
+    # credit left: the balance you entered, minus what was spent after you entered it
+    S = strategy.load()
+    credit = S.get("api_credit_usd") or 0
+    set_at = (strategy.PATH.stat().st_mtime if strategy.PATH.exists() else 0)
+    if credit and _spend["since"].get("credit") != credit:
+        _spend["since"] = {"credit": credit, "at": set_at}
+    spent_since = sum(u for ts, u in _spend.get("events", []) if ts >= _spend["since"].get("at", 0)) if credit else 0
+    return {"calls": _spend["calls"], "tokens_in": _spend["tin"], "tokens_out": _spend["tout"], "usd_total": round(total, 4),
+            "usd_today": round(today, 4), "credit_set": credit, "credit_left": round(credit - spent_since, 2) if credit else None,
+            "avg_usd_per_call": round(total / _spend["calls"], 5) if _spend["calls"] else None}
+
+
 def list_prices():
     lp = {}
     for p in (cache.get("dealers") or {}).get("personas", []):
@@ -226,7 +268,7 @@ class Handler(BaseHTTPRequestHandler):
                     agent_state["plans"] = {k: v for k, v in (agent_state["plans"] or {}).items() if not v.get("done")}
                 except (OSError, ValueError):
                     agent_state = {}
-                body = json.dumps({**cache, "agent_state": agent_state, "history": history, "served_at": time.time(),
+                body = json.dumps({**cache, "api_spend": api_spend(), "agent_state": agent_state, "history": history, "served_at": time.time(),
                                    "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60)}).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):

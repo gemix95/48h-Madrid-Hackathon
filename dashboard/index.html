@@ -1353,6 +1353,17 @@ function strategyPlan(d, M) {
       <div><b style="display:block;font-size:18px;color:var(--text-primary)">${msgs.length ? (msgs.reduce((t, r) => t + r.ms, 0) / msgs.length / 1000).toFixed(1) + " s" : "–"}</b>avg time</div>
       <div><b style="display:block;font-size:18px;color:var(--text-primary)">${fails.length}</b>fallbacks</div></div>
     ${last ? `<div class="msg" style="margin-top:10px;max-width:none"><div class="who">last · ${hm(new Date(last.ts * 1000))} · ${last.price} P</div>${esc(last.reason || "")}</div>` : ""}
+    ${(() => { const sp = d.api_spend || {}; if (!sp.calls && !sp.credit_set) return "";
+      const left = sp.credit_left, low = left != null && left < 5;
+      return `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--grid)">
+        <div class="sec" style="font-size:12px;font-weight:600;margin-bottom:6px">Claude API spend <span class="muted" style="font-weight:400">(exact, from token counts × Opus 5.5 prices)</span></div>
+        <div style="display:flex;gap:18px;font-size:12px;color:var(--muted)">
+          <div><b style="display:block;font-size:18px;color:var(--text-primary)">$${(sp.usd_today || 0).toFixed(2)}</b>today</div>
+          <div><b style="display:block;font-size:18px;color:var(--text-primary)">$${(sp.usd_total || 0).toFixed(2)}</b>total</div>
+          <div><b style="display:block;font-size:18px;color:${low ? "var(--critical)" : "var(--text-primary)"}">${left != null ? "$" + left.toFixed(2) : "–"}</b>credit left</div></div>
+        <div class="muted" style="font-size:11px;margin-top:6px;line-height:1.4">${sp.calls || 0} calls · ~$${(sp.avg_usd_per_call || 0).toFixed(4)} each.
+          ${left == null ? "Set your balance in Advanced settings → AI to see credit left (copy it from console.anthropic.com → Billing)." : "Balance you entered minus what the agent spent since."}
+          Your Claude.ai plan usage isn't available through the API: check claude.ai → Settings → Usage.</div></div>`; })()}
     ${d.agent_running ? "" : `<div class="muted" style="font-size:12px;margin-top:8px">Agent is stopped. Run it with <code>.venv/bin/python team13/agent.py</code> (the AI needs the .venv).</div>`}`;
   $("llm-toggle").onchange = async e => { await post("/strategy", { ...SD.current, llm_negotiator: e.target.checked ? 1 : 0 }); await loadStrategy(); };
 
@@ -1465,7 +1476,7 @@ async function refresh() {
     if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
     servedAt = d.served_at;
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
-      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
+      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
     header(d);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;

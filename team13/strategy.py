@@ -102,6 +102,9 @@ KNOBS = {
                    "Never spent, even after our market bond is paid: room for a great trade or tomorrow's first deals."),
     "deals_per_dealer_day": (5, 1, 12, 1, "Money", "Most buys per dealer per day",
                              "Only our best 3 deals per level count each day; a couple more is enough to improve them."),
+    "api_credit_usd": (0, 0, 1000, 1, "AI", "Claude API credit when you set this ($)",
+                       "Copy your balance from console.anthropic.com > Billing. The dashboard subtracts what the agent spends "
+                       "from here on (the API cannot report the balance with a user key). 0 = not set."),
     "reserve_cash": (270, 0, 400, 10, "Market", "Cash kept for the market bond (P)",
                      "The bond is 250 + 20. Set 0 to spend everything on deals."),
 }
