@@ -195,15 +195,19 @@ class Auto:
         self.on, self.armed, self.off, self.tried, self.why, self.log, self.last = on, {}, set(), {}, {}, [], -1e9
         self.bar = (None, None)
         self.last_longshot = -1e9
+        self.longshot_ids = set()  # offers we sent as long shots: they do not raise the auto bar
 
     @staticmethod
     def key(r: dict) -> str:
         return f"{r['team']}|{r['want']}|{r['asset']}"
 
+    def waiting_both(self, offers: list, me_id: str) -> int:
+        return waiting([o for o in offers if o.get("id") not in self.longshot_ids], me_id)
+
     def check(self, r: dict, now: float, offers: list, me_id: str, min_gain: float):
         """Why this swap may not send itself right now, or None."""
         mine = [o for o in offers if o.get("maker") == me_id]
-        bar = auto_bar(waiting(offers, me_id), min_gain)
+        bar = auto_bar(self.waiting_both(offers, me_id), min_gain)
         if not self.on:
             return "auto-send is off"
         if self.key(r) in self.off:
@@ -216,7 +220,7 @@ class Auto:
             return "that spare is already in a swap"
         if len(mine) >= OFFER_LIMIT:
             return f"the game's limit of {OFFER_LIMIT} open offers"
-        if waiting(offers, me_id) >= AUTO_MAX_OPEN:
+        if self.waiting_both(offers, me_id) >= AUTO_MAX_OPEN:
             return f"{AUTO_MAX_OPEN} swaps already waiting"
         if now - self.tried.get((r["team"], r["want"]), -1e9) < AUTO_COOLDOWN:
             return "asked recently"
@@ -224,7 +228,7 @@ class Auto:
 
     def plan(self, now: float, rows: list, offers: list, me_id: str, min_gain: float):
         """Arm the countdown of every swap that may send itself, drop the rest; return the one due now, if any."""
-        self.bar = auto_bar(waiting(offers, me_id), min_gain)
+        self.bar = auto_bar(self.waiting_both(offers, me_id), min_gain)
         both = {self.key(r): r for r in rows if r.get("both")}
         why = {}
         for k, r in both.items():
@@ -262,6 +266,8 @@ class Auto:
     def done(self, now: float, r: dict, res: dict) -> None:
         if not r.get("both"):
             self.last_longshot = now
+            if res.get("offer"):
+                self.longshot_ids.add(res["offer"])
         self.last = now
         self.tried[(r["team"], r["want"])] = now
         self.armed.pop(self.key(r), None)
