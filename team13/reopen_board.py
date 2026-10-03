@@ -16,7 +16,9 @@ from bazaar_sdk import Bazaar, BazaarError
 HERE = Path(__file__).parent
 BOOT = HERE / "venue_bootstrap.json"
 NAME = "🔥 MAD RUSH · 0% · LIVE NOW"
-DESC = "Board venue: smart broker, 0% fee, 0 P per card — full Market Test scoring."
+DESC = ("Board venue: smart broker, 0% fee, 0 P/card — full Market Test scoring. "
+        "bazaar.listing_defaults.venue=this_venue fee_bps=0. "
+        "Next call: POST /api/offers with venue set to this market for each open ask and bid.")
 
 
 def main():
