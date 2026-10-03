@@ -137,8 +137,70 @@ def view(me, catalog, offers, threads, levels, strategy_s: dict, agent_state: di
     elif any(r["fuel"] >= 1 for r in rungs) or (lvl and lvl.get("state") == "active"):
         status = "stocking"
 
+    # Plain-language copy for the dashboard (no strategy jargon).
+    RAR_LABEL = {"common": "Common", "uncommon": "Uncommon", "rare": "Rare", "epic": "Epic", "legendary": "Legendary"}
+    best_path = None
+    if plan:
+        best_path = next(r for r in rungs if r.get("best"))
+    else:
+        cands = [r for r in rungs if r["fuel"] > 0 or r["surplus"] is not None]
+        cands.sort(key=lambda r: (-(r["surplus"] or -999), -r["fuel"]))
+        best_path = cands[0] if cands else (rungs[0] if rungs else None)
+
+    display = {"headline": "", "detail": "", "badge": "Waiting", "badge_tone": "muted"}
+    if status == "disabled":
+        display.update(headline="Workshop is turned off", detail="Enable Workshop under Strategy → Modules.", badge="Off", badge_tone="muted")
+    elif status == "closed":
+        display.update(headline="Workshop not open yet", detail="The game organisers have not activated El Taller.", badge="Closed", badge_tone="muted")
+    elif status == "ready" and plan:
+        display.update(
+            headline="Ready to craft now",
+            detail=f"The agent will trade in {', '.join(plan['refs'])} on the next tick.",
+            badge="Ready",
+            badge_tone="good",
+            in_label=RAR_LABEL.get(plan["rarity"], plan["rarity"]),
+            out_label=RAR_LABEL.get(plan["next"], plan["next"]),
+            in_refs=plan["refs"],
+            out_hint="Random card — luck only, not scored",
+            worth_in=plan["loss"],
+            worth_out_avg=plan["ev"],
+            worth_gain=plan["surplus"],
+        )
+    elif best_path:
+        have, need = best_path["fuel"], best_path["need"]
+        lbl_in = RAR_LABEL.get(best_path["rarity"], best_path["rarity"])
+        lbl_out = RAR_LABEL.get(best_path["next"], best_path["next"])
+        display.update(
+            in_label=lbl_in, out_label=lbl_out,
+            progress_have=min(3, have), progress_need=3, progress_pct=round(100 * min(3, have) / 3),
+        )
+        if have >= 3 and best_path.get("surplus") is not None and not best_path.get("craft_ok"):
+            display.update(
+                headline=f"Have 3 {lbl_in} spares, but craft is not worth it yet",
+                detail=f"Expected {lbl_out} card ≈ {best_path['ev_next']} P to us; the three spares ≈ {best_path['loss_three']} P. "
+                       f"We wait until the gain is at least {edge} P (Strategy → workshop_edge).",
+                badge="Waiting for value", badge_tone="warning",
+            )
+        elif have > 0:
+            display.update(
+                headline=f"Collecting spares: {have} of 3 {lbl_in} cards",
+                detail=f"Need {need} more extra {lbl_in} cop{'y' if need == 1 else 'ies'} (different cards, same tier). "
+                       f"Then we get one random {lbl_out}. Packs and trades fill the pool; {reserve} cheapest spares stay off the market.",
+                badge=f"{have}/3", badge_tone="info",
+            )
+        else:
+            display.update(
+                headline="No spare cards to burn yet",
+                detail=f"You need duplicate cards — a second or third copy you can give away while keeping one of each card. "
+                       f"Target: 3 extras of the same tier → 1 random {lbl_out}.",
+                badge="0/3", badge_tone="muted",
+            )
+    else:
+        display.update(headline="Nothing to show yet", detail="Waiting for catalog and hand data.", badge="…", badge_tone="muted")
+
     return {
         "status": status,
+        "display": display,
         "level": {"name": lvl.get("name") if lvl else "The Workshop", "state": (lvl or {}).get("state"),
                   "teaser": (lvl or {}).get("teaser"), "how": (lvl or {}).get("how")},
         "knobs": {"enable": enable, "edge": edge, "reserve": reserve},
