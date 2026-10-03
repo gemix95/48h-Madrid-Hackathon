@@ -23,6 +23,7 @@ if [ "$NEW" != "$OLD" ]; then
   rsync -a --exclude '__pycache__' --exclude 'logs/' --exclude 'state.json' --exclude 'strategy.json' --exclude '*.env' "$SRC/team13" "$SRC/agent" "$SRC/dashboard" "$SRC/data" "$APP/"
   chown -R bazaar:bazaar "$APP" /home/bazaar/app.prev
   systemctl restart bazaar-agent bazaar-dashboard
+  systemctl is-enabled -q bazaar-duel-tuner 2>/dev/null && systemctl restart bazaar-duel-tuner
   sleep 25
   if ! systemctl is-active -q bazaar-agent || journalctl -u bazaar-agent --since "-25s" --no-pager | grep -q "Failed with result"; then
     rsync -a /home/bazaar/app.prev/team13/ "$APP/team13/" --exclude logs/ --exclude state.json --exclude strategy.json; rsync -a /home/bazaar/app.prev/agent/ "$APP/agent/"; rsync -a /home/bazaar/app.prev/dashboard/ "$APP/dashboard/"
