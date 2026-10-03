@@ -109,6 +109,8 @@ def public(data: dict) -> dict:
                     "set": c.get("set"), "set_id": c.get("set_id"), "book": c.get("book"),
                     "hidden": c.get("hidden"), "order": c.get("order"),
                     "buyers": len(c["bids"]), "sellers": len(c["asks"]), "meet": meet,
+                    "buy_at": ask["price"] if ask else None,   # the cheapest seller anywhere: what buying costs
+                    "sell_at": bid["price"] if bid else None,  # the best buyer anywhere: what selling brings
                     "saves": _fee(meet, *RASTRO_FEE) if meet else None,  # what El Rastro takes from the accepting side
                     "sides_here": sorted({x["side"] for x in here}), "on_ours": here})
     for c in out:
@@ -142,6 +144,20 @@ def _pair_text(c, vid, deadline, sell):
             f"Nothing crossed by tick {deadline}? Cancel it; the offer costs nothing while it waits. "
             f"{vid} charges 0; the same trade on El Rastro costs the accepting side {saves} P. "
             f"The market's owner cannot be on the other side of it: a team cannot trade on its own venue (RULES, Markets).")
+
+
+def _price_text(c, vid, price, sell):
+    """Buy at the cheapest price in the Bazaar, or sell to the best buyer: one call that puts that price on our market."""
+    ref, name = c["ref"], c.get("name") or c["ref"]
+    body = (f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":{price}}}}}' if sell
+            else f'{{"venue":"{vid}","give":{{"cash":{price}}},"want":{{"cards":["{ref}"]}}}}')
+    what = (f"sell {ref} ({name}) for {price} P, the best price a buyer pays for it anywhere in the Bazaar right now"
+            if sell else f"buy {ref} ({name}) for {price} P, the cheapest it is offered anywhere in the Bazaar right now")
+    return (f"El Club Board ({vid}): {what}.\n\n"
+            + _curl(body) +
+            (f"\n\nYOUR_ASSET_ID: the id of your spare {ref} in GET /api/me." if sell else "") +
+            f"\n\nYour offer goes on {vid} (0 fee). Everyone using this board is sent to the same price on {vid}, and our "
+            f"broker matches a buyer and a seller the tick both are there. Until then it waits for free; cancel it any tick.")
 
 
 def _accept_text(c, o, vid):
@@ -195,9 +211,10 @@ def _howto(c, vid, deadline, sell):
     resting = next((o for o in c["on_ours"] if o["side"] == want), None)
     if resting:
         return _button(_accept_text(c, resting, vid), f'{"Sell into" if sell else "Take"} the {resting["price"]} P offer here')
-    if c["meet"]:
-        return _button(_pair_text(c, vid, deadline, sell), f'{"Sell" if sell else "Buy"} at {c["meet"]} P on {vid}')
-    return _button(_post_text(c, vid, sell), f'{"Sell it" if sell else "Buy it"} on {vid}')
+    price = c.get("sell_at") if sell else c.get("buy_at")
+    if price:
+        return _button(_price_text(c, vid, price, sell), f'{"Sell for" if sell else "Buy for"} {price} P')
+    return _button(_post_text(c, vid, sell), "Sell yours" if sell else "Ask for it")
 
 
 def _note(c, vid):
@@ -257,7 +274,7 @@ def render(data: dict) -> str:
             rows = "".join(row(c) for c in cards)
             empty = " empty" if all(c["state"] == "quiet" for c in cards) else ""
             out.append(f'<div class="set{empty}"><h3>{html.escape(name)}</h3><div class="wrap"><table><thead><tr><th>Card</th><th></th>'
-                       f'<th>In the Bazaar</th><th>Buy / sell it on {vid}</th></tr></thead><tbody>{rows}</tbody></table></div></div>')
+                       f'<th>In the Bazaar</th><th>Best price, one click</th></tr></thead><tbody>{rows}</tbody></table></div></div>')
         return "".join(out)
 
     when = time.strftime("%H:%M", time.localtime(pub["at"]))
@@ -289,7 +306,7 @@ footer{{margin-top:24px;font-size:13px}}
 .meet{{margin:4px 0 2px;font-size:13px}}
 h3{{font-size:15px;margin:20px 0 6px;color:var(--gold)}}tr.quiet td{{opacity:.62}}
 .active-only tr.quiet{{display:none}}.active-only .set.empty{{display:none}}
-.pill.quietpill{{color:var(--dim)}}.why{{border-left:4px solid var(--gold)}}
+.pill.quietpill{{color:var(--dim)}}.hero{{font-size:20px;line-height:1.35;margin:8px 0 6px;max-width:820px}}
 button.toggle{{float:right;font:inherit;font-size:12px;padding:3px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--dim);cursor:pointer}}
 td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 table td{{vertical-align:middle}}
@@ -297,16 +314,16 @@ button.trade{{margin-top:6px;font:inherit;font-size:13px;padding:5px 12px;border
 button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}.ok{{color:var(--green);font-weight:600;margin-left:6px}}
 </style></head><body><main>
 <h1>El Club Board</h1>
-<div class="dim">Every card of the Bazaar, and who wants or has one across all {pub["markets"]} markets · tick {pub["tick"]} · updated {when} · refreshes every minute</div>
+<div class="hero">Find the card you need at the <b>best price in the Bazaar</b> and buy it in one click.
+Got a spare? <b>Sell it fast</b> to the best buyer.</div>
+<div class="dim">Prices from all {pub["markets"]} markets · tick {pub["tick"]} · updated {when} · refreshes every minute</div>
 <div class="steps">
-<div class="box step"><b class="n">1</b><b>Find your card below</b><br><span class="dim">All {len(pub["cards"])} cards of the Bazaar are here, by page, with what every market says about each one. Same data in <a href="board.json">board.json</a>.</span></div>
-<div class="box step"><b class="n">2</b><b>Press buy or sell</b><br><span class="dim">Each button copies a complete curl with the card, the price and, where there is one, the offer id already in it.</span></div>
-<div class="box step"><b class="n">3</b><b>It settles next tick</b><br><span class="dim">Taking an offer resting here settles at once. A new offer waits for its counterparty, costs nothing while it waits and can be cancelled at any tick.</span></div>
+<div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim"><b>Buy for</b> = the cheapest seller in the Bazaar. <b>Sell for</b> = the best buyer.</span></div>
+<div class="box step"><b class="n">2</b><b>Click and paste</b><br><span class="dim">The button copies one ready call. Paste it to your agent, or run it yourself.</span></div>
+<div class="box step"><b class="n">3</b><b>Matched on {vid}</b><br><span class="dim">Buyers and sellers from this board meet on {vid}, our market, and are matched the tick both are there.</span></div>
 </div>
-<div class="box kpi why"><b>Why trade it on {vid}?</b> On El Rastro the side that accepts pays <b>5 % + 1 P a card</b>.
-On {vid} it pays <b>0</b>, and our broker crosses a bid and an ask <b>the tick both are there</b>. No team is ever named.</div>
 
-<h2>Cards people want or sell <span class="dim" style="font-weight:400;font-size:14px">· {live} of {len(pub["cards"])} cards have a buyer or a seller right now</span>
+<h2>Cards you can buy or sell now <span class="dim" style="font-weight:400;font-size:14px">· {live} of {len(pub["cards"])} cards have a price</span>
 <button class="toggle" id="showall">show all {len(pub["cards"])} cards</button></h2>
 <div id="deck" class="active-only">{deck()}</div>
 
