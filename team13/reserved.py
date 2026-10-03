@@ -1,6 +1,6 @@
-"""Cards reserved for swap strategies: no module of the agent (trader, haggler, wtb, market rewards, workshop) and no
-dashboard auto-swap sells, offers, swaps or burns them. We trade them by hand (swaps with other teams, Workshop trios,
-selling the uncommons that come out).
+"""Cards reserved for swap strategies: no module of the agent (trader, haggler, wtb, tapas, market rewards, workshop)
+and no dashboard auto-swap sells, offers, swaps or burns them. We trade them by hand (swaps with other teams,
+Workshop trios, selling the uncommons that come out).
 
 team13/reserved.json, read whenever it changes (edit, push: the server deploys it within a minute):
   refs           every copy of these cards

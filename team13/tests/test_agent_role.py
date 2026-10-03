@@ -8,7 +8,7 @@ import guard
 
 def test_roles():
     assert agent.parse_role("dealers") == {"duels", "haggler", "matchmaker"}
-    assert agent.parse_role("market") == {"venue", "trader", "flipper", "wtb", "loans", "workshop"}
+    assert agent.parse_role("market") == {"venue", "trader", "flipper", "wtb", "tapas", "loans", "workshop"}
     assert agent.parse_role("") == agent.ROLES["all"]
     assert agent.parse_role(" Haggler , trader ") == {"haggler", "trader"}
     assert not agent.ROLES["dealers"] & agent.ROLES["market"]
@@ -36,6 +36,7 @@ class FakeCtx:
         self.clock, self.me = {"today": "sat"}, {"id": "t13", "cash": cash}
         self.state = {"venue": "v13", "spent": {"sat": spent}}
         self.agent_budget = agent_budget
+        self.threads = []
 
 
 def test_budget():
