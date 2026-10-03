@@ -81,6 +81,35 @@ def broker(brk):
               f"last at {dt.datetime.fromtimestamp(books[-1]['ts']):%H:%M}")
 
 
+def settlements(since):
+    """Every settlement of ours since `since` from the agent's public-feed store, with direction and price."""
+    path = os.path.join(LOGS, "feed_events.jsonl")
+    print("\n== Our settlements (from the agent's feed store; fills of our resting asks and bids show here) ==")
+    if not os.path.exists(path):
+        print(f"(no {path})")
+        return
+    me, n = "t13", 0
+    with open(path) as f:
+        for line in f:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            p = e.get("payload") or {}
+            if e.get("type") != "settlement" or me not in (p.get("parties") or []):
+                continue
+            if e.get("ts") and e["ts"] < since:
+                continue
+            items = p.get("items") or []
+            got = [i.get("ref") or i.get("kind") for i in items if i.get("to") == me]
+            gave = [i.get("ref") or i.get("kind") for i in items if i.get("frm") == me]
+            who = p.get("persona") or next((x for x in p.get("parties") or [] if x != me), "?")
+            n += 1
+            print(f"  t{e.get('tick')} {p.get('venue') or 'dealer'} with {who}: gave {gave or '-'} got {got or '-'} "
+                  f"price {p.get('price')} fee {p.get('fee')}")
+    print(f"  {n} settlements (dealer deals included; only team trades count in neg_points)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default=dt.date.today().isoformat() + " 09:00")
@@ -89,6 +118,7 @@ def main():
     dec, brk = rows("decisions.jsonl", since), rows("broker.jsonl", since)
     print(f"since {a.since}: {len(dec)} agent decisions, {len(brk)} broker records")
     trades(dec)
+    settlements(since)
     broker(brk)
 
 

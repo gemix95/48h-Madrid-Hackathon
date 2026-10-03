@@ -19,6 +19,7 @@ KNOBS = {
     "enable_guard": (1, 0, 1, 1, "Modules", "Guard", "Last each tick: cancel any open offer of ours that loses value at our private values or breaks a team cap."),
     "enable_flipper": (1, 0, 1, 1, "Modules", "Flipper", "Buy a card a team sells below another team's bid and sell into that bid (profit after both fees)."),
     "enable_wtb": (1, 0, 1, 1, "Modules", "Want-to-buy asks", "Direct offers to teams that probably hold a card we need and do not collect its set."),
+    "solvency_check": (0, 0, 1, 1, "Modules", "Skip makers that cannot pay", "Off by default: the agent's feed store has gaps after restarts (the server serves only the last 500 events), so rebuilt cash runs low and good trades were skipped (355 skips on Saturday morning)."),
     "auto_flag_proven": (1, 0, 1, 1, "Modules", "Flag proven bad faith", "Flag a dealer message when its own structured offer proves the words false (price or card code). A correct flag scores, a wrong one costs."),
     "flag_bluffs": (0, 0, 1, 1, "Modules", "Also flag proven bluffs", "Flag a 'final' price the same dealer later beat in the same conversation. Off until we see how organisers score bluffs."),
     "flag_catalog": (0, 0, 1, 1, "Modules", "Also flag catalog contradictions", "Flag a stated print run that contradicts the catalog."),

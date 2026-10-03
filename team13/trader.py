@@ -92,7 +92,11 @@ class Trader:
             intel = getattr(self.ctx, "intel", None)
             team = (intel.summary().get("offer_maker", {}).get(o.get("id")) if intel else None) or o.get("maker")
         if sol.cannot_pay(team, cash):
-            self.ctx.log("trade", "skip_insolvent", offer=o.get("id"), team=team, cash=cash, bounds=sol.bounds(team))
+            seen = self.ctx.state.setdefault("insolvent_logged", [])
+            if o.get("id") not in seen:  # once per offer, not every tick
+                seen.append(o.get("id"))
+                del seen[:-500]
+                self.ctx.log("trade", "skip_insolvent", offer=o.get("id"), team=team, cash=cash, bounds=sol.bounds(team))
             return True
         return False
 

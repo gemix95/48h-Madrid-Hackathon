@@ -78,5 +78,7 @@ class Solvency:
     SLACK = 10  # unseen cash events (a grant under another event type) must not block a good deal
 
     def cannot_pay(self, team: str, cash: int) -> bool:
+        if not self.ctx.S.get("solvency_check", 0):  # Strategy tab switch, in case the bounds are off
+            return False
         b = self.bounds(team)
         return bool(b) and cash > b[1] + self.SLACK
