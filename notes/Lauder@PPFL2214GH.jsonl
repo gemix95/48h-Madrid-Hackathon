@@ -1,1 +1,2 @@
 {"ts": 1791026365.2, "tick": null, "author": "agent", "topic": "joined", "lesson": "Lauder started on PPFL2214GH: role dealers (duels, haggler).", "evidence": {}, "agent": "Lauder", "role": "dealers", "host": "PPFL2214GH"}
+{"ts": 1791026430.2, "tick": 621, "author": "haggler", "topic": "deal", "lesson": "No deal with Abuela on uncommon (closed).", "evidence": {"key": "abuela:buy:uncommon", "thread": 859}, "agent": "Lauder", "role": "dealers", "host": "PPFL2214GH"}
