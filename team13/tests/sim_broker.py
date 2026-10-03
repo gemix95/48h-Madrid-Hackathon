@@ -39,10 +39,12 @@ def run(seed, strategy, n=10, ticks=16, arrivals=True):
             book.append({"id": t["id"], "want": {"cash": t["q"] if t["side"] == "ask" else 0},
                          "give": {"cash": t["q"] if t["side"] == "bid" else 0}})
         tracker.update(tick, book)
+        book_dict = {"bench_offers": book}
         if strategy == "smart":
             plan = sb.smart_bench_plan({}, tracker, tick, lambda p: 0)
+            plan = sb.stall_floor(book_dict, plan, lambda p: 0)
         elif strategy == "stall":
-            plan = starter_plans.bench_plan({"bench_offers": book})
+            plan = starter_plans.bench_plan(book_dict)
         else:  # oracle: knows limits and departures
             plan, used = [], set()
             live = [by[o["id"]] for o in book]
