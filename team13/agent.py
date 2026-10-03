@@ -60,6 +60,7 @@ from learner import Learner
 from negotiator import Negotiator
 import council
 import strategy
+from reserved import reserved_ids
 
 HERE = Path(__file__).parent
 LOGS = HERE / "logs"
@@ -303,7 +304,10 @@ class Context:
         own = self.state.get("owned", {})
         return offer.get("id") in own.get("offers", []) or (offer.get("thread") or -1) in own.get("threads", [])
 
-    def locked_assets(self):
+    def locked_assets(self, reserved: bool = True):
+        """Assets no module may give away: promised in an open offer or a dealer sale, and (reserved=True) the cards
+        reserved for swap strategies (reserved.json). reserved=False only counts what is promised, for the Workshop's
+        "do we still need fuel" maths, so reserved spares never trigger pack buying."""
         ids = set()
         for o in self.my_offers:
             for a in (o.get("give") or {}).get("assets") or []:
@@ -312,6 +316,8 @@ class Context:
             topic = (th.get("topic") or {}).get("sell") or {}
             if th["status"] == "open":
                 ids.update(topic.get("assets") or ([topic["asset"]] if topic.get("asset") else []))
+        if reserved:
+            ids |= reserved_ids((self.values.assets if self.values else None) or self.me.get("assets", []), self.state)
         return ids
 
     def speak(self, situation, band, fallback, effort="low"):

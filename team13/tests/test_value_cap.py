@@ -61,7 +61,7 @@ class Ctx:
     def reserve(self):
         return 0
 
-    def locked_assets(self):
+    def locked_assets(self, reserved=True):
         return set()
 
     def budget_left(self):

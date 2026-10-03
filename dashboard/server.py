@@ -40,6 +40,7 @@ BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 import council  # noqa: E402  (team13/council.py: El Consejo, the board where our agents post what they learnt)
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
 import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, and the one write the dashboard makes)
+from reserved import reserved_ids  # noqa: E402  (team13/reserved.py: cards kept for swap strategies)
 import workshop_panel as workshop_tab  # noqa: E402  (El Taller tab; team13/workshop.py is the agent module)
 import ledger as cash_ledger  # noqa: E402  (Ledger tab: every prima that moved for us)
 HAND_LOG = HERE.parent / "logs" / "hand.jsonl"
@@ -216,6 +217,10 @@ def autosend():
                 continue
             S = strategy.load()
             min_gain = S.get("trade_min_gain", 3)
+            try:  # cards reserved for swap strategies never send themselves
+                AUTO.reserved = reserved_ids(me.get("assets"), json.loads(STATE.read_text()) if STATE.exists() else {})
+            except (OSError, ValueError):
+                AUTO.reserved = reserved_ids(me.get("assets"), {})
             r = AUTO.plan(time.time(), v["opportunities"], offers, me.get("id"), min_gain)
             if not r:
                 r = AUTO.longshot(time.time(), v["opportunities"], offers, me.get("id"), S)

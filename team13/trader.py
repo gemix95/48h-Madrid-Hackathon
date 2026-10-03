@@ -564,8 +564,9 @@ class Trader:
         from workshop import accumulating, listing_reserve, spare_copies
         markets = self.listing_markets()
         locked = ctx.locked_assets()
-        reserve = listing_reserve(S, v, locked)
-        accum, acc_rar, acc_have = (accumulating(v, locked, int(S.get("workshop_trio_target", 3)))
+        promised = ctx.locked_assets(reserved=False)  # reserved spares still count as Workshop fuel
+        reserve = listing_reserve(S, v, promised)
+        accum, acc_rar, acc_have = (accumulating(v, promised, int(S.get("workshop_trio_target", 3)))
                                     if int(S.get("workshop_accumulate", 1)) and int(S.get("enable_workshop", 1))
                                     else (False, "", 0))
         if accum:

@@ -1,0 +1,7 @@
+{
+ "note": "Reserved for swap strategies: the agent and the dashboard's auto-swaps never sell, offer, swap, reward or burn these. Edit and push: the server picks it up within a minute.",
+ "refs": [],
+ "assets": [],
+ "common_spares": true,
+ "crafted": true
+}

@@ -214,8 +214,8 @@ class Haggler:
         can_buy = buys_today < S.get("deals_per_dealer_day", 5)
         item_cap = min(S.get("max_dealer_buy", 40), ctx.budget_left())
         from workshop import accumulating, restock_packs
-        buy_packs = restock_packs(S, ctx.values, ctx.locked_assets())
-        accum, acc_rar, acc_have = (accumulating(ctx.values, ctx.locked_assets(), int(S.get("workshop_trio_target", 3)))
+        buy_packs = restock_packs(S, ctx.values, ctx.locked_assets(reserved=False))  # reserved spares count as fuel
+        accum, acc_rar, acc_have = (accumulating(ctx.values, ctx.locked_assets(reserved=False), int(S.get("workshop_trio_target", 3)))
                                     if int(S.get("workshop_accumulate", 1)) and int(S.get("enable_workshop", 1))
                                     else (False, "", 0))
         for s in (menu.get("sells", []) if can_buy else []):  # 1) packs: the cleanest price range to capture

@@ -15,6 +15,12 @@ A local process would trade as the same team. `pkill -f agent.py` then `pgrep -f
 - The AI negotiator is Claude Opus 5.5 at medium effort (`llm_effort` 1). It needs the `anthropic` SDK and the key
   in `anthropic.env` at the repo root (git-ignored). The agent picks the key up within 30 s, with no restart.
 
+## Reserved cards
+
+- `team13/reserved.json`: cards reserved for swap strategies (refs, asset ids, every common we hold twice, every
+  Workshop pull). No agent module and no dashboard auto-swap sells, offers, swaps or burns them; we trade them by hand.
+  Edit and push: the server deploys it within a minute.
+
 ## El Consejo: the shared board
 
 - The board is the `council` branch, checked out at `.council/` by `team13/council.py` on first use. Never edit it,

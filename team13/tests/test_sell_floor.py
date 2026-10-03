@@ -40,7 +40,7 @@ class Ctx:
     def day_key(self):
         return "sat"
 
-    def locked_assets(self):
+    def locked_assets(self, reserved=True):
         return set()
 
     def limit(self, name, default):

@@ -221,6 +221,8 @@ class Auto:
         bar = auto_bar(self.waiting_both(offers, me_id), min_gain)
         if not self.on:
             return "auto-send is off"
+        if r.get("asset") in getattr(self, "reserved", ()):
+            return "reserved for swap strategies (team13/reserved.json)"
         if self.key(r) in self.off:
             return "auto-send cancelled"
         if r["ours"] < bar[0] or r["theirs"] < bar[1]:

@@ -165,6 +165,8 @@ class Workshop:
                     next=plan["next"], loss=plan["loss"], ev=plan["ev"])
             return
         card = pulled_card(res)
+        if card.get("id") is not None:  # reserved.json "crafted": what comes out is kept for swap strategies
+            ctx.state.setdefault("crafted_assets", []).append(card["id"])
         ctx.log("workshop", "crafted", refs=plan["refs"], ids=plan["ids"], rarity=plan["rarity"],
                 next=plan["next"], loss=plan["loss"], ev=plan["ev"], surplus=plan["surplus"],
                 pulled=card.get("ref"), pulled_rarity=card.get("rarity"), luck=res.get("luck") if isinstance(res, dict) else None)
