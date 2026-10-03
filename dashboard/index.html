@@ -182,6 +182,15 @@ tr.good td { background: color-mix(in srgb, var(--good) 11%, transparent); }
 .btn-s:disabled { opacity: .5; cursor: default; }
 .swap-warn { font-size: 12px; padding: 6px 10px; border-radius: 6px; margin-bottom: 10px;
   background: color-mix(in srgb, var(--warning) 22%, transparent); border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent); }
+.swap-info { font-size: 12px; padding: 6px 10px; border-radius: 6px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--series-1) 14%, transparent); border: 1px solid color-mix(in srgb, var(--series-1) 50%, transparent); }
+.auto-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: 6px; white-space: nowrap; margin-right: 6px;
+  background: color-mix(in srgb, var(--series-1) 14%, transparent); border: 1px solid color-mix(in srgb, var(--series-1) 50%, transparent); color: var(--series-1); }
+.auto-badge b { font-variant-numeric: tabular-nums; } .auto-badge button { all: unset; cursor: pointer; opacity: .7; } .auto-badge button:hover { opacity: 1; }
+.i-ic { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 999px; background: var(--series-1); color: #fff; font: italic 700 10px Georgia, serif; flex: none; }
+.pulse { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; margin-left: 6px; border-radius: 999px;
+  background: var(--series-2); color: #fff; font-size: 11px; font-weight: 700; line-height: 1; vertical-align: 1px; animation: pulse 1.6s ease-out infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--series-2) 65%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 .swap-note { font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 6px; margin-bottom: 10px; background: var(--surface-2); }
 .cell .x { position: absolute; top: -7px; right: -6px; background: var(--series-2); color: #fff; border-radius: 999px; font-size: 10px;
   font-weight: 700; padding: 1px 5px; border: 2px solid var(--surface-1); }
@@ -985,9 +994,9 @@ function threads(d, M) {
 // ---------- swaps (a view of the Negotiations card) ----------
 const NEG = { view: "talk", sub: "opps", mode: "both", note: null };   // card: talk | swaps · swaps: opps | deals · opportunities: both | us
 function negSwitch(d) {
-  const n = (d.swaps?.opportunities || []).filter(r => r.both).length;
+  const n = d.swaps?.deals?.waiting || 0;   // our live swaps, waiting for the other team's answer
   const b = (v, label) => `<button class="btn-s ${NEG.view === v ? "on" : ""}" onclick="NEG.view='${v}';negSwitch(D);swaps(D,model(D))">${label}</button>`;
-  $("neg-switch").innerHTML = `<div style="display:flex;gap:8px;margin-bottom:10px">${b("talk", "Conversations")}${b("swaps", `Swaps${n ? ` · ${n}` : ""}`)}</div>`;
+  $("neg-switch").innerHTML = `<div style="display:flex;gap:8px;margin-bottom:10px">${b("talk", "Conversations")}${b("swaps", `Swaps${n ? `<span class="pulse" title="${n} swap${n > 1 ? "s" : ""} of ours waiting for the other team's answer">${n}</span>` : ""}`)}</div>`;
   $("neg-card").className = "card " + (NEG.view === "swaps" ? "s12" : "s7");
   $("neg-hint").style.display = $("threads").style.display = NEG.view === "talk" ? "" : "none";
   $("swaps").style.display = NEG.view === "swaps" ? "" : "none";
@@ -1006,8 +1015,13 @@ function swaps(d, M) {
   const side = refs => refs.map(r => cardTag(r, d, M)).join("") || "–";
   let body;
   if (NEG.sub === "opps") {
-    const rows = NEG.mode === "both" ? both : us, v = S.venue, note = NEG.note;
+    const rows = NEG.mode === "both" ? both : us, v = S.venue, note = NEG.note, A = S.auto || {};
+    const bar = A.bar?.[0] != null ? ` when it leaves us ≥ ${fmt(A.bar[0])} P and them ≥ ${fmt(A.bar[1])} P (est.); the bar rises with every swap waiting` : "";
+    const autoLog = (A.log || []).slice().reverse().map(x => `<div class="muted" style="font-size:11px">${hm(new Date(x.ts * 1000))} · ${x.ok ? `✓ sent our ${esc(x.give)} to ${esc(nm(x.team))} for ${esc(x.want)} (#${x.offer})` : `✕ ${esc(x.want)} from ${esc(nm(x.team))}: ${esc(x.error)}`}</div>`).join("");
     body = `<div class="swap-warn">⚠ <b>Publishes directly.</b> The button posts the offer with our team key; it does not go through the agent.</div>`
+      + `<div class="swap-info"><span class="i-ic">i</span><span>${A.on ? `<b>Auto-send on.</b> A swap good for both sends itself ${A.delay ?? 30} s after it shows up${bar}. At most one every ${A.gap ?? 30} s.` : "<b>Auto-send off.</b> Nothing is sent without a click."}</span>`
+      + `<button class="btn-s" style="margin-left:auto" onclick="autoSwitch({ on: ${!A.on} })">${A.on ? "Turn off" : "Turn on"}</button></div>`
+      + (autoLog ? `<div style="margin:-4px 0 10px">${autoLog}</div>` : "")
       + (note ? `<div class="swap-note" style="color:${note.wait ? "var(--text-secondary)" : note.ok ? "var(--up)" : "var(--critical)"}">${note.wait ? "Posting…" : esc(note.text)}</div>` : "")
       + `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">${tab("mode", "both", "Good for both", both.length)}${tab("mode", "us", "Only good for us", us.length)}`
       + `<span class="muted" style="font-size:12px">${v ? `posts to ${esc(v.name)} · ${fmt((v.fee_bps || 0) / 100)}% fee` : "no market to post on"}</span></div>`
@@ -1017,7 +1031,7 @@ function swaps(d, M) {
           <td>${cardTag(r.give, d, M)}${r.listed.length ? `<div class="muted" style="font-size:11px">also for sale for cash (#${r.listed.join(", #")})</div>` : ""}</td>
           <td class="num" title="card +${fmt(r.gain)} P, spare −${fmt(r.loss)} P"><b style="color:var(--up)">+${fmt(r.ours)}</b></td>
           <td class="num" title="our estimate of what the other team gains"><b style="color:${r.both ? "var(--up)" : "var(--critical)"}">${r.theirs > 0 ? "+" : ""}${fmt(r.theirs)}</b></td>
-          <td class="num"><button class="btn-s" ${v ? "" : "disabled"} onclick="offerSwap('${esc(r.team)}','${esc(r.want)}',${Number(r.asset)})">Offer swap</button></td></tr>`).join("") + `</tbody></table>`
+          <td class="num">${autoCell(r)}<button class="btn-s" ${v ? "" : "disabled"} onclick="offerSwap('${esc(r.team)}','${esc(r.want)}',${Number(r.asset)})">Offer swap</button></td></tr>`).join("") + `</tbody></table>`
         : `<div class="empty">${NEG.mode === "both" ? `No swap that both sides would likely accept right now. "Only good for us" lists the ones that only help us.` : "Nothing else to propose right now."}</div>`)
       + `<div class="empty" style="margin-top:6px"><b>Us</b> = what the card is worth to us minus what the spare costs us (exact, at our values). <b>Them</b> = our estimate for the other team from the sets it keeps or dumps in the public feed: a guess. We cannot see other teams' cards: holders come from the deals, gifts and listings we saw.</div>`;
   } else {
@@ -1031,6 +1045,20 @@ function swaps(d, M) {
       : `<div class="empty">No swap has settled with us yet. ${S.deals.market_swaps ? `Between teams, ${S.deals.market_swaps} card-for-card trade${S.deals.market_swaps > 1 ? "s have" : " has"} settled so far.` : "No team has settled a card-for-card trade so far."}</div>`);
   }
   el.innerHTML = bar + body;
+}
+// a good-for-both row: a real countdown to its automatic send (server time), or why it will not send itself
+function autoCell(r) {
+  if (!r.auto) return "";
+  const key = esc(`${r.team}|${r.want}|${r.asset}`);
+  if (r.auto.at != null) return `<span class="auto-badge" title="Sends itself when the count reaches 0. ✕ cancels it."><span class="i-ic">i</span>sends in <b data-at="${r.auto.at}">${countdown(r.auto.at)}</b><button onclick="autoSwitch({ cancel: '${key}' })" aria-label="Cancel auto-send">✕</button></span>`;
+  return r.auto.why ? `<div class="muted" style="font-size:11px;margin-bottom:4px;white-space:normal">${esc(r.auto.why)}</div>` : "";
+}
+let skew = 0;   // server clock minus ours, so the countdown is the server's
+const countdown = at => { const s = Math.max(0, Math.ceil(at - (Date.now() / 1000 + skew))); return s ? `${s} s` : "now…"; };
+setInterval(() => document.querySelectorAll("[data-at]").forEach(el => { el.textContent = countdown(+el.dataset.at); }), 500);
+async function autoSwitch(body) {
+  try { await fetch("/swap/auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); } catch (e) {}
+  lastSig = ""; refresh();
 }
 async function offerSwap(team, want, asset) {
   const r = (D.swaps?.opportunities || []).find(x => x.team === team && x.want === want && x.asset === asset), v = D.swaps?.venue;
@@ -1793,14 +1821,15 @@ async function refresh() {
     // Python's json writes bare Infinity/NaN (e.g. a guard "loss"), which JSON.parse rejects
     const d = JSON.parse((await res.text()).replace(/([:\[,]\s*)-?(?:Infinity|NaN)(?=\s*[,\]}])/g, "$1null"));
     // Always drive the header from clock + served_at, even before /api/me lands.
-    if (d.served_at) servedAt = d.served_at;
+    if (d.served_at) { servedAt = d.served_at; skew = d.served_at - Date.now() / 1000; }
     if (d.clock) header(d);
     const errs = Object.keys(d).filter(k => k.endsWith("_error"));
     $("err").textContent = errs.length ? `⚠ stale: ${errs.map(k => k.replace("_error", "")).join(", ")}` : "";
     if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
     if (!ok(d.catalog)) { $("err").textContent = "⚠ waiting for catalog…"; return; }
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
-      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length, d.council?.notes?.length, d.council?.state]);
+      d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length, d.council?.notes?.length, d.council?.state,
+      d.swaps?.auto, (d.swaps?.opportunities || []).map(r => r.auto ? r.auto.at ?? r.auto.why : 0), d.swaps?.deals?.waiting]);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;
     D = d; const M = model(d);

@@ -48,7 +48,7 @@ Two writers fight over the one accept per tick, repeat each other's prices to de
 | Process | Command (from the repo root, after `source bazaar.env`) | Writes with the key? |
 |---|---|---|
 | Agent: duels, dealers, our market + broker, team trades, guard | `cd team13 && ../.venv/bin/python agent.py` | **yes, the only writer** |
-| Dashboard (war room, Strategy tab) | `cd dashboard && DASHBOARD_PASSWORD=... python3 server.py` | only through `strategy.json`, **one exception**: Deals > Negotiations > Swaps has an *Offer swap* button that posts one offer with our key straight from the dashboard (no agent, no guard; logged in `logs/hand.jsonl`) |
+| Dashboard (war room, Strategy tab) | `cd dashboard && DASHBOARD_PASSWORD=... python3 server.py` | only through `strategy.json`, **one exception**: Deals > Negotiations > Swaps has an *Offer swap* button that posts one offer with our key straight from the dashboard (no agent, no guard; logged in `logs/hand.jsonl`), and swaps good for both send themselves after a 30 s countdown, at most one every 30 s, only above a bar that rises with every swap waiting (Turn off on the tab; start a dashboard with `AUTO_SWAPS=0` so it never sends) |
 | Tunnel for the second pair of eyes | `cloudflared tunnel --url http://localhost:8765` | no |
 | Watcher, optional (alerts in a terminal) | `python3 agent/watch.py 30` | no |
 | Rival tracker (public data, no key: may run on any laptop) | `python3 agent/rivals.py live --every 60 --min 0.8` | no |

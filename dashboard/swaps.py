@@ -26,6 +26,10 @@ ACTIVE_TICKS = 120  # same as team13/wtb.py: a team with no public event this re
 EXPIRES_TICKS = 120  # life of a swap we post, like the want-to-buy asks
 MAX_ROWS = 40  # per list: swaps that leave both sides ahead, and swaps that only help us
 MIN_THEIRS = 1.0  # P the holder must come out ahead, by our rough estimate, for a swap to count as good for both
+AUTO_DELAY = 30  # seconds a swap that clears the auto bar counts down on the tab before it sends itself
+AUTO_GAP = 30  # at most one automatic send every 30 s
+AUTO_MAX_OPEN = 8  # open swaps of ours (any source) at which nothing sends itself
+AUTO_COOLDOWN = 600  # seconds before the same team is asked for the same card again
 TEAM = re.compile(r"^t\d+$")
 _recent: dict = {}  # (team, card, asset) -> time of the last post, so a double click cannot post twice
 
@@ -123,6 +127,7 @@ def opportunities(me: dict, catalog: dict, events: list, leaderboard, offers: li
     give, and the net value of the swap to us (exact) and to them (estimate)."""
     v, listed = Values(catalog, me), _listed(me, offers)
     hold, lean, seen = ledger.build(events, leaderboard), team_intel.lean(events), last_seen(events)
+    asked = {(o.get("to"), ref) for o in offers if o.get("maker") == me.get("id") for ref in wanted_refs(o.get("want") or {})}
     set_ids = list(me.get("affinity") or {})
     mults = list((me.get("affinity") or {}).values())
     spares = v.spares()
@@ -135,7 +140,7 @@ def opportunities(me: dict, catalog: dict, events: list, leaderboard, offers: li
             continue
         for team, cards in hold.items():
             c = cards.get(ref)
-            if team == me.get("id") or not c or c[0] <= 0 or now_tick - seen.get(team, -10 ** 9) > ACTIVE_TICKS:
+            if team == me.get("id") or not c or c[0] <= 0 or now_tick - seen.get(team, -10 ** 9) > ACTIVE_TICKS or (team, ref) in asked:
                 continue
             tm = est.setdefault(team, estimate_mults(lean.get(team, {}), set_ids, mults))
             _, their_loss = _their_values(v, tm, c[0], ref)
@@ -162,6 +167,100 @@ def opportunities(me: dict, catalog: dict, events: list, leaderboard, offers: li
     return both[:MAX_ROWS] + only_us[:MAX_ROWS]
 
 
+def waiting(offers: list, me_id: str) -> int:
+    """Our live card-for-card offers, each waiting for the other team's answer."""
+    return sum(1 for o in offers if o.get("maker") == me_id and swap_offer(o) and o.get("status", "open") == "open")
+
+
+def auto_bar(n_waiting: int, min_gain: float) -> tuple:
+    """How good a swap must be to send itself, for us (exact) and for them (estimate). It rises with every swap of
+    ours already waiting, so a run of borderline swaps cannot pile up: 0 waiting -> +5 / +2, 4 waiting -> +13 / +6."""
+    return max(min_gain, 5) + 2 * n_waiting, 2 + n_waiting
+
+
+class Auto:
+    """Swaps that are good for both and clear auto_bar send themselves AUTO_DELAY seconds after they show up, at
+    most one every AUTO_GAP seconds. A row can be cancelled, and the whole thing switched off, from the tab."""
+
+    def __init__(self, on: bool = True):
+        self.on, self.armed, self.off, self.tried, self.why, self.log, self.last = on, {}, set(), {}, {}, [], -1e9
+        self.bar = (None, None)
+
+    @staticmethod
+    def key(r: dict) -> str:
+        return f"{r['team']}|{r['want']}|{r['asset']}"
+
+    def check(self, r: dict, now: float, offers: list, me_id: str, min_gain: float):
+        """Why this swap may not send itself right now, or None."""
+        mine = [o for o in offers if o.get("maker") == me_id]
+        bar = auto_bar(waiting(offers, me_id), min_gain)
+        if not self.on:
+            return "auto-send is off"
+        if self.key(r) in self.off:
+            return "auto-send cancelled"
+        if r["ours"] < bar[0] or r["theirs"] < bar[1]:
+            return f"below the auto bar (us ≥ {bar[0]:g} P, them ≥ {bar[1]:g} P)"
+        if any(r["want"] in wanted_refs(o.get("want") or {}) for o in mine):
+            return "we already ask for this card"
+        if any(r["asset"] in [a["id"] for a in (o.get("give") or {}).get("assets") or []] for o in mine if swap_offer(o)):
+            return "that spare is already in a swap"
+        if waiting(offers, me_id) >= AUTO_MAX_OPEN:
+            return f"{AUTO_MAX_OPEN} swaps already waiting"
+        if now - self.tried.get((r["team"], r["want"]), -1e9) < AUTO_COOLDOWN:
+            return "asked recently"
+        return None
+
+    def plan(self, now: float, rows: list, offers: list, me_id: str, min_gain: float):
+        """Arm the countdown of every swap that may send itself, drop the rest; return the one due now, if any."""
+        self.bar = auto_bar(waiting(offers, me_id), min_gain)
+        both = {self.key(r): r for r in rows if r.get("both")}
+        why = {}
+        for k, r in both.items():
+            w = self.check(r, now, offers, me_id, min_gain)
+            if w:
+                why[k] = w
+                self.armed.pop(k, None)
+            else:
+                self.armed.setdefault(k, now + AUTO_DELAY)
+        for k in list(self.armed):
+            if k not in both:
+                del self.armed[k]  # gone: its countdown starts again if it comes back
+        self.why = why
+        if now - self.last < AUTO_GAP:
+            return None
+        due = sorted((at, k) for k, at in self.armed.items() if at <= now)
+        return both[due[0][1]] if due else None
+
+    def done(self, now: float, r: dict, res: dict) -> None:
+        self.last = now
+        self.tried[(r["team"], r["want"])] = now
+        self.armed.pop(self.key(r), None)
+        self.log.append({"ts": now, "ok": bool(res.get("ok")), "team": r["team"], "want": r["want"], "give": r["give"],
+                         "offer": res.get("offer"), "error": res.get("error")})
+        del self.log[:-20]
+
+    def state(self, r: dict):
+        """For the tab: when a good-for-both row sends itself (a real time, the 30 s gap included), or why it won't."""
+        if not r.get("both"):
+            return None
+        k = self.key(r)
+        if k in self.armed:
+            return {"at": max(self.armed[k], self.last + AUTO_GAP)}
+        return {"why": self.why.get(k, "")}
+
+    def cancel(self, k: str) -> None:
+        self.off.add(k)
+        self.armed.pop(k, None)
+
+    def set_on(self, on: bool) -> None:
+        self.on = on
+        if on:
+            self.off.clear()  # switching it back on re-arms everything
+
+    def snapshot(self) -> dict:
+        return {"on": self.on, "bar": list(self.bar), "delay": AUTO_DELAY, "gap": AUTO_GAP, "log": self.log[-5:]}
+
+
 def deals(me: dict, events: list, offers: list) -> dict:
     """Swaps in flight (our open card-for-card offers and the ones addressed to us) and swaps settled with us, plus
     how many card-for-card trades any team has settled so far."""
@@ -181,7 +280,7 @@ def deals(me: dict, events: list, offers: list) -> dict:
         if me_id in (p.get("parties") or []):
             done.append({"tick": e.get("tick"), "venue": p.get("venue"), "with": next((x for x in p["parties"] if x != me_id), None),
                          "gave": [i["ref"] for i in cards if i.get("frm") == me_id], "got": [i["ref"] for i in cards if i.get("to") == me_id]})
-    return {"open": open_, "done": done[::-1][:30], "market_swaps": market}
+    return {"open": open_, "done": done[::-1][:30], "market_swaps": market, "waiting": waiting(offers, me_id)}
 
 
 def view(me: dict, catalog: dict, events: list, leaderboard, offers: list, venues: list, min_gain: float, now_tick: int) -> dict:

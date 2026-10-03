@@ -41,6 +41,7 @@ import council  # noqa: E402  (team13/council.py: El Consejo, the board where ou
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
 import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, and the one write the dashboard makes)
 HAND_LOG = HERE.parent / "logs" / "hand.jsonl"
+AUTO = swaps.Auto(on=os.environ.get("AUTO_SWAPS", "1") != "0")  # AUTO_SWAPS=0: this dashboard never sends swaps by itself
 # the bots' own logs, so they only exist on the laptop that runs them: agent.py writes decisions.jsonl, agent/hand.py hand.jsonl
 INDEX = LogIndex({"agent": DECISIONS, "manual": HERE.parent / "logs" / "hand.jsonl"})
 
@@ -127,6 +128,54 @@ def swaps_view():
             _swaps["view"] = {"error": repr(e)[:200]}
         _swaps["key"] = key
     return _swaps["view"]
+
+
+def swaps_payload():
+    """swaps_view() plus each row's auto-send countdown (or why it won't send itself) and the auto-send state."""
+    v = swaps_view()
+    if not v or "opportunities" not in v:
+        return v
+    return {**v, "opportunities": [{**r, "auto": AUTO.state(r)} for r in v["opportunities"]], "auto": AUTO.snapshot()}
+
+
+def log_hand(rec):
+    """Same log as agent/hand.py, so every swap sent from the dashboard is traceable."""
+    try:
+        HAND_LOG.parent.mkdir(exist_ok=True)
+        with HAND_LOG.open("a") as f:
+            f.write(json.dumps({"ts": time.time(), **rec}) + "\n")
+    except OSError:
+        pass
+
+
+def autosend():
+    """Once a second: arm the countdowns (swaps.Auto) and send the swap whose time has come, at most one per 30 s.
+    Right before sending it re-reads our offers from the game, so a swap another laptop just sent is not sent twice."""
+    while True:
+        time.sleep(1)
+        try:
+            with lock:
+                v = swaps_view()
+                me, cat, offers, venues = cache.get("me"), cache.get("catalog"), (cache.get("offers") or {}).get("offers"), (cache.get("venues") or {}).get("venues")
+            if not (v and "opportunities" in v and isinstance(me, dict) and offers is not None and venues):
+                continue
+            min_gain = strategy.load().get("trade_min_gain", 3)
+            r = AUTO.plan(time.time(), v["opportunities"], offers, me.get("id"), min_gain)
+            if not r:
+                continue
+            fresh = get("/api/me/offers", True)
+            if "_error" in fresh:
+                continue
+            if AUTO.check(r, time.time(), fresh.get("offers", []), me.get("id"), min_gain):
+                AUTO.armed.pop(AUTO.key(r), None)  # the game moved on (asked meanwhile, too many open): not this one
+                continue
+            res = swaps.post_swap(post, time.time(), me, cat, fresh.get("offers", []), venues, min_gain, r["team"], r["want"], r["asset"])
+            AUTO.done(time.time(), r, res)
+            log_hand({"ev": "swap_offer", "auto": True, "team": r["team"], "want": r["want"], "asset": r["asset"], "r": res})
+            if res.get("ok"):
+                due["offers"] = 0
+        except Exception as e:
+            print("autosend:", repr(e)[:200], flush=True)
 
 
 def record(me, clock):
@@ -322,7 +371,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "history": history, "served_at": time.time(),
                                    "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60),
                                    "origins": message_origins(INDEX, cache.get("threads"), (cache.get("me") or {}).get("id")),
-                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard(), "swaps": swaps_view()}).encode()
+                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard(), "swaps": swaps_payload()}).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):
             self._send(200, "application/json", json.dumps(strategy.describe()).encode())
@@ -342,6 +391,8 @@ class Handler(BaseHTTPRequestHandler):
                 prop = cache.get("proposal") or {}
                 prop["dismissed"], prop["status"] = prop.get("changes"), "dismissed"
             return self._send(200, "application/json", b'{"ok": true}')
+        if self.path.startswith("/swap/auto"):
+            return self._swap_auto()
         if self.path.startswith("/swap"):
             return self._swap()
         if not self.path.startswith("/strategy"):
@@ -370,15 +421,26 @@ class Handler(BaseHTTPRequestHandler):
         if not (isinstance(me, dict) and me.get("assets") is not None and isinstance(cat, dict) and "sets" in cat and offers is not None and venues):
             return reply({"ok": False, "error": "no team data yet, try again in a few seconds"})
         res = swaps.post_swap(post, time.time(), me, cat, offers, venues, strategy.load().get("trade_min_gain", 3), team, want, asset)
-        try:  # same log as agent/hand.py, so a swap sent from here is traceable
-            HAND_LOG.parent.mkdir(exist_ok=True)
-            with HAND_LOG.open("a") as f:
-                f.write(json.dumps({"ts": time.time(), "ev": "swap_offer", "team": team, "want": want, "asset": asset, "r": res}) + "\n")
-        except OSError:
-            pass
+        log_hand({"ev": "swap_offer", "team": team, "want": want, "asset": asset, "r": res})
         if res.get("ok"):
             due["offers"] = 0  # show it in Our offers at once
         reply(res)
+
+    def _swap_auto(self):
+        """Auto-send switches: {"on": true|false} for all of it, {"cancel": "<team>|<card>|<asset>"} for one row."""
+        reply = lambda res, code=200: self._send(code, "application/json", json.dumps(res).encode())
+        if not (self.headers.get("Content-Type") or "").startswith("application/json"):
+            return reply({"ok": False, "error": "send JSON"}, 415)
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+            req = json.loads(self.rfile.read(min(n, 2000)) or b"{}")
+        except ValueError:
+            return reply({"ok": False, "error": "bad request"}, 400)
+        if "on" in req:
+            AUTO.set_on(bool(req["on"]))
+        if isinstance(req.get("cancel"), str):
+            AUTO.cancel(req["cancel"])
+        reply({"ok": True, "auto": AUTO.snapshot()})
 
     def _send(self, code, ctype, body):
         self.send_response(code)
@@ -396,5 +458,6 @@ if __name__ == "__main__":
     threading.Thread(target=poll, daemon=True).start()
     threading.Thread(target=listen, daemon=True).start()
     threading.Thread(target=advise, daemon=True).start()
+    threading.Thread(target=autosend, daemon=True).start()
     print(f"Team 13 war room on http://localhost:{PORT}")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
