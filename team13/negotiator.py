@@ -61,12 +61,28 @@ SCHEMA = {
 }
 
 
+def _local_key():
+    """ANTHROPIC_API_KEY from the repo's anthropic.env (never committed: see .gitignore)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "anthropic.env")
+    try:
+        for line in open(path):
+            line = line.strip().removeprefix("export ").strip()
+            if line.startswith("ANTHROPIC_API_KEY="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'") or None
+    except OSError:
+        return None
+    return None
+
+
 class Negotiator:
     def __init__(self, log=None):
         self.log = log or (lambda *a, **k: None)
         self.client = None
         self.disabled_until = 0.0
         self.stats = {"calls": 0, "fails": 0, "ms": 0}
+        key = _local_key()  # the team's key in ../anthropic.env (git-ignored) wins over the shell's
+        if key:
+            os.environ["ANTHROPIC_API_KEY"] = key
         if anthropic is not None and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
             self.client = anthropic.Anthropic(timeout=8.0, max_retries=0)  # ticks are 30 s on Saturday, 15 s on Sunday
 

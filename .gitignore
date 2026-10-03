@@ -12,3 +12,4 @@ feed_events.jsonl
 dashboard/.password
 .venv/
 broker.env
+anthropic.env
