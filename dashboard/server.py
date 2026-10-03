@@ -448,14 +448,14 @@ def arb_loop():
 
 
 def board_loop():
-    """Every minute: the public El Club board from public reads only (no team key)."""
+    """Every 15 s (a Sunday tick): the public El Club board from public reads only (no team key)."""
     while True:
         try:
             data = board.build()
             BOARD["html"], BOARD["json"] = board.render(data).encode(), json.dumps(board.public(data)).encode()  # redacted: no other markets
         except Exception as e:
             print("board:", repr(e)[:200], flush=True)
-        time.sleep(60)
+        time.sleep(15)  # a Sunday tick is 15 s
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -18,6 +18,7 @@ import json
 import math
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 URL = "https://bazaar.causaprima.ai"
 ME = "t13"
@@ -52,10 +53,15 @@ def build() -> dict:
     except Exception:
         pass
     rows, swaps = {}, []
-    for v in venues:
+    def fetch(v):
         try:
-            offers = _get(f"/api/venues/{v['venue']}/offers").get("offers", [])
+            return v, _get(f"/api/venues/{v['venue']}/offers").get("offers", [])
         except Exception:
+            return v, None
+    with ThreadPoolExecutor(max_workers=10) as pool:  # all markets at once: a Sunday tick is 15 s
+        books = list(pool.map(fetch, venues))
+    for v, offers in books:
+        if offers is None:
             continue
         where = {"venue": v["venue"], "name": v.get("name", v["venue"]), "fee_bps": v.get("fee_bps") or 0,
                  "fee_per_card": v.get("fee_per_card") or 0, "ours": v is ours}
@@ -332,7 +338,7 @@ button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}
 <h1>El Club Board</h1>
 <div class="hero">Find the card you need at the <b>best price in the Bazaar</b> and buy it in one click.
 Got a spare? <b>Sell it fast</b> to the best buyer.</div>
-<div class="dim">Prices from all {pub["markets"]} markets · tick {pub["tick"]} · updated {when} · refreshes every minute</div>
+<div class="dim">Prices from all {pub["markets"]} markets · tick {pub["tick"]} · updated {when} · refreshes every 15 s</div>
 <div class="steps">
 <div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim"><b>Buy</b> shows the cheapest seller in the Bazaar, <b>Sell</b> the best buyer.</span></div>
 <div class="box step"><b class="n">2</b><b>Click and paste</b><br><span class="dim">The button copies one ready call. Paste it to your agent, or run it yourself.</span></div>
@@ -365,7 +371,7 @@ JSON: <a href="board.json">board.json</a> · Team 13</footer>
 let busyUntil = 0;
 document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click", async () => {{
   const box = b.nextElementSibling, text = b.dataset.text;
-  box.hidden = false; busyUntil = Date.now() + 120000;
+  box.hidden = false; busyUntil = Date.now() + 60000;
   try {{ await navigator.clipboard.writeText(text); box.querySelector(".ok").textContent = "copied ✓"; }}
   catch (e) {{ const r = document.createRange(); r.selectNodeContents(box.querySelector("pre"));
     const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); box.querySelector(".ok").textContent = "selected: press Ctrl/Cmd+C"; }}
@@ -378,5 +384,5 @@ let all = false; try {{ all = localStorage.getItem("board-all") === "1"; }} catc
 const paint = () => {{ deckEl.classList.toggle("active-only", !all); tg.textContent = all ? "show only active cards" : "show all {len(pub["cards"])} cards"; }};
 tg.addEventListener("click", () => {{ all = !all; try {{ localStorage.setItem("board-all", all ? "1" : "0"); }} catch (e) {{}} paint(); }});
 paint();
-setInterval(() => {{ if (Date.now() > busyUntil && !getSelection().toString()) location.reload(); }}, 60000);
+setInterval(() => {{ if (Date.now() > busyUntil && !getSelection().toString()) location.reload(); }}, 15000);
 </script></body></html>"""
