@@ -24,6 +24,7 @@ One agent per person (one team key, scopes that never overlap), all set by envir
     AGENT_DEALERS=abuela,pilar   the only dealers this agent opens, talks to and trades with
     AGENT_BUDGET_2H=40           most it spends per 2 game hours; when it runs out it buys nothing until the next window
     AGENT_SLOT=0 AGENT_SLOTS=3   the team's single accept per tick goes to the agent whose slot is tick % slots
+    AGENT_KNOBS=enable_haggler=1,workshop_accumulate=0   this agent's own strategy knobs on top of strategy.json
 """
 from __future__ import annotations
 
@@ -62,6 +63,23 @@ HERE = Path(__file__).parent
 LOGS = HERE / "logs"
 STATE = HERE / "state.json"  # default for AGENT_ROLE=all; split roles use state-{role}.json
 VENUE_BOND = 270
+
+
+def agent_knobs() -> dict:
+    """AGENT_KNOBS ("knob=value,knob=value"): this agent's own strategy, on top of the shared strategy.json."""
+    raw = {}
+    for part in os.environ.get("AGENT_KNOBS", "").split(","):
+        if "=" in part:
+            k, v = (x.strip() for x in part.split("=", 1))
+            try:
+                raw[k] = float(v) if "." in v else int(v)
+            except ValueError:
+                raw[k] = v
+    return strategy.clean(raw)
+
+
+def load_strategy() -> dict:
+    return {**strategy.load(), **agent_knobs()}
 
 
 def role_label(role_str: str) -> str:
@@ -171,7 +189,7 @@ class Context:
         self.venues, self.boards = [], {}
         self.values = None
         self._accepts = {}
-        self.S = strategy.load()
+        self.S = load_strategy()
         self.intel = None
         self.learner = Learner()
         self.agent_budget = None  # AGENT_BUDGET: this process's daily spend cap when teammates run agents too
@@ -419,7 +437,7 @@ class Context:
     # ---------------------------------------------------------------- observe
     def observe(self, full=False):
         api = self.raw
-        self.S = strategy.load()  # the dashboard's Strategy tab writes strategy.json
+        self.S = load_strategy()  # the dashboard's Strategy tab writes strategy.json
         self.me = api.me()
         if self.intel is None:
             self.intel = Intel(LOGS / "feed_events.jsonl", url=self.raw.url)
@@ -551,6 +569,7 @@ def main():
     ctx.agent_id = agent_id
     ctx.log("agent", "start", dry=args.dry_run, role=sorted(role), agent_budget=args.budget, agent_id=agent_id,
             name=ctx.name, dealers=sorted(ctx.dealer_scope) if ctx.dealer_scope else "all", budget_2h=ctx.budget_2h,
+            knobs=agent_knobs(),
             accept_slot=list(ctx.slot),
             state_file=spath.name, lock=f"agent-{label}.lock")
     if agent_id:
