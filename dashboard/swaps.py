@@ -118,7 +118,7 @@ def _load_no_rebuy():
     """Cards the agent sold to a dealer (team13/state.json "no_rebuy", every day): never asked back in a swap."""
     try:
         st = json.loads((ROOT / "team13" / "state.json").read_text())
-        values.NO_REBUY = {r for refs in (st.get("no_rebuy") or {}).values() for r in refs}
+        values.NO_REBUY = set()  # off, see team13/agent.py: buying a page completer back is the best trade
     except (OSError, ValueError):
         pass
 

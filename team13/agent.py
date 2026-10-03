@@ -494,7 +494,9 @@ class Context:
             self.intel.set_catalog(self.catalog)
         else:
             self.values.update(self.me)
-        values_mod.NO_REBUY = {r for refs in (self.state.get("no_rebuy") or {}).values() for r in refs}  # every day
+        # Off: the organisers' scoring slide (Sat 20:25) makes buying back a page-completing card the best trade in the
+        # game (+50); the real loss was selling below value, which the dealer sell floor now forbids.
+        values_mod.NO_REBUY = set()
         self.state["ladder_deals"] = sum(1 for t in self.threads if t.get("kind") == "persona" and t["status"] == "deal")
         self._accepts = {"team": self.limit("accepts_per_team_per_tick", 1), "duel": 3}
 
