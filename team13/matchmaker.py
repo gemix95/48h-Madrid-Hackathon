@@ -170,7 +170,7 @@ class Matchmaker:
                 st["queue"].append((team, text.format(venue=venue, ref=ref, p=bid), key))
             queued += 1
             ctx.log("matchmaker", "match", ref=ref, bid=bid, why=why)  # who is who stays in our log only
-        if matches and tick - st.get("announced", -999) >= MATCH_EVERY:
+        if matches and ctx.S.get("matchmaker_announce", 0) and tick - st.get("announced", -999) >= MATCH_EVERY:
             cards = ", ".join(sorted({m[0] for m in matches})[:6])
             text = ANNOUNCE.format(venue=venue, cards=cards)[:ANNOUNCE_MAX]
             key = self._broker_key()
