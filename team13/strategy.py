@@ -89,10 +89,10 @@ KNOBS = {
     "duel_accept": (0.5, 0.4, 1.0, 0.05, "Duels", "Accept threshold",
                     "Take the rival's offer when it gives us this share of what our next offer would."),
     # market
-    "venue_fee_bps": (100, 0, 1000, 25, "Market", "Our market fee (bps)",
-                      "100 = 1%. Fees round up, so 1% costs 1 P on a typical 24 P trade, the same as Team 6's 0.5% and far below "
-                      "El Rastro (5% + 1 P per card). Fees earned do not score but fund our deals. Safety: if the Market Test ever "
-                      "has a match refused because of the fee, the agent drops it to 0% at once."),
+    "venue_fee_bps": (0, 0, 1000, 25, "Market", "Our market fee (bps)",
+                      "0 = free (Saturday default). Fees never score and a positive fee blocks thin Market Test pairs "
+                      "(ceil(bps*price/10000) on every match). El Duende / El Rastro Express are at 0%; Team 6 at 0.5%. "
+                      "Safety: if a bench match is refused or fee-blocked, or a Market Test is upcoming, the agent forces 0%."),
     "day_budget": (120, 20, 400, 10, "Money", "Buying budget per game day (P)",
                    "Most we spend on dealer purchases, bids and posted offers per day (Friday, Saturday, Sunday each get "
                    "their own). Page completers are exempt. The ladder scores how well we buy, not how much."),
@@ -118,7 +118,7 @@ PRESETS = {
     "Previous defaults": {"haggle_open": 0.45, "haggle_rounds": 12, "duel_rounds": 6, "duel_anchor": 0.6, "duel_accept": 0.9},
     "Fast closer": {"haggle_open": 0.6, "haggle_rounds": 7, "haggle_curve": 1.5, "trade_min_gain": 2,
                     "trade_ask_start": 1.1, "trade_bid_start": 0.75, "duel_rounds": 4, "duel_accept": 0.8},
-    "Market first": {"reserve_cash": 270, "trade_bid_share": 0.2, "haggle_buy_cards": 0, "venue_fee_bps": 100},
+    "Market first": {"reserve_cash": 270, "trade_bid_share": 0.2, "haggle_buy_cards": 0, "venue_fee_bps": 0},
 }
 
 # Simulated scores per preset (tests/tournament.py, see tests/RESULTS.md)

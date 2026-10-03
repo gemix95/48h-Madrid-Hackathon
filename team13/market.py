@@ -2,15 +2,18 @@
 
 Why it matters: market-making is 30 points. Most come from the Market Test (our broker's matching quality, see
 smart_broker.py); the rest from the value OTHER teams create trading on our venue. Fees earned never score, so:
-  - fee 0%: the cheapest market in the game (El Rastro charges 5% + 1 P per card);
-  - a board venue run by our smart broker (fair midpoint matching, best pairs first);
+  - fee 0% (Saturday default): match El Duende / El Rastro Express, beat Team 6's 0.5%, and never block thin
+    Market Test pairs (El Rastro still takes 5% + 1 P per card);
+  - a board venue run by our smart broker (fair midpoint matching, best pairs first, stall floor);
   - announcements on the big screen through the broker, and one personal invitation per team per game day,
     written by Claude when the AI negotiator is on.
 We can never trade on our own venue (self_venue), so this module only ever helps others trade.
 """
 from __future__ import annotations
 
+import json
 import threading
+from pathlib import Path
 
 from bazaar_sdk import BazaarError, Broker
 
@@ -44,6 +47,7 @@ class Market:
             return self.try_open()
         self.ensure_broker()
         tick = ctx.clock.get("tick", 0)
+        self.force_zero_for_bench(tick)  # fee changes need a notice: drop before the Market Test
         self.fee_safety()
         self.sync_fee(tick)
         if tick - st.get("announce_tick", -99) >= 20:
@@ -75,45 +79,95 @@ class Market:
             ctx.log("market", "open_refused", code=e.code, error=str(e)[:200])  # venue_not_live: team markets open at +3h
 
     # ------------------------------------------------------------------ fee: follow the Strategy tab, with a safety
+    def live_fee_bps(self):
+        """Fee currently advertised on our open venue (from /api/venues), else the last fee we set."""
+        st = self.ctx.state
+        for v in getattr(self.ctx, "venues", None) or []:
+            if v.get("venue") == st.get("venue"):
+                return int(v.get("fee_bps", st.get("fee_set") or 0))
+        return int(st.get("fee_set") or self.ctx.S.get("venue_fee_bps") or 0)
+
+    def drop_fee_to_zero(self, reason, **detail):
+        """Persist venue_fee_bps=0 so sync_fee announces the change (worth up to 30 Market Test points)."""
+        import strategy
+        ctx = self.ctx
+        if not ctx.S.get("venue_fee_bps") and self.live_fee_bps() == 0:
+            return False
+        cur = strategy.load()
+        strategy.save({k: v for k, v in cur.items() if v != strategy.defaults().get(k)} | {"venue_fee_bps": 0})
+        ctx.S["venue_fee_bps"] = 0
+        ctx.log("market", "fee_dropped_for_market_test", reason=reason, **detail)
+        return True
+
     def sync_fee(self, tick):
         """Apply the Strategy tab's fee to our open market (fee changes take effect after a public notice)."""
         ctx, st = self.ctx, self.ctx.state
         want = int(ctx.S["venue_fee_bps"])
-        if st.get("fee_set") == want or tick - st.get("fee_try_tick", -99) < 10:
+        live = self.live_fee_bps()
+        if st.get("fee_set") == want and live == want:
+            return
+        if tick - st.get("fee_try_tick", -99) < 10:
             return
         st["fee_try_tick"] = tick
         try:
             ctx.api.set_fee(st["venue"], want, 0)
             st["fee_set"] = want
-            ctx.log("market", "fee_changed", fee_bps=want)
+            ctx.log("market", "fee_changed", fee_bps=want, was_live=live)
         except BazaarError as e:
             ctx.log("market", "fee_change_refused", fee_bps=want, error=str(e)[:200])
 
-    def fee_safety(self):
-        """If the Market Test ever had a match refused because of our fee, drop the fee to 0% (it is worth 30 points)."""
-        import json as _json
-        from pathlib import Path
+    def force_zero_for_bench(self, tick):
+        """Drop fee to 0% as soon as a Market Test is on the schedule or already in the book.
+
+        Fee changes need a public notice, so waiting for a refused match during the test is too late.
+        """
         ctx, st = self.ctx, self.ctx.state
-        if not ctx.S["venue_fee_bps"]:
+        if not ctx.S.get("venue_fee_bps") and self.live_fee_bps() == 0:
             return
-        log = Path(__file__).parent / "logs" / "broker.jsonl"
-        if not log.exists():
+        # Live bench offers in our book (broker thread may already be matching)
+        if tick - st.get("bench_sched_tick", -99) >= 5:
+            st["bench_sched_tick"] = tick
+            try:
+                up = [u for u in ctx.raw.schedule().get("upcoming", []) if u.get("action") == "bench"]
+                if up:
+                    self.drop_fee_to_zero("upcoming_bench", when=up[0].get("at") or up[0].get("game_hour"))
+                    return
+            except BazaarError as e:
+                ctx.log("market", "bench_schedule_failed", error=str(e)[:120])
+        blog = Path(__file__).parent / "logs" / "broker.jsonl"
+        if blog.exists():
+            # Cheap tail check: any recent book event with bench>0 while we still charge a fee
+            for line in blog.read_text().splitlines()[-30:]:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if r.get("event") == "book" and r.get("bench", 0) > 0:
+                    self.drop_fee_to_zero("bench_live", tick=r.get("tick"))
+                    return
+
+    def fee_safety(self):
+        """If the Market Test had a match refused or silently fee-blocked, drop the fee to 0%."""
+        ctx, st = self.ctx, self.ctx.state
+        if not ctx.S.get("venue_fee_bps") and self.live_fee_bps() == 0:
+            return
+        blog = Path(__file__).parent / "logs" / "broker.jsonl"
+        if not blog.exists():
             return
         seen = st.get("fee_safety_lines", 0)
-        lines = log.read_text().splitlines()
+        lines = blog.read_text().splitlines()
         st["fee_safety_lines"] = len(lines)
         for line in lines[seen:]:
             try:
-                r = _json.loads(line)
+                r = json.loads(line)
             except ValueError:
                 continue
-            if r.get("event") == "match_refused" and str(r.get("sell", "")).startswith("b") and "fee" in str(r.get("error", "")).lower():
-                import strategy
-                cur = strategy.load()
-                cur["venue_fee_bps"] = 0
-                strategy.save({k: v for k, v in cur.items() if v != strategy.defaults().get(k)} | {"venue_fee_bps": 0})
-                ctx.S["venue_fee_bps"] = 0
-                ctx.log("market", "fee_dropped_for_market_test", error=str(r.get("error"))[:160])
+            ev = r.get("event")
+            if ev == "fee_blocked":
+                self.drop_fee_to_zero("fee_blocked", sell=r.get("sell"), buy=r.get("buy"))
+                return
+            if ev == "match_refused" and str(r.get("sell", "")).startswith("b") and "fee" in str(r.get("error", "")).lower():
+                self.drop_fee_to_zero("match_refused", error=str(r.get("error"))[:160])
                 return
 
     # ------------------------------------------------------------------ broker (Market Test + real offers)

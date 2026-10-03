@@ -11,7 +11,8 @@ Bench traders shade their quotes away from hidden limits and most relax them as 
   - track every bench offer's quote over time and estimate its limit (quote minus learned shading);
   - compute the efficient set per run on the estimates and match intramarginal pairs as soon as they cross;
   - let extra-marginal pairs trade only late in the session, or when a trader looks about to leave;
-  - fall back to the stall's plan if anything is off, so we never do worse than half points by construction.
+  - fall back to the stall's plan on errors, and always union leftover stall crosses (stall_floor), so we never
+    score below half bench points by construction; fee_blocked events tell market.py to force 0% fee.
 Real offers on our venue are crossed card by card exactly like the starter (lowest ask vs highest bid covering fee).
 """
 from __future__ import annotations
@@ -103,6 +104,13 @@ class Tracker:
         return False
 
 
+def _price_with_fee(ask, bid, fee):
+    """Midpoint, walked down until the buyer also covers the venue fee. None if no price works."""
+    if bid < ask:
+        return None
+    return next((p for p in range((ask + bid) // 2, ask - 1, -1) if p + fee(p) <= bid), None)
+
+
 def smart_bench_plan(book, tracker, tick, fee):
     plan = []
     runs: dict = {}
@@ -138,13 +146,55 @@ def smart_bench_plan(book, tracker, tick, fee):
                     continue
                 if s[0] not in intra_s:
                     continue
-                ask, bid = s[2], b[2]
-                price = next((p for p in range((ask + bid) // 2, ask - 1, -1) if p + fee(p) <= bid), None) if bid >= ask else None
+                price = _price_with_fee(s[2], b[2], fee)
                 if price is not None:
                     plan.append((s[0], b[0], price))
                     used |= {s[0], b[0]}
                     break
     return plan
+
+
+def _bench_quotes(book):
+    asks, bids = {}, {}
+    for o in book.get("bench_offers") or []:
+        if (o.get("want") or {}).get("cash"):
+            asks[o["id"]] = o["want"]["cash"]
+        elif (o.get("give") or {}).get("cash"):
+            bids[o["id"]] = o["give"]["cash"]
+    return asks, bids
+
+
+def stall_floor(book, plan, fee):
+    """Add any free-stall crosses the smart plan skipped, so we never score below half bench points.
+
+    Impatient / hard Market Tests leave before our limit estimates settle; taking the leftover stall pairs
+    restores the floor while keeping the smart plan's preferred intramarginal matches first.
+    """
+    used = {oid for s, b, _ in plan for oid in (s, b)}
+    out = list(plan)
+    asks, bids = _bench_quotes(book)
+    for sell, buy, _mid in starter_plans.bench_plan(book):
+        if sell in used or buy in used:
+            continue
+        ask, bid = asks.get(sell), bids.get(buy)
+        if ask is None or bid is None:
+            continue
+        price = _price_with_fee(ask, bid, fee)
+        if price is None:
+            log(event="fee_blocked", sell=sell, buy=buy, ask=ask, bid=bid)
+            continue
+        out.append((sell, buy, price))
+        used |= {sell, buy}
+    return out
+
+
+def log_fee_blocks(book, fee):
+    """Surface quote-crossing bench pairs that our fee makes unmatchable (fee_safety watches this)."""
+    asks, bids = _bench_quotes(book)
+    for sell, buy, _ in starter_plans.bench_plan(book):
+        ask, bid = asks.get(sell), bids.get(buy)
+        if ask is not None and bid is not None and _price_with_fee(ask, bid, fee) is None:
+            log(event="fee_blocked", sell=sell, buy=buy, ask=ask, bid=bid)
 
 
 def main():
@@ -195,17 +245,23 @@ def run(url, key):
 
             def fee(p):
                 return math.ceil(fee_bps * p / 10000) + per_card
-            now = (tick, sorted(o["id"] for o in bench + (book.get("offers") or [])))
+            # Include quotes so a mid-tick reprice (bench traders relax) triggers a new plan.
+            now = (tick, sorted((o["id"], (o.get("want") or {}).get("cash") or (o.get("give") or {}).get("cash"))
+                                for o in bench + (book.get("offers") or [])))
             if now != seen:
                 seen = now
                 try:
                     plan = smart_bench_plan(book, tracker, tick, fee)
+                    plan = stall_floor(book, plan, fee)  # never below the free stall
                 except Exception as e:  # never worse than the stall
                     log(event="smart_plan_failed", error=repr(e))
                     plan = starter_plans.bench_plan(book)
+                if fee_bps or per_card:
+                    log_fee_blocks(book, fee)
                 plan += starter_plans.public_plan(book)
                 if bench and tick % 4 == 0:
-                    log(event="book", tick=tick, bench=len(bench), sample=bench[:2], keys=sorted(book))
+                    log(event="book", tick=tick, bench=len(bench), sample=bench[:2], keys=sorted(book),
+                        fee_bps=fee_bps, fee_per_card=per_card)
                 for sell, buy, price in plan:
                     try:
                         broker.match(sell, buy, price)
