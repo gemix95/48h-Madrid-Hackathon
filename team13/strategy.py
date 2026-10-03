@@ -62,6 +62,8 @@ KNOBS = {
     "buy_open_margin": (0.6, 0.1, 0.8, 0.05, "Dealers", "First offer under our value",
                         "Open at (1 - this) x our value (lower if the list-price rule opens lower), then concede "
                         "Boulware-style up to the cap, reaching it at the round this dealer usually names its final (every team's conversations)."),
+    "flag_bluffs_picaros": (1, 0, 1, 1, "Dealers", "Flag Los Pícaros' false finals",
+                            "They are announced as bad faith: a price called final and beaten later in the same thread is flagged."),
     "abuela_visits": (1, 0, 1, 1, "Dealers", "Abuela gift visits",
                       "Every 2 game hours one kind message to Abuela, no price and no buy: she gives kind teams a small gift."),
     "abuela_haggle_per_hour": (6, 0, 10, 1, "Dealers", "Abuela haggles per hour",

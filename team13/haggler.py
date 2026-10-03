@@ -495,8 +495,29 @@ class Haggler:
         except BazaarError as e:
             self.ctx.log("haggle", "close_refused", thread=th["id"], error=str(e)[:160])
 
+    @staticmethod
+    def switched(offer, th) -> str | None:
+        """Why this dealer offer is not the deal the thread is about (a card switched in the structure), or None.
+        Los Pícaros name one card and sell another; nobody may take a card of ours we did not put on the table."""
+        topic = th.get("topic") or {}
+        want_card = (topic.get("buy") or {}).get("card")
+        g, w = offer.get("give") or {}, offer.get("want") or {}
+        given = [x.split(":", 1)[1] for x in g.get("types") or [] if x.startswith("card:")]
+        given += [a.get("ref") for a in g.get("assets") or [] if isinstance(a, dict)]
+        if want_card and given != [want_card]:
+            return f"offer gives {given or 'no card'}, the thread is for {want_card}"
+        ours = set((topic.get("sell") or {}).get("assets") or [])
+        asked = {a.get("id") if isinstance(a, dict) else a for a in w.get("assets") or []}
+        if topic.get("sell") and (not asked or not asked <= ours):
+            return f"offer asks for assets {sorted(asked)}, we sell {sorted(ours)}"
+        return None
+
     def _accept(self, offer, th, plan, reason):
         ctx = self.ctx
+        why = self.switched(offer, th)
+        if why:
+            ctx.log("haggle", "switch_refused", thread=th["id"], offer=offer.get("id"), dealer=th.get("with"), why=why)
+            return
         try:
             ctx.api.accept(offer["id"])
             price = plan.get("asks", [None])[-1]

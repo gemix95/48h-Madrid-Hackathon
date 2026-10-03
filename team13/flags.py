@@ -28,6 +28,9 @@ PRINT_RUN = re.compile(r"only (\d+) (?:printed|exist|ever made|in the world)", r
 LIST_PRICE = re.compile(r"list(?:ed)? (?:price )?(?:is |at )?(\d+)", re.I)
 
 
+BAD_FAITH_DEALERS = {"picaros"}
+
+
 class FlagHunter:
     def __init__(self, ctx):
         self.ctx = ctx
@@ -98,11 +101,16 @@ class FlagHunter:
         for th in ctx.threads:
             if th.get("kind") != "persona":
                 continue
+            # Los Pícaros are announced as "bargains and bad faith": a card switched against the words or our topic,
+            # and a "final" beaten in the same conversation, are proven by their own structured offers
+            rogue = th.get("with") in BAD_FAITH_DEALERS
             for kind, mid, reason, _auto in self.findings(th):
                 if mid in flagged:
                     continue
                 flagged.append(mid)
-                if not (allow[kind] and ctx.S.get("auto_flag_proven", 1)):
+                ok = allow[kind] or (rogue and (kind in ("item_name", "item_topic")
+                                                or (kind == "bluff" and ctx.S.get("flag_bluffs_picaros", 1))))
+                if not (ok and ctx.S.get("auto_flag_proven", 1)):
                     ctx.log("flag", "candidate", kind=kind, message=mid, thread=th["id"], dealer=th.get("with"), reason=reason)
                     continue
                 try:
