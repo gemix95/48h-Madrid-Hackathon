@@ -193,7 +193,12 @@ class Haggler:
             key = f"{dealer['id']}:sell:{a['rarity']}"
             if key not in unsupported:
                 hi_ask = self._opening(stats.get(key), {"list_price": book}, side="sell")
-                return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": math.ceil(book * 0.6),
+                # only a sale above our third-best price with this dealer improves the ladder's best three
+                done = sorted((stats.get(key) or {}).get("deals") or [], reverse=True)
+                floor = max(math.ceil(book * 0.6), (done[2] + 1) if len(done) >= 3 else 0)
+                if floor >= hi_ask:
+                    return None
+                return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": floor,
                                                        "hi": hi_ask, "list": book, "asset": a["id"], "ref": a["ref"],
                                                        "ladder": True}
         # 3) one card: the copy worth most to us that we can actually close.
