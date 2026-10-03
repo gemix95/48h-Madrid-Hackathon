@@ -6,6 +6,7 @@ __pycache__/
 history.json
 team13/state.json
 team13/state.tmp
+team13/venue_bootstrap.json
 team13/logs/*
 !team13/logs/council.jsonl
 !team13/logs/council_state.json

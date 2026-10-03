@@ -23,6 +23,7 @@ class Values:
     def __init__(self, pack_worth, wish):
         self.pw, self.wish = pack_worth, wish
         self.cards = {"SAL-08": {"rarity": "uncommon", "book": 25}}
+        self.assets = []
 
     def pack_ev(self, pack):
         return self.pw
@@ -51,13 +52,17 @@ class Intel:
 class Ctx:
     def __init__(self, pack_worth=13.0, wish=(("SAL-08", 40.0),), best=None, rounds=(5, 6, 5, 6), every_team={"mean": 5.3, "n": 74}):
         self.S = {**strategy.defaults(), "use_intel": 1}
-        self.state = {"dealer_stats": {"abuela:buy:sobre_barrio": {"deals": [21], "walked": 0, "rounds": list(rounds)}}}
+        self.state = {"dealer_stats": {"abuela:buy:sobre_barrio": {"deals": [21], "walked": 0, "rounds": list(rounds)}},
+                      "abuela_visit_hours": 5}
         self.me, self.threads, self.clock = {"cash": 300}, [{"id": 1, "kind": "persona", "with": "abuela", "status": "deal"}], {"tick": 10, "t_hours": 5}
         self.catalog, self.values, self.intel = {"packs": [PACK]}, Values(pack_worth, list(wish)), Intel(best, every_team)
         self.me["unlocked"], self.dealers, self.said = ["abuela"], [ABUELA], []
 
     def reserve(self):
         return 0
+
+    def locked_assets(self):
+        return set()
 
     def budget_left(self):
         return 120
@@ -125,13 +130,14 @@ results.append(check("pack skipped when nobody ever got it that cheap", topic !=
 
 # 4) a single card worth 40 to us, list 25: the list price binds (25), the opening is the lower of the two rules
 results.append(check("card topic", topic == {"buy": {"card": "SAL-08"}}, topic))
-results.append(check("card cap: min(list, 85% of value, value - 3)", plan["hi"] == min(25, math.floor(40 * 0.85), 40 - 3), plan["hi"]))
-results.append(check("card opening: lower of list rule and 40% of value", plan["lo"] == min(math.floor(25 * ctx.S["haggle_open"]), math.floor(40 * 0.4)), plan["lo"]))
+results.append(check("card cap: min(list, 85% of value)", plan["hi"] == min(25, math.floor(40 * 0.85)), plan["hi"]))
+results.append(check("card opening near prices that close, not a lowball",
+                     plan["lo"] == max(min(math.floor(25 * ctx.S["haggle_open"]), math.floor(40 * 0.4)), math.floor(19 * 0.75)),
+                     plan["lo"]))
 
-# 5) a card worth only 12 to us: cap at 9 even though its list price is 25
+# 5) a card worth only 12, and nobody ever closed under 19: do not open. Walking burns the hourly quota.
 ctx = Ctx(best=19, wish=(("SAL-08", 12.0),)); h = Haggler(ctx)
-topic, plan = h.choose_topic(ABUELA)
-results.append(check("cheap-to-us card capped at its value", plan["hi"] == min(math.floor(12 * 0.85), 12 - 3), plan["hi"]))
+results.append(check("card skipped when our cap cannot reach any real close", h.choose_topic(ABUELA) is None))
 
 # 6) nobody has finished a conversation with this dealer yet: the knob
 ctx = Ctx(every_team={}); h = Haggler(ctx)

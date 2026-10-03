@@ -196,22 +196,47 @@ class Haggler:
                 return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": math.ceil(book * 0.6),
                                                        "hi": hi_ask, "list": book, "asset": a["id"], "ref": a["ref"],
                                                        "ladder": True}
-        for s in menu.get("sells", []):  # 3) buy single cards we want, cheaply
-            if can_buy and S["haggle_buy_cards"] and s.get("rarity") and cash > 15 and item_cap >= 5:
-                for ref, gain in ctx.values.wishlist():
+        # 3) one card: the copy worth most to us that we can actually close.
+        # Saturday: 8 closes out of 81 uncommon threads. Almost all of those were El Retiro / La Latina,
+        # worth 12–17 P to us, while every team closes uncommons at 20–26. We walked, the hourly quota
+        # was gone, and the ladder (best three per level) stayed near zero. A missing deal scores 0,
+        # so we only open when our cap reaches the cheapest price anyone has already paid.
+        best_card = None
+        if can_buy and S["haggle_buy_cards"] and cash > 15 and item_cap >= 5:
+            for s in menu.get("sells", []):
+                if not s.get("rarity"):
+                    continue
+                key = f"{dealer['id']}:buy:{s['rarity']}"
+                if key in unsupported:
+                    continue
+                adv = (intel.advice(dealer["id"], f"buy:card:{s['rarity']}") or {}) if intel else {}
+                market_best = adv.get("best")
+                for ref, gain in ctx.values.wishlist(limit=40):
                     if ctx.values.cards[ref]["rarity"] != s["rarity"]:
                         continue
-                    key = f"{dealer['id']}:buy:{s['rarity']}"
-                    if key in unsupported:
-                        break
                     v_lo, v_hi = self._value_band(gain)
-                    hi = min(math.floor(s.get("list_price", 10) * S["haggle_cap"]), cash, math.floor(gain - S["trade_min_gain"]), v_hi, item_cap)
+                    # Pay up to what it is worth. trade_min_gain is for team trades; a dealer buy scores
+                    # on the ladder, and the best Chato rare (77) is exactly a Lavapiés rare's value.
+                    hi = min(math.floor(s.get("list_price", 10) * S["haggle_cap"]), cash, math.floor(gain), v_hi, item_cap)
                     if hi < 3:
-                        break
+                        continue
+                    if market_best is not None and hi < market_best:
+                        continue
                     lo = min(self._opening(stats.get(key), s, side="buy"), v_lo)
-                    return {"buy": {"card": ref}}, {"side": "buy", "key": key, "lo": min(lo, hi), "hi": hi,
-                                                    "list": s.get("list_price"), "ref": ref, "worth": round(gain, 1),
-                                                    "rounds": self._rounds(dealer["id"])}
+                    # Chato mirrors the step and walks on a lowball. Open near the prices that close.
+                    closeable = None
+                    if market_best is not None:
+                        closeable = min(hi - 1, max(1, math.floor(market_best * 0.75)))
+                        lo = max(lo, closeable)
+                    lo = min(lo, hi)
+                    if best_card is None or gain > best_card[0]:
+                        plan = {"side": "buy", "key": key, "lo": lo, "hi": hi, "list": s.get("list_price"),
+                                "ref": ref, "worth": round(gain, 1), "rounds": self._rounds(dealer["id"])}
+                        if closeable:
+                            plan["closeable_open"] = closeable
+                        best_card = (gain, {"buy": {"card": ref}}, plan)
+        if best_card:
+            return best_card[1], best_card[2]
         return None
 
     def _team_acquired(self) -> set:
@@ -282,6 +307,9 @@ class Haggler:
                 plan["lo"] = max(1, min(plan["hi"] - 1, math.floor(ratio * opening)))
                 if plan.get("worth"):  # the learned first offer may not open above our value-based opening
                     plan["lo"] = min(plan["lo"], self._value_band(plan["worth"])[0])
+                # a lowball that never closed (learned ~38% of her ask) is how Chato and Abuela stopped moving
+                if plan.get("closeable_open"):
+                    plan["lo"] = min(plan["hi"], max(plan["lo"], plan["closeable_open"]))
                 plan.update(arm=arm, cls=cls, learned_first=ratio, final_max_r=L.model.get("final_max_vs_opening"),
                             lessons=L.model.get("lessons"))
         adv = ctx.intel.advice(dealer_id, cls)

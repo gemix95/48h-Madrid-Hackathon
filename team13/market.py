@@ -20,6 +20,9 @@ import re
 import threading
 from pathlib import Path
 
+HERE = Path(__file__).parent
+BOOTSTRAP = HERE / "venue_bootstrap.json"  # one-shot reopen; consumed on next market step
+
 from bazaar_sdk import BazaarError, Broker
 from venues import safe_markets
 
@@ -175,11 +178,16 @@ class Market:
     def reconcile_venue(self, tick):
         """After a close, drop local venue state when the bond refund tick passes so we can reopen under a new name."""
         ctx, st = self.ctx, self.ctx.state
+        self._consume_bootstrap(tick)
+        self._sync_live_venue(tick)
         vid = st.get("venue")
         if vid:
             live = next((v for v in (ctx.venues or []) if v.get("venue") == vid), None)
             if live and live.get("status") == "closed":
                 self._clear_venue_state(tick, reason="closed")
+                return
+            if live is None:  # closed venues drop off the open list
+                self._clear_venue_state(tick, reason="not_open")
                 return
         intel = getattr(ctx, "intel", None)
         if intel and vid:
@@ -196,12 +204,83 @@ class Market:
         refund_at = int(st.get("venue_refund_at_tick") or 0)
         if vid and refund_at and tick >= refund_at:
             self._clear_venue_state(tick, reason="refund_ready")
+        self.maybe_migrate_auto(tick)
+
+    def _consume_bootstrap(self, tick):
+        """Merge venue + broker key written by a one-shot reopen script (survives agents with stale in-memory state)."""
+        if not BOOTSTRAP.exists():
+            return
+        try:
+            data = json.loads(BOOTSTRAP.read_text())
+        except (ValueError, OSError):
+            return
+        vid, key = data.get("venue"), data.get("broker_key")
+        if not vid or not key:
+            return
+        st = self.ctx.state
+        st["venue"] = vid
+        st["broker_key"] = key
+        st["fee_set"] = int(data.get("fee_bps", self.ctx.S.get("venue_fee_bps", 0)))
+        st.setdefault("venue_keys", {})[vid] = key
+        try:
+            BOOTSTRAP.unlink()
+        except OSError:
+            pass
+        self.ctx.log("market", "bootstrap_applied", venue=vid, tick=tick)
+        council_note("market", f"Adopted {vid} from bootstrap (board broker key restored).", tick=tick)
+
+    def _sync_live_venue(self, tick):
+        """Keep state aligned with /api/me when another process reopened or the feed dropped a close event."""
+        ctx, st = self.ctx, self.ctx.state
+        live = self._our_open_venue()
+        if not live:
+            return
+        vid = live["venue"]
+        keys = st.setdefault("venue_keys", {})
+        if st.get("venue") != vid:
+            st["venue"] = vid
+            if keys.get(vid):
+                st["broker_key"] = keys[vid]
+            ctx.log("market", "venue_sync", venue=vid, tick=tick)
+        elif not st.get("broker_key") and keys.get(vid):
+            st["broker_key"] = keys[vid]
+
+    def _our_open_venue(self):
+        ctx = self.ctx
+        v = ctx.me.get("venue") or {}
+        if v.get("status") == "open" and v.get("owner") == ctx.me.get("id"):
+            return v
+        for row in ctx.venues or []:
+            if row.get("owner") == ctx.me.get("id") and row.get("status") == "open":
+                return row
+        return None
+
+    def _want_board(self):
+        return int(self.ctx.S.get("venue_mechanism", 1)) != 0
+
+    def maybe_migrate_auto(self, tick):
+        """Auto stalls cap Market Test points; close and reopen as board when strategy asks for board."""
+        ctx, st = self.ctx, self.ctx.state
+        if not self._want_board() or st.get("venue_refund_at_tick", 0) > tick:
+            return
+        live = self._our_open_venue()
+        if not live or (live.get("rules") or {}).get("mechanism") != "auto":
+            return
+        if tick - st.get("migrate_try_tick", -999) < 20:
+            return
+        st["migrate_try_tick"] = tick
+        try:
+            ctx.api.close_venue(live["venue"])
+            ctx.log("market", "migrate_auto_close", venue=live["venue"], tick=tick)
+            council_note("market", f"Closed {live['venue']} (auto) to reopen as board before the next Market Test.", tick=tick)
+        except BazaarError as e:
+            ctx.log("market", "migrate_auto_close_refused", error=str(e)[:200])
 
     def _clear_venue_state(self, tick, reason):
         ctx, st = self.ctx, self.ctx.state
         old = st.get("venue")
         for key in ("venue", "broker_key", "fee_set", "venue_refund_at_tick", "announce_tick", "announce_n",
-                    "fee_try_tick", "bench_sched_tick", "bench_eta", "bench_eta_tick"):
+                    "fee_try_tick", "bench_sched_tick", "bench_eta", "bench_eta_tick", "market_wait_log"):
             st.pop(key, None)
         ctx.log("market", "venue_cleared_for_reopen", old=old, reason=reason, tick=tick, name=VENUE_NAME[:40])
         council_note("market", f"Cleared {old} ({reason}); reopening as «{VENUE_NAME[:40]}» when cash allows.", tick=tick)
@@ -221,12 +300,13 @@ class Market:
         st["venue_try_tick"] = ctx.clock.get("tick", 0)
         try:
             ft = fee_text(int(S["venue_fee_bps"]))
-            # auto: the engine crosses every pair itself, which is Team 5's stall. A board venue scores 0 for
-            # any tick our broker is down. Only used when we open; an open market cannot change mechanism.
+            mech = "board" if self._want_board() else "auto"
             res = ctx.api.open_venue(VENUE_NAME[:40], fee_bps=int(S["venue_fee_bps"]), fee_per_card=0,
-                                     rules={"mechanism": "auto"}, description=DESCRIPTION.format(fee=ft))
+                                     rules={"mechanism": mech}, description=DESCRIPTION.format(fee=ft))
             st["venue"] = res.get("venue") or res.get("id")
             st["broker_key"] = res.get("broker_key")
+            if st.get("venue") and st.get("broker_key"):
+                st.setdefault("venue_keys", {})[st["venue"]] = st["broker_key"]
             st["fee_set"] = int(S["venue_fee_bps"])
             ctx.log("market", "opened", venue=st["venue"], fee_bps=int(S["venue_fee_bps"]))
         except BazaarError as e:

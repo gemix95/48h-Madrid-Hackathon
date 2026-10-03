@@ -143,6 +143,9 @@ KNOBS = {
     "duel_silent_after": (1, 1, 3, 1, "Duels", "Follow-ups after rival goes quiet",
                           "After they spoke once: our unanswered messages before we park again and move on."),
     # market
+    "venue_mechanism": (1, 0, 1, 1, "Market", "Board venue (not auto stall)",
+                        "1 = board: smart_broker can score full Market Test points. 0 = auto: engine crosses like the free stall (half bench ceiling). "
+                        "Changing this closes an open auto venue and reopens as board once the bond refund lands."),
     "venue_fee_bps": (0, 0, 1000, 25, "Market", "Our market fee (bps)",
                       "0 = free (Saturday default). Fees never score and a positive fee blocks thin Market Test pairs "
                       "(ceil(bps*price/10000) on every match). El Duende / El Rastro Express are at 0%; Team 6 at 0.5%; "

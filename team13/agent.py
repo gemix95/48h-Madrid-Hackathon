@@ -155,7 +155,9 @@ class Context:
     def reserve(self):
         """Cash we keep back: the venue bond until our market is open (it is worth up to 30 points), then a floor."""
         floor = self.S.get("cash_floor", 40)
-        return floor if self.state.get("venue") else max(floor, self.S["reserve_cash"])
+        v = self.me.get("venue") or {}
+        open_ours = (v.get("status") == "open" and v.get("owner") == self.me.get("id")) or bool(self.state.get("venue"))
+        return floor if open_ours else max(floor, self.S["reserve_cash"])
 
     # ---------------------------------------------------------------- daily money plan
     def day_key(self):
