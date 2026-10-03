@@ -41,6 +41,7 @@ import council  # noqa: E402  (team13/council.py: El Consejo, the board where ou
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
 import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, and the one write the dashboard makes)
 import workshop_panel as workshop_tab  # noqa: E402  (El Taller tab; team13/workshop.py is the agent module)
+import ledger as cash_ledger  # noqa: E402  (Ledger tab: every prima that moved for us)
 HAND_LOG = HERE.parent / "logs" / "hand.jsonl"
 AUTO = swaps.Auto(on=os.environ.get("AUTO_SWAPS", "1") != "0")  # AUTO_SWAPS=0: this dashboard never sends swaps by itself
 
@@ -360,8 +361,10 @@ def poll():
             summ = INTEL.summary()
             me_id = (cache.get("me") or {}).get("id", "t13")
             learned = LEARNER.fit(summ.get("dealer_threads", []), me_id, summ.get("now_tick")) if INTEL.rarity else None
+            ledger_view = cash_ledger.build(list(INTEL.events.values()), me_id)
             with lock:
                 cache["intel"] = {k: v for k, v in summ.items() if k != "dealer_threads"}
+                cache["ledger"] = ledger_view
                 if learned:
                     cache["learner"] = learned
             intel_due = now + 10

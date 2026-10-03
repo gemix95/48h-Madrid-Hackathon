@@ -21,23 +21,35 @@ import tournament as T  # noqa: E402
 
 MIN_DEALS = 3          # real haggled deals needed before we trust the calibration
 MIN_GAIN = 0.015       # +1.5 points of the dealer's range captured, averaged
+# Cap goes up to the knob's max (1.2× list). Stopping at 1.0× made every candidate walk away from the
+# same above-list closes (rares at ~1.4×, some uncommons at ~1.2×), so the search reported 69% as the ceiling.
 GRID = {"haggle_open": [0.15, 0.2, 0.25, 0.3, 0.4, 0.5], "haggle_rounds": [8, 12, 18, 24],
-        "haggle_curve": [1.5, 2.2, 3.0], "haggle_cap": [0.9, 1.0]}
+        "haggle_curve": [1.5, 2.2, 3.0], "haggle_cap": [1.0, 1.1, 1.2]}
 
 
 def calibrate(summary: dict, list_prices: dict) -> dict:
-    open_r, floor_r, rounds = [], [], []
+    """One record per real deal: its opening and the price it closed at stay together.
+
+    Sampling those two ratios independently invented dealers whose floor sat above list even when that
+    deal had closed under it, and the search then scored a walk-away (0) on about a third of episodes.
+    """
+    deals = []
     for r in summary.get("dealer_deals", []):
         if r.get("beginner") or not r.get("opening") or not r.get("price") or not r["cls"].startswith("buy"):
             continue
         lst = list_prices.get(r["cls"])
-        if lst:
-            open_r.append(r["opening"] / lst)
-        floor_r.append(min(1.0, r["price"] / r["opening"]))
-        rounds.append(int(r.get("rounds") or 0) + 1)
-    if len(floor_r) < MIN_DEALS:
+        if not lst:
+            continue
+        deals.append({"open_ratio": r["opening"] / lst,
+                      "price_ratio": min(1.0, r["price"] / r["opening"]),
+                      "rounds": int(r.get("rounds") or 0) + 1})
+    if len(deals) < MIN_DEALS:
         return {}
-    return {"open_ratio": open_r or [1.15], "floor_ratio": floor_r, "rounds": rounds, "n": len(floor_r)}
+    return {"deals": deals,
+            "open_ratio": [d["open_ratio"] for d in deals],
+            "floor_ratio": [d["price_ratio"] for d in deals],
+            "rounds": [d["rounds"] for d in deals],
+            "n": len(deals)}
 
 
 def score(S, calib) -> float:

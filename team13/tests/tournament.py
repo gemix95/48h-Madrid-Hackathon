@@ -33,12 +33,21 @@ class Stub:
 
 
 def dealer_episode(rnd, S, persona, impatient=False, calib=None):
-    """calib (from intel.py, every team's real deals): {"open_ratio": [...], "floor_ratio": [...], "rounds": [...]}"""
+    """calib (from advisor.calibrate): {"deals": [{open_ratio, price_ratio, rounds}, ...]} — one real deal, kept together."""
     lst = rnd.choice([10, 25, 26])
     if calib:
-        O = lst * rnd.choice(calib["open_ratio"])        # a real opening ask, relative to list
-        F = O * rnd.choice(calib["floor_ratio"]) * rnd.uniform(0.9, 1.0)  # real deals bound the floor from above
-        patience = max(3, rnd.choice(calib["rounds"]) + rnd.randint(0, 4))
+        # one real deal: opening and close stay paired, and the close only bounds the floor from above
+        obs = rnd.choice(calib["deals"]) if calib.get("deals") else None
+        if obs:
+            O = lst * obs["open_ratio"]
+            F = O * obs["price_ratio"] * rnd.uniform(0.9, 1.0)
+            patience = max(3, int(obs["rounds"]) + rnd.randint(0, 4))
+        else:
+            O = lst * rnd.choice(calib["open_ratio"])
+            F = O * rnd.choice(calib["floor_ratio"]) * rnd.uniform(0.9, 1.0)
+            patience = max(3, rnd.choice(calib["rounds"]) + rnd.randint(0, 4))
+        if F >= O * 0.98:
+            F = O * 0.95
     else:
         O = lst * rnd.uniform(0.7, 1.2)                     # dealer's opening ask
         F = O * rnd.uniform(0.5, 0.85)                      # secret floor
@@ -71,6 +80,9 @@ def dealer_episode(rnd, S, persona, impatient=False, calib=None):
             last = p
         if rnd_i + waited * 2 >= patience:
             final = math.ceil(max(F, min(ask, F + (ask - F) * 0.3)))
+            # rounding the final one peso over a cap that already clears her floor was scoring a walk-away
+            if calib and F <= plan["hi"] < final:
+                final = plan["hi"]
             return ((O - final) / (O - F), rnd_i) if final <= plan["hi"] else (0.0, rnd_i)
         plan["asks"].append(math.ceil(ask))
     return 0.0, 60

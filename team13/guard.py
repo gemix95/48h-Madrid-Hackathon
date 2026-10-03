@@ -54,6 +54,10 @@ class Guard:
             out_refs, in_refs = self._refs(g), self._refs(w)
             if not out_refs and not in_refs:
                 continue
+            if o.get("thread") and out_refs and not in_refs:
+                th = next((t for t in ctx.threads if t.get("id") == o["thread"]), None)
+                if th and th.get("kind") == "persona" and (th.get("topic") or {}).get("sell"):
+                    continue  # negotiating scores dealer range capture, not our private card values
             loss = v.loss_of_removing(out_refs) + (g.get("cash") or 0) if out_refs else (g.get("cash") or 0)
             gain = v.gain_of_adding(in_refs) + (w.get("cash") or 0)
             over_cap = not out_refs and len(in_refs) == 1 and in_refs[0] in caps and (g.get("cash") or 0) > caps[in_refs[0]]

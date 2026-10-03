@@ -445,6 +445,16 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
 .spark-bar i.z { background: var(--critical); opacity: .55; }
 .board-empty { padding: 28px 18px; text-align: center; color: var(--text-secondary); }
 .board-empty b { display: block; font-size: 16px; color: var(--text-primary); margin-bottom: 6px; }
+.kpis.five { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 900px) { .kpis.five { grid-template-columns: repeat(2, 1fr); } }
+.ledger-scroll { max-height: 680px; overflow: auto; }
+.ledger-scroll th { position: sticky; top: 0; background: var(--surface-1); z-index: 1; }
+#ledger-by tr { cursor: pointer; }
+#ledger-by tr.on td { background: color-mix(in srgb, var(--series-1) 12%, transparent); }
+.ledger-q { width: 100%; margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: inherit; font: inherit; font-size: 13px; }
+.amt-out { color: var(--critical); font-weight: 650; }
+.amt-in { color: var(--up); font-weight: 650; }
 </style>
 </head>
 <body>
@@ -456,7 +466,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <span class="pill" id="next">next tick –</span>
     <span class="err" id="err"></span>
     <nav id="tabs">
-      <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a>
+      <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a><a href="#ledger">Ledger</a>
       <a href="#duels">Duels<span class="pulse" id="duels-pulse" style="display:none">0</span></a>
       <a href="#album">Album</a><a href="#workshop">Workshop</a>
       <a href="#market">Market</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a><a href="#council">Council</a>
@@ -660,6 +670,22 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
     <div id="brain-stats" style="display:none"></div>
   </main>
 
+  <main class="tab" id="tab-ledger">
+    <div class="kpis five" id="ledger-kpis"></div>
+    <div class="grid">
+      <section class="card s5">
+        <h2>Where the money went <span class="hint">click a row to filter the list</span></h2>
+        <div id="ledger-by"></div>
+      </section>
+      <section class="card s7">
+        <h2>Every transaction <span class="hint" id="ledger-hint">newest first</span></h2>
+        <div class="chips" id="ledger-filters"></div>
+        <input id="ledger-q" class="ledger-q" type="search" placeholder="Card, team, or place" autocomplete="off">
+        <div id="ledger-rows"></div>
+      </section>
+    </div>
+  </main>
+
   <main class="tab" id="tab-council">
     <div class="grid">
       <section class="card s12"><h2>El Consejo <span class="hint">our agents' shared board: what each module learnt, and how the strategy tunes itself</span></h2><div id="council-head"></div></section>
@@ -671,6 +697,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
 <div class="tip" id="tip"></div>
 </div>
 
+<script id="ledger-seed" type="application/json">[{"id":"s-11","tick":4,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"SAL-06","name":"La Galería","kind":"card","dir":"in"}],"price":17,"fee":0,"out":17,"in":0,"note":""},{"id":"s-25","tick":12,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"SAL-03","name":"Perrito con Abrigo","kind":"card","dir":"in"}],"price":10,"fee":0,"out":10,"in":0,"note":""},{"id":"s-35","tick":20,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"SAL-05","name":"Taxi Blanco","kind":"card","dir":"in"}],"price":10,"fee":0,"out":10,"in":0,"note":""},{"id":"s-62","tick":38,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"MAL-06","name":"Tienda de Discos","kind":"card","dir":"in"}],"price":21,"fee":0,"out":21,"in":0,"note":""},{"id":"s-73","tick":44,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"SAL-08","name":"Guantería Antigua","kind":"card","dir":"in"}],"price":24,"fee":0,"out":24,"in":0,"note":""},{"id":"s-80","tick":47,"kind":"sell","with":"t14","where":"rastro","items":[{"ref":"LAT-09","name":"San Isidro","kind":"card","dir":"out"}],"price":65,"fee":5,"out":0,"in":65,"note":""},{"id":"s-84","tick":52,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"sobre_barrio","name":"Neighbourhood pack","kind":"pack","dir":"in"}],"price":22,"fee":0,"out":22,"in":0,"note":""},{"id":"s-85","tick":52,"kind":"buy","with":"t14","where":"rastro","items":[{"ref":"MAL-05","name":"Café de Madrugada","kind":"card","dir":"in"}],"price":6,"fee":2,"out":6,"in":0,"note":""},{"id":"s-86","tick":52,"kind":"buy","with":"t05","where":"rastro","items":[{"ref":"MAL-02","name":"Plaza del Dos de Mayo","kind":"card","dir":"in"}],"price":6,"fee":2,"out":6,"in":0,"note":""},{"id":"s-89","tick":53,"kind":"buy","with":"t05","where":"rastro","items":[{"ref":"MAL-08","name":"La Vía Láctea","kind":"card","dir":"in"}],"price":26,"fee":3,"out":26,"in":0,"note":""},{"id":"s-104","tick":65,"kind":"buy","with":"t04","where":"rastro","items":[{"ref":"SAL-09","name":"El Marqués","kind":"card","dir":"in"}],"price":74,"fee":5,"out":74,"in":0,"note":""},{"id":"s-134","tick":80,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"LAT-04","name":"Mercado de la Cebada","kind":"card","dir":"out"}],"price":6,"fee":0,"out":0,"in":6,"note":""},{"id":"s-140","tick":83,"kind":"sell","with":"t15","where":"rastro","items":[{"ref":"LAT-01","name":"Caña en la Cava Baja","kind":"card","dir":"out"},{"ref":"LAT-07","name":"Vermut del Domingo","kind":"card","dir":"out"}],"price":40,"fee":4,"out":0,"in":40,"note":""},{"id":"s-153","tick":98,"kind":"buy","with":"t10","where":"rastro","items":[{"ref":"SAL-10","name":"Museo Lázaro Galdiano","kind":"card","dir":"in"}],"price":70,"fee":5,"out":70,"in":0,"note":""},{"id":"s-171","tick":99,"kind":"buy","with":"t06","where":"rastro","items":[{"ref":"MAL-01","name":"Vinilo de la Movida","kind":"card","dir":"in"}],"price":6,"fee":2,"out":6,"in":0,"note":""},{"id":"s-175","tick":101,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"sobre_barrio","name":"Neighbourhood pack","kind":"pack","dir":"in"}],"price":22,"fee":0,"out":22,"in":0,"note":""},{"id":"s-181","tick":104,"kind":"sell","with":"t07","where":"rastro","items":[{"ref":"LAT-02","name":"Puesto del Rastro","kind":"card","dir":"out"}],"price":10,"fee":2,"out":0,"in":10,"note":""},{"id":"s-187","tick":109,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"SAL-05","name":"Taxi Blanco","kind":"card","dir":"out"}],"price":5,"fee":0,"out":0,"in":5,"note":""},{"id":"s-195","tick":117,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"SAL-01","name":"Escaparate de Serrano","kind":"card","dir":"out"}],"price":5,"fee":0,"out":0,"in":5,"note":""},{"id":"s-199","tick":120,"kind":"sell","with":"chato","where":"chato","items":[{"ref":"LAT-09","name":"San Isidro","kind":"card","dir":"out"}],"price":46,"fee":0,"out":0,"in":46,"note":""},{"id":"s-207","tick":124,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"SAL-02","name":"El Portero","kind":"card","dir":"out"}],"price":6,"fee":0,"out":0,"in":6,"note":""},{"id":"s-220","tick":129,"kind":"sell","with":"chato","where":"chato","items":[{"ref":"MAL-06","name":"Tienda de Discos","kind":"card","dir":"out"}],"price":15,"fee":0,"out":0,"in":15,"note":""},{"id":"venue-v03","tick":129,"kind":"bond","with":"v03","where":"v03","items":[],"price":270,"fee":0,"out":270,"in":0,"note":"250 P bond + 20 P to open Mercado Trece · 1% fee"},{"id":"s-228","tick":135,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"LAV-03","name":"Té Moruno","kind":"card","dir":"out"}],"price":6,"fee":0,"out":0,"in":6,"note":""},{"id":"s-255","tick":148,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"MAL-01","name":"Vinilo de la Movida","kind":"card","dir":"out"}],"price":5,"fee":0,"out":0,"in":5,"note":""},{"id":"s-282","tick":164,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"LAT-05","name":"El Organillero","kind":"card","dir":"out"}],"price":6,"fee":0,"out":0,"in":6,"note":""},{"id":"grant-165","tick":165,"kind":"grant","with":null,"where":null,"items":[],"price":150,"fee":0,"out":0,"in":150,"note":"El Retiro has arrived: a pack and the Saturday allowance (150 primas) for everyone"},{"id":"s-306","tick":166,"kind":"buy","with":"t17","where":"rastro","items":[{"ref":"MAL-07","name":"Mercado de San Ildefonso","kind":"card","dir":"in"}],"price":25,"fee":3,"out":25,"in":0,"note":""},{"id":"s-314","tick":172,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"sobre_barrio","name":"Neighbourhood pack","kind":"pack","dir":"in"}],"price":24,"fee":0,"out":24,"in":0,"note":""},{"id":"s-325","tick":180,"kind":"buy","with":"chato","where":"chato","items":[{"ref":"LAV-06","name":"La Tabacalera","kind":"card","dir":"in"}],"price":26,"fee":0,"out":26,"in":0,"note":""},{"id":"s-326","tick":180,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"sobre_barrio","name":"Neighbourhood pack","kind":"pack","dir":"in"}],"price":19,"fee":0,"out":19,"in":0,"note":""},{"id":"s-333","tick":187,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"sobre_barrio","name":"Neighbourhood pack","kind":"pack","dir":"in"}],"price":21,"fee":0,"out":21,"in":0,"note":""},{"id":"s-338","tick":194,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"LAV-04","name":"Mural de la Esquina","kind":"card","dir":"out"}],"price":5,"fee":0,"out":0,"in":5,"note":""},{"id":"s-340","tick":195,"kind":"buy","with":"chato","where":"chato","items":[{"ref":"LAV-07","name":"Samosas de la Plaza","kind":"card","dir":"in"}],"price":26,"fee":0,"out":26,"in":0,"note":""},{"id":"s-350","tick":202,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"LAT-04","name":"Mercado de la Cebada","kind":"card","dir":"out"}],"price":6,"fee":0,"out":0,"in":6,"note":""},{"id":"s-351","tick":203,"kind":"sell","with":"t15","where":"v02","items":[{"ref":"MAL-03","name":"Cartel de Conciertos","kind":"card","dir":"out"}],"price":7,"fee":0,"out":0,"in":7,"note":""},{"id":"s-380","tick":235,"kind":"sell","with":"t02","where":"rastro","items":[{"ref":"MAL-01","name":"Vinilo de la Movida","kind":"card","dir":"out"}],"price":5,"fee":2,"out":0,"in":5,"note":""},{"id":"s-403","tick":316,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"LAV-01","name":"La Corrala","kind":"card","dir":"out"}],"price":6,"fee":0,"out":0,"in":6,"note":""},{"id":"s-411","tick":326,"kind":"sell","with":"pilar","where":"pilar","items":[{"ref":"LAV-08","name":"Teatro Valle-Inclán","kind":"card","dir":"out"}],"price":19,"fee":0,"out":0,"in":19,"note":""},{"id":"s-414","tick":330,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"LAT-02","name":"Puesto del Rastro","kind":"card","dir":"out"}],"price":5,"fee":0,"out":0,"in":5,"note":""},{"id":"s-416","tick":331,"kind":"buy","with":"t09","where":"rastro","items":[{"ref":"MAL-10","name":"Noche de Movida","kind":"card","dir":"in"}],"price":65,"fee":5,"out":65,"in":0,"note":""},{"id":"s-418","tick":332,"kind":"sell","with":"chato","where":"chato","items":[{"ref":"MAL-08","name":"La Vía Láctea","kind":"card","dir":"out"}],"price":14,"fee":0,"out":0,"in":14,"note":""},{"id":"s-429","tick":343,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"SAL-01","name":"Escaparate de Serrano","kind":"card","dir":"out"}],"price":6,"fee":0,"out":0,"in":6,"note":""},{"id":"s-437","tick":350,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"MAL-05","name":"Café de Madrugada","kind":"card","dir":"out"}],"price":6,"fee":0,"out":0,"in":6,"note":""},{"id":"s-450","tick":366,"kind":"sell","with":"abuela","where":"abuela","items":[{"ref":"LAV-02","name":"El Frutero de Argumosa","kind":"card","dir":"out"}],"price":5,"fee":0,"out":0,"in":5,"note":""},{"id":"s-455","tick":370,"kind":"sell","with":"t14","where":"rastro","items":[{"ref":"RET-08","name":"Palacio de Velázquez","kind":"card","dir":"out"}],"price":20,"fee":2,"out":0,"in":20,"note":""},{"id":"s-501","tick":462,"kind":"sell","with":"pilar","where":"pilar","items":[{"ref":"LAV-08","name":"Teatro Valle-Inclán","kind":"card","dir":"out"}],"price":18,"fee":0,"out":0,"in":18,"note":""},{"id":"s-502","tick":467,"kind":"sell","with":"pilar","where":"pilar","items":[{"ref":"LAV-06","name":"La Tabacalera","kind":"card","dir":"out"}],"price":18,"fee":0,"out":0,"in":18,"note":""},{"id":"s-503","tick":469,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"LAV-08","name":"Teatro Valle-Inclán","kind":"card","dir":"in"}],"price":23,"fee":0,"out":23,"in":0,"note":""},{"id":"s-504","tick":474,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"LAV-06","name":"La Tabacalera","kind":"card","dir":"in"}],"price":23,"fee":0,"out":23,"in":0,"note":""},{"id":"s-573","tick":567,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"LAV-07","name":"Samosas de la Plaza","kind":"card","dir":"in"}],"price":22,"fee":0,"out":22,"in":0,"note":""},{"id":"s-585","tick":595,"kind":"sell","with":"t10","where":"rastro","items":[{"ref":"SAL-03","name":"Perrito con Abrigo","kind":"card","dir":"out"}],"price":5,"fee":2,"out":0,"in":5,"note":""},{"id":"s-595","tick":601,"kind":"sell","with":"pilar","where":"pilar","items":[{"ref":"LAV-07","name":"Samosas de la Plaza","kind":"card","dir":"out"}],"price":17,"fee":0,"out":0,"in":17,"note":""},{"id":"s-600","tick":610,"kind":"sell","with":"pilar","where":"pilar","items":[{"ref":"LAV-08","name":"Teatro Valle-Inclán","kind":"card","dir":"out"}],"price":18,"fee":0,"out":0,"in":18,"note":""},{"id":"s-601","tick":610,"kind":"sell","with":"t04","where":"rastro","items":[{"ref":"MAL-04","name":"El Tatuador","kind":"card","dir":"out"}],"price":5,"fee":2,"out":0,"in":5,"note":""},{"id":"s-602","tick":611,"kind":"buy","with":"t07","where":"rastro","items":[{"ref":"LAV-08","name":"Teatro Valle-Inclán","kind":"card","dir":"in"}],"price":20,"fee":2,"out":20,"in":0,"note":""},{"id":"s-603","tick":612,"kind":"buy","with":"abuela","where":"abuela","items":[{"ref":"LAV-07","name":"Samosas de la Plaza","kind":"card","dir":"in"}],"price":22,"fee":0,"out":22,"in":0,"note":""},{"id":"s-827","tick":887,"kind":"sell","with":"pilar","where":"pilar","items":[{"ref":"MAL-06","name":"Tienda de Discos","kind":"card","dir":"out"}],"price":18,"fee":0,"out":0,"in":18,"note":""},{"id":"s-828","tick":890,"kind":"buy","with":"t04","where":"rastro","items":[{"ref":"MAL-06","name":"Tienda de Discos","kind":"card","dir":"in"}],"price":28,"fee":3,"out":28,"in":0,"note":""},{"id":"s-835","tick":895,"kind":"sell","with":"pilar","where":"pilar","items":[{"ref":"MAL-06","name":"Tienda de Discos","kind":"card","dir":"out"}],"price":19,"fee":0,"out":0,"in":19,"note":""},{"id":"s-848","tick":908,"kind":"buy","with":"picaros","where":"picaros","items":[{"ref":"LAV-09","name":"Cine Doré","kind":"card","dir":"in"}],"price":63,"fee":0,"out":63,"in":0,"note":""}]</script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -2659,6 +2686,142 @@ function councilTab(d) {
     || `<div class="empty">Nothing here yet.</div>`;
 }
 
+// ---------- ledger: every prima in or out ----------
+const LEDGER_SEED = JSON.parse(document.getElementById("ledger-seed").textContent || "[]");
+const LEDGER_SEED_IDS = new Set(LEDGER_SEED.map(r => String(r.id)));
+let ledgerFilter = "all", ledgerPlace = null, ledgerQuery = "";
+const LEDGER_KIND = { buy: "Bought", sell: "Sold", swap: "Swapped", bond: "Opened market", grant: "Allowance", gift: "Gift", refund: "Bond back" };
+function ledgerTrade(p, tick, me) {
+  if (!p || p.kind === "match") return null;
+  const items = p.items || [];
+  const goods = it => it.kind === "card" || it.kind === "pack";
+  const got = items.filter(it => it.to === me && goods(it));
+  const gave = items.filter(it => (it.frm || it.from) === me && goods(it));
+  if (!got.length && !gave.length) return null;
+  const price = +p.price || 0, fee = +p.fee || 0;
+  const kind = got.length && !gave.length ? "buy" : gave.length && !got.length ? "sell" : "swap";
+  const out = kind === "buy" ? price : 0, inn = kind === "sell" ? price : 0;
+  const other = (p.parties || []).find(x => x !== me) || p.persona || null;
+  const pack = it => ({ ref: it.ref, name: it.name || it.ref, kind: it.kind || "card", dir: it.to === me ? "in" : "out" });
+  return { id: `s-${p.settlement}`, tick, kind, with: other, where: p.persona || p.venue || null,
+    items: [...got, ...gave].map(pack), price, fee, out, in: inn, note: "" };
+}
+function ledgerRowFromEvent(e, me) {
+  const p = e.payload || {}, tick = e.tick;
+  if (e.type === "settlement") return ledgerTrade(p, p.tick ?? tick, me);
+  if (e.type === "schedule.fired" && p.action === "grant_all") {
+    const m = /(\d+)\s*primas/.exec(p.note || "");
+    if (!m) return null;
+    const amt = +m[1];
+    return { id: `grant-${tick}`, tick, kind: "grant", with: null, where: null, items: [], price: amt, fee: 0, out: 0, in: amt, note: p.note || "Allowance" };
+  }
+  if (e.type === "gift.given" && p.team === me && +p.cash) {
+    const amt = +p.cash;
+    return { id: `gift-${e.id}`, tick, kind: "gift", with: null, where: null, items: [], price: amt, fee: 0, out: 0, in: amt, note: p.reason || "Cash gift" };
+  }
+  if (e.type === "venue.opened" && (p.owner || p.team) === me) {
+    const bond = +p.bond || 0, cost = bond + 20;
+    return { id: `venue-${p.venue}`, tick, kind: "bond", with: p.venue, where: p.venue, items: [], price: cost, fee: 0, out: cost, in: 0,
+      note: `${bond} P bond + 20 P to open ${p.name || "our market"}` };
+  }
+  if (e.type === "venue.closed" && (p.owner || p.team) === me && +p.refund) {
+    const amt = +p.refund;
+    return { id: `refund-${p.venue}-${tick}`, tick, kind: "refund", with: p.venue, where: p.venue, items: [], price: amt, fee: 0, out: 0, in: amt, note: "Venue bond returned" };
+  }
+  return null;
+}
+function ledgerRows(d) {
+  if (d.ledger?.rows?.length) return d.ledger.rows;
+  const me = d.me?.id || "t13";
+  let bag = {};
+  try { bag = JSON.parse(localStorage.getItem("t13-ledger-extra") || "{}"); } catch (e) { bag = {}; }
+  let dirty = false;
+  const take = row => { if (!row || LEDGER_SEED_IDS.has(String(row.id)) || bag[row.id]) return; bag[row.id] = row; dirty = true; };
+  for (const e of d.feed?.events || []) take(ledgerRowFromEvent(e, me));
+  for (const p of d.intel?.market_trades || []) take(ledgerTrade(p, p.tick, me));
+  if (dirty) localStorage.setItem("t13-ledger-extra", JSON.stringify(bag));
+  return LEDGER_SEED.concat(Object.values(bag));
+}
+function ledgerPlaceName(id, d) {
+  if (!id) return "–";
+  if (id === "rastro") return "El Rastro";
+  const dealer = (d.dealers?.personas || []).find(p => p.id === id);
+  if (dealer) return dealer.name;
+  const venue = (d.venues?.venues || []).find(v => v.venue === id);
+  if (venue) return venue.name;
+  const team = (d.leaderboard?.teams || []).find(t => t.team === id);
+  if (team) return team.name;
+  return id;
+}
+function ledgerTab(d) {
+  const M = model(d);
+  const rows = ledgerRows(d);
+  const totals = { spent: 0, raised: 0, fees: 0, buys: 0, sells: 0, bond: 0, grants: 0 };
+  const by = {};
+  for (const r of rows) {
+    totals.fees += r.fee || 0;
+    if (r.kind === "buy") { totals.spent += r.out || 0; totals.buys++; }
+    else if (r.kind === "sell") { totals.raised += r.in || 0; totals.sells++; }
+    else if (r.kind === "bond") totals.bond += r.out || 0;
+    else if (r.kind === "grant" || r.kind === "gift") totals.grants += r.in || 0;
+    if ((r.kind === "buy" || r.kind === "sell") && r.where) {
+      const b = by[r.where] || (by[r.where] = { id: r.where, spent: 0, raised: 0, fees: 0, n: 0 });
+      if (r.kind === "buy") b.spent += r.out || 0; else b.raised += r.in || 0;
+      b.fees += r.fee || 0; b.n++;
+    }
+  }
+  const places = Object.values(by).sort((a, b) => (b.spent - a.spent) || (b.raised - a.raised));
+  const net = totals.raised - totals.spent;
+  $("ledger-kpis").innerHTML = [
+    ["Cash now", P(d.me.cash), "in the wallet right now"],
+    ["Spent buying", P(totals.spent), `${totals.buys} purchase${totals.buys === 1 ? "" : "s"}`],
+    ["Raised selling", P(totals.raised), `${totals.sells} sale${totals.sells === 1 ? "" : "s"}`],
+    ["Venue bond", totals.bond ? P(totals.bond) : "–", totals.bond ? "locked, refundable" : "no market opened"],
+    ["Trade fees", P(totals.fees), "paid by whoever accepted"],
+  ].map(([l, v, sub]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${sub}</div></div>`).join("");
+  const netTxt = `${net < 0 ? "−" : "+"}${P(Math.abs(net))} from trading`;
+  $("ledger-by").innerHTML = places.length ? `<div class="muted" style="font-size:12px;margin:-4px 0 8px">${netTxt}${totals.grants ? ` · allowance ${P(totals.grants)} in` : ""}</div>
+    <table><thead><tr><th>Place</th><th class="num">Buys</th><th class="num">Sales</th><th class="num">Fees</th><th class="num">Net</th></tr></thead><tbody>
+    ${places.map(b => { const n = b.raised - b.spent; return `<tr data-place="${esc(b.id)}" class="${ledgerPlace === b.id ? "on" : ""}"><td>${esc(ledgerPlaceName(b.id, d))}<div class="muted" style="font-size:11px">${b.n} trade${b.n === 1 ? "" : "s"}</div></td>
+      <td class="num amt-out">${b.spent ? P(b.spent) : "–"}</td><td class="num amt-in">${b.raised ? P(b.raised) : "–"}</td><td class="num">${b.fees ? P(b.fees) : "–"}</td>
+      <td class="num ${n < 0 ? "amt-out" : "amt-in"}">${n < 0 ? "−" : "+"}${P(Math.abs(n))}</td></tr>`; }).join("")}
+    </tbody></table>` : `<div class="empty">No trades on the feed yet.</div>`;
+  $("ledger-by").querySelectorAll("[data-place]").forEach(tr => tr.onclick = () => {
+    ledgerPlace = ledgerPlace === tr.dataset.place ? null : tr.dataset.place; ledgerTab(D);
+  });
+  const counts = { all: rows.length, buy: totals.buys, sell: totals.sells, other: rows.length - totals.buys - totals.sells };
+  const labels = { all: "All", buy: "Buys", sell: "Sales", other: "Bond & allowance" };
+  $("ledger-filters").innerHTML = Object.entries(labels).map(([k, lab]) => `<span class="${ledgerFilter === k ? "on" : ""}" data-f="${k}">${lab} ${counts[k]}</span>`).join("");
+  $("ledger-filters").querySelectorAll("[data-f]").forEach(el => el.onclick = () => { ledgerFilter = el.dataset.f; ledgerTab(D); });
+  const q = $("ledger-q");
+  if (!q.dataset.bound) { q.dataset.bound = "1"; q.oninput = () => { ledgerQuery = q.value.trim().toLowerCase(); ledgerTab(D); }; }
+  const shown = rows.filter(r => ledgerFilter === "all" || (ledgerFilter === "other" ? r.kind !== "buy" && r.kind !== "sell" : r.kind === ledgerFilter))
+    .filter(r => !ledgerPlace || r.where === ledgerPlace)
+    .filter(r => { if (!ledgerQuery) return true;
+      const hay = [r.kind, r.with, r.where, r.note, ledgerPlaceName(r.with, d), ledgerPlaceName(r.where, d), ...(r.items || []).flatMap(it => [it.name, it.ref])].join(" ").toLowerCase();
+      return hay.includes(ledgerQuery); })
+    .sort((a, b) => (b.tick || 0) - (a.tick || 0));
+  const placeBit = ledgerPlace ? ` · ${ledgerPlaceName(ledgerPlace, d)}` : "";
+  $("ledger-hint").textContent = `${shown.length} of ${rows.length}${placeBit} · newest first · the accepting side pays the fee`;
+  const itemCell = r => {
+    if (!r.items?.length) return esc(r.note || "–");
+    return r.items.map(it => it.kind === "card" && M.byRef[it.ref] ? cardTag(it.ref, d, M) : `<span class="ctag">${esc(it.name || it.ref)}</span>`).join(" ")
+      + (r.note ? `<div class="muted" style="font-size:11px">${esc(r.note)}</div>` : "");
+  };
+  const kept = $("ledger-rows").querySelector(".ledger-scroll")?.scrollTop || 0;
+  $("ledger-rows").innerHTML = shown.length ? `<div class="ledger-scroll"><table><thead><tr><th>When</th><th>What</th><th>With</th><th>Where</th><th>Out</th><th>In</th><th>Fee</th></tr></thead><tbody>
+    ${shown.map(r => { const when = tickTime(r.tick, d); return `<tr><td class="sec">${hm(when)}<div class="muted" style="font-size:11px">tick ${r.tick ?? "–"}</div></td>
+      <td><b>${LEDGER_KIND[r.kind] || esc(r.kind)}</b><div style="margin-top:4px">${itemCell(r)}</div></td>
+      <td>${r.kind === "grant" ? "Organisers" : esc(ledgerPlaceName(r.with, d))}</td>
+      <td>${r.where ? esc(ledgerPlaceName(r.where, d)) : "–"}</td>
+      <td class="num amt-out">${r.out ? P(r.out) : "–"}</td>
+      <td class="num amt-in">${r.in ? P(r.in) : "–"}</td>
+      <td class="num">${r.fee ? P(r.fee) : "–"}</td></tr>`; }).join("")}
+    </tbody></table></div>` : `<div class="empty">Nothing in this filter.</div>`;
+  const sc = $("ledger-rows").querySelector(".ledger-scroll");
+  if (sc) sc.scrollTop = kept;
+}
+
 // ---------- main loop ----------
 function showTab() {
   const id = (location.hash || "#overview").slice(1);
@@ -2690,13 +2853,14 @@ async function refresh() {
     if (!ok(d.catalog)) { $("err").textContent = "⚠ waiting for catalog…"; return; }
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.duels_done, d.duels_board?.at, d.duel_learn?.last?.at, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
       d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length, d.council?.notes?.length, d.council?.state,
+      d.ledger?.rows?.length, d.ledger?.rows?.slice(-1)[0]?.id,
       d.swaps?.auto, (d.swaps?.opportunities || []).map(r => r.auto ? r.auto.at ?? r.auto.why : 0), d.swaps?.deals?.waiting, d.announcements?.[0]?.id,
       d.workshop?.status, d.workshop?.plan, d.workshop?.fuel_total, (d.workshop?.log || [])[0]?.tick]);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
-      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => workshopTab(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d)];
+      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => workshopTab(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d), () => ledgerTab(d)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable — open http://localhost:8765"; }
 }
