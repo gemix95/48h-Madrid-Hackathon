@@ -28,12 +28,12 @@ DESCRIPTION = ("Madrid's top-tier market: {fee} fee, no per-card charge, a smart
                "pairs first. Built by the team leading the board.")
 # FOMO and loss aversion, but only true claims: fee comparison, matching every tick, 0 P per card, swaps cost nothing.
 # The server cuts an announcement at 240 characters, so the 0% is always in the first words.
-BRAND = "El Club"          # what we call v03 everywhere; the listed name stays "Mercado Trece · 1% fee" until we reopen
+BRAND = "El Club"          # our market (v22 since Saturday 16:45, listed as "El Club · 0% fee · matched every tick")
 # Team 5's stall (v10, auto, 0%) is the market score to copy: one line, then other teams' spares and
 # want-to-buy bids. The trade those listings produced is what put them at 12.5; the same auto stall at 0%
 # with no trades (Team 2, Team 9) sits on the 7.5 floor with everyone else.
-PITCH = ("Hola! Team 13 — El Club ({venue}, listed as 'Mercado Trece'). {fee} fee, no per-card charge; the '1%' in "
-         "the name is stale. Bids and asks cross every tick. Post your spares and want-to-buy bids here. "
+PITCH = ("Hola! Team 13 — El Club ({venue}). {fee} fee, no per-card charge. "
+         "Bids and asks cross every tick. Post your spares and want-to-buy bids here. "
          "El Rastro takes 5% + 1 P per card.")
 ANNOUNCE = [
     "STOP PAYING 5% + 1 P A CARD. El Club ({venue}): {fee} fee, 0 P per card. Every trade on El Rastro hands primas to the "
@@ -726,8 +726,6 @@ class Market:
         if ctx.S.get("llm_negotiator", 1):
             situation = {"counterparty": f"team {target}", "goal": f"invite them to join and trade on our market {BRAND}",
                          "facts": {"our_market": BRAND, "venue_id": venue, "fee": ft + " (no per-card charge)",
-                                   "name_note": "listed on the big screen as 'Mercado Trece · 1% fee'; the '1%' is out of "
-                                                "date and open markets cannot be renamed",
                                    "el_rastro_fee": "5% + 1 P per card",
                                    "matching": "smart broker every tick, fair midpoint, best pairs first",
                                    "market_test_soon": bool(self.bench_soon()),
