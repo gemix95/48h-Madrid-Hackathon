@@ -429,7 +429,7 @@ def poll():
         time.sleep(0.3)
 
 
-BOARD = {"html": None, "json": None, "live": None, "refs": set()}
+BOARD = {"html": None, "json": None, "live": None, "history": None, "refs": set()}
 ARB = {"data": None, "html": None}
 
 
@@ -462,6 +462,7 @@ def board_loop():
             BOARD["html"], BOARD["json"] = board.render(data).encode(), json.dumps(board.public(data)).encode()
             BOARD["live"] = json.dumps(board.live(data)).encode()  # the light feed the page polls every 15 s
             BOARD["refs"] = {c["ref"] for c in data["cards"]}  # cards a lot may be opened for
+            BOARD["history"] = json.dumps({"tick": data.get("tick"), "cards": board.HIST.all()}).encode()  # trade prices per card
         except Exception as e:
             print("board:", repr(e)[:200], flush=True)
         time.sleep(15)  # a Sunday tick is 15 s
@@ -502,8 +503,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return True
-        if path == "/board/live.json":
-            body = BOARD["live"] or b"{}"
+        if path in ("/board/live.json", "/board/history.json"):
+            body = BOARD["live" if path.endswith("live.json") else "history"] or b"{}"
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))

@@ -20,7 +20,10 @@ import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
+import history
+
 API = "https://bazaar.causaprima.ai"
+HIST = history.History()  # trade prices per card, from the public feed
 URL = "$BAZAAR_URL"  # in the copied calls: the kit's variable, next to $BAZAAR_KEY, keeps them short
 ME = "t13"
 RASTRO_FEE = (500, 1)  # 5 % + 1 P a card: the friction that keeps near-crossing pairs apart on El Rastro
@@ -78,6 +81,7 @@ def build() -> dict:
                 rows.setdefault(wanted[0], {"asks": [], "bids": []})["bids"].append({"price": g["cash"], **where, "id": o.get("id"), "expires": o.get("expires_tick")})
             elif gave and wanted and not g.get("cash") and not w.get("cash"):
                 swaps.append({"give": gave, "want": wanted, **where})
+    HIST.refresh()
     out = []
     for ref in list(cards) or list(rows):
         r = rows.get(ref) or {"asks": [], "bids": []}
@@ -96,7 +100,7 @@ def build() -> dict:
         if not r["asks"] and not r["bids"]:
             state = "quiet"
         out.append({"ref": ref, **cards.get(ref, {"name": ref}), "asks": r["asks"], "bids": r["bids"],
-                    "best_ask": ask, "best_bid": bid, "gap": gap, "state": state})
+                    "best_ask": ask, "best_bid": bid, "gap": gap, "state": state, "history": HIST.stats(ref)})
     rank = {"cross": 0, "near": 1, "apart": 2, "one-sided": 3, "quiet": 4}
     out.sort(key=lambda x: (rank[x["state"]], x["gap"] if x["gap"] is not None else 10 ** 6, x["ref"]))
     return {"at": int(time.time()), "tick": tick, "our_venue": ours and {"venue": ours["venue"], "name": ours.get("name")},
@@ -118,6 +122,9 @@ def public(data: dict) -> dict:
                     "buyers": len(c["bids"]), "sellers": len(c["asks"]), "meet": meet,
                     "buy_at": ask["price"] if ask else None,   # the cheapest seller anywhere: what buying costs
                     "sell_at": bid["price"] if bid else None,  # the best buyer anywhere: what selling brings
+                    "buy_hi": c["asks"][-1]["price"] if c["asks"] else None,   # the dearest seller ("from 10 P, up to 15")
+                    "sell_lo": c["bids"][-1]["price"] if c["bids"] else None,  # the lowest buyer
+                    "history": c.get("history"),
                     "saves": _fee(meet, *RASTRO_FEE) if meet else None,  # what El Rastro takes from the accepting side
                     "sides_here": sorted({x["side"] for x in here}), "on_ours": here})
     for c in out:
@@ -158,8 +165,8 @@ def _price_text(c, vid, price, sell):
     ref, name = c["ref"], c.get("name") or c["ref"]
     body = (f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":YOUR_PRICE}}}}' if sell
             else f'{{"venue":"{vid}","give":{{"cash":YOUR_PRICE}},"want":{{"cards":["{ref}"]}}}}')
-    what = (f"sell {ref} ({name}) for {price} P, the best price a buyer pays for it anywhere in the Bazaar right now"
-            if sell else f"buy {ref} ({name}) for {price} P, the cheapest it is offered anywhere in the Bazaar right now")
+    what = (f"sell {ref} ({name}) for YOUR_PRICE P; the best price a buyer pays for it anywhere in the Bazaar right now is {price} P"
+            if sell else f"buy {ref} ({name}) for YOUR_PRICE P; the cheapest it is offered anywhere in the Bazaar right now is {price} P")
     return (f"El Club Board ({vid}): {what}.\n\n"
             + _curl(body) +
             (f"\n\nYOUR_ASSET_ID: the id of your spare {ref} in GET /api/me." if sell else "") +
@@ -213,9 +220,10 @@ def _button(text, label, ask=None):
     text = html.escape(text, quote=True)
     attrs, form = "", ""
     if ask:
-        attrs = f' data-def="{ask.get("def") or ""}" data-min="{ask.get("min") or 1}"'
+        attrs = (f' data-def="{ask.get("def") or ""}" data-min="{ask.get("min") or 1}"'
+                 + "".join(f' data-{k}="{html.escape(str(ask[k]))}"' for k in ("lo", "hi", "last", "basis") if ask.get(k) is not None))
         form = ('<form class="pricef"><label>Your price <input type="number" inputmode="numeric" step="1" required> P</label>'
-                '<button type="submit">Copy request</button><div class="err small"></div></form>')
+                '<button type="submit">Copy request</button><div class="hint dim small"></div><div class="err small"></div></form>')
     return (f'<button class="trade" data-text="{text}"{attrs}>{label}</button>'
             f'<div class="copied" hidden>{form}<div class="lbl"{" hidden" if ask else ""}>Read it, then run it <span class="ok">copied ✓</span></div>'
             f'<pre{" hidden" if ask else ""}>{text}</pre></div>')
@@ -230,8 +238,17 @@ def _choice(c, vid, deadline, sell):
         return _accept_text(c, resting, vid), ("Sell in 1 click" if sell else "Buy in 1 click"), None
     price = c.get("sell_at") if sell else c.get("buy_at")
     if price:
-        return _price_text(c, vid, price, sell), ("Sell in 1 click" if sell else "Buy in 1 click"), {"def": price, "min": 1}
-    return _post_text(c, vid, sell), ("Sell in 1 click" if sell else "Bid in 1 click"), {"def": None, "min": 1}
+        return _price_text(c, vid, price, sell), ("Sell in 1 click" if sell else "Buy in 1 click"), _ask(c, price)
+    return _post_text(c, vid, sell), ("Sell in 1 click" if sell else "Bid in 1 click"), _ask(c, None)
+
+
+def _ask(c, price):
+    """What the price field needs: the suggestion, the floor and, when the card has traded, its usual range."""
+    h = c.get("history")
+    out = {"def": price, "min": 1}
+    if h:
+        out.update(lo=h["usual"][0], hi=h["usual"][1], last=h["last"], basis=h["basis"])
+    return out
 
 
 def _howto(c, vid, deadline, sell):
@@ -239,12 +256,37 @@ def _howto(c, vid, deadline, sell):
 
 
 def _side_top(c, sell):
+    """(price line, count line) of one side. Several offers: 'from 10 P' and '3 offers, up to 15 P' (for buyers:
+    'up to 15 P' and '3 buyers, from 8 P')."""
     price = c.get("sell_at") if sell else c.get("buy_at")
     n = c["buyers"] if sell else c["sellers"]
-    if price:
-        word = ("buyer" if sell else "offer") + ("s" if n != 1 else "")
-        return f"{price} P", f"{n} {word}"
-    return "–", ("no buyer yet" if sell else "no seller yet")
+    if not price:
+        return "–", ("no buyer yet" if sell else "no seller yet")
+    far = c.get("sell_lo") if sell else c.get("buy_hi")
+    fire = "🔥 " if is_deal(c, sell) else ""
+    if n > 1 and far is not None and far != price:
+        return ((f"{fire}up to {price} P", f"{n} buyers, from {far} P") if sell
+                else (f"{fire}from {price} P", f"{n} offers, up to {far} P"))
+    word = ("buyer" if sell else "offer") + ("s" if n != 1 else "")
+    return f"{fire}{price} P", f"{n} {word}"
+
+
+DEAL_PCT = 15  # 🔥 when an ask is this much below the card's usual range, or a bid this much above it
+
+
+def is_deal(c, sell) -> bool:
+    """A good deal against what the card usually trades at: buying under the usual range's low end, or selling over
+    its high end, by DEAL_PCT percent or more. Needs at least 3 trades behind the range."""
+    h, price = c.get("history"), (c.get("sell_at") if sell else c.get("buy_at"))
+    if not h or not price or len([x for x in h["recent"] if x[2] == h["basis"]]) < 3:
+        return False
+    lo, hi = h["usual"]
+    return price >= hi * (1 + DEAL_PCT / 100) if sell else price <= lo * (1 - DEAL_PCT / 100)
+
+
+def _hist_html(c):
+    h = c.get("history")
+    return f'<div class="hist small" data-hist="{html.escape(c["ref"])}">{history.spark(h)}<span>{html.escape(history.line(h))}</span></div>'
 
 
 def live(data: dict) -> dict:
@@ -258,6 +300,7 @@ def live(data: dict) -> dict:
             text, label, ask = _choice(c, vid, pub["deadline"], sell)
             price, count = _side_top(c, sell)
             sides[key] = {"price": price, "count": count, "label": label, "text": text, "ask": ask}
+        sides["hist"] = {"line": history.line(c.get("history")), "spark": history.spark(c.get("history"))}
         out[c["ref"]] = sides
     return {"at": pub["at"], "tick": pub["tick"], "cards": out}
 
@@ -414,7 +457,7 @@ def render(data: dict) -> str:
             meta = " · ".join(x for x in (str(c.get("rarity") or "").capitalize(), str(c.get("set") or "")) if x)
             return (f'<tr class="{quiet}"><td class="cardcell"><div class="thumb" data-card="{html.escape(c["ref"])}"></div>'
                     f'<div class="cardtxt"><b>{html.escape(c["ref"])}</b><div>{html.escape(str(c.get("name") or ""))}</div>'
-                    f'<div class="dim small">{html.escape(meta)}</div></div></td>'
+                    f'<div class="dim small">{html.escape(meta)}</div>{_hist_html(c)}</div></td>'
                     f'{side(c, False)}{side(c, True)}</tr>')
 
         out = []
@@ -467,7 +510,7 @@ td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 table.deck{{table-layout:fixed;width:100%;min-width:720px}}table.deck td{{vertical-align:middle;overflow-wrap:anywhere}}table.deck.sets th:nth-child(1){{width:30%}}table.deck.sets th:nth-child(n+2){{width:35%}}table.deck.lots th:nth-child(1){{width:24%}}table.deck.lots th:nth-child(2){{width:11%}}table.deck.lots th:nth-child(3){{width:23%}}table.deck.lots th:nth-child(4){{width:14%}}table.deck.lots th:nth-child(5){{width:28%}}td.cardcell{{display:flex;gap:12px;align-items:center}}
 .thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
 .cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
-td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
+td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.hint{{width:100%}}.hist{{margin-top:4px;color:var(--dim)}}.hist .spark{{display:block;margin-bottom:2px}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
 .setnav{{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;margin:6px 0 4px;background:var(--bg)}}
 .setnav a{{text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;font-size:13px}}
 .setnav a:hover{{border-color:var(--gold);color:var(--gold)}}.setnav .n{{color:var(--dim);margin-left:6px;font-size:12px}}
@@ -510,7 +553,7 @@ in. Read it before you run it: there is nothing in it but your own offer.</li>
 <i>For sale</i>: someone sells it and nobody bids. <i>Buyers and sellers apart</i>: both exist, on different markets, and the
 board names the price that splits them. <i>Nothing moving</i>: no bid and no ask anywhere — the first side posted here is
 the one the other will find. Our broker crosses a bid and an ask on {vid} the tick they are both there.<br>
-JSON: <a href="board.json">board.json</a> · Team 13</footer>
+JSON: <a href="board.json">board.json</a> · <a href="board/live.json">live.json</a> (every 15 s) · <a href="board/history.json">history.json</a> (trade prices per card) · Team 13</footer>
 </main>
 <script>
 let busyUntil = 0;
@@ -538,6 +581,8 @@ document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click
   inp.min = b.dataset.min; inp.max = {MAX_PRICE};
   if (!inp.value && b.dataset.def) inp.value = b.dataset.def;
   box.querySelector("pre").hidden = true; box.querySelector(".lbl").hidden = true;
+  const d = b.dataset, hint = form.querySelector(".hint");
+  hint.textContent = d.lo ? `usual ${{d.lo === d.hi ? d.lo : d.lo + "–" + d.hi}} P · last ${{d.last}} P${{d.basis === "dealer" ? " (with dealers)" : ""}}` : "no trade of this card yet";
   inp.focus(); inp.select();
 }}));
 document.querySelectorAll("form.pricef").forEach(f => f.addEventListener("submit", ev => {{
@@ -546,6 +591,12 @@ document.querySelectorAll("form.pricef").forEach(f => f.addEventListener("submit
   const [n, why] = checkPrice(f.querySelector("input").value, parseInt(b.dataset.min || "1", 10));
   err.textContent = why;
   if (n === null) return;
+  const lo = parseInt(b.dataset.lo || "0", 10), hi = parseInt(b.dataset.hi || "0", 10);
+  if (hi && (n > hi * 3 || n * 3 < lo) && f.dataset.warned !== String(n)) {{  // far from what it trades at: ask once more
+    f.dataset.warned = String(n);
+    err.textContent = `${{n}} P is far from the usual ${{lo}}–${{hi}} P. Press Copy request again to use it anyway.`;
+    return;
+  }}
   copyOut(box, b.dataset.text.split("YOUR_PRICE").join(String(n)));
 }}));
 fetch("/board/cards.json").then(r => r.json()).then(cards => {{
@@ -557,11 +608,16 @@ async function refresh() {{
     const d = await r.json();
     document.getElementById("tick").textContent = d.tick;
     document.getElementById("upd").textContent = new Date(d.at * 1000).toLocaleTimeString([], {{hour: "2-digit", minute: "2-digit", second: "2-digit"}});
+    document.querySelectorAll("[data-hist]").forEach(el => {{
+      const h = ((d.cards || {{}})[el.dataset.hist] || {{}}).hist;
+      if (h && el.querySelector("span").textContent !== h.line) el.innerHTML = h.spark + "<span>" + h.line.replace(/</g, "&lt;") + "</span>";
+    }});
     document.querySelectorAll("td.side[data-ref]").forEach(td => {{
       const v = ((d.cards || {{}})[td.dataset.ref] || {{}})[td.dataset.side]; if (!v) return;
       const pr = td.querySelector(".price"), ct = td.querySelector(".count"), b = td.querySelector("button.trade"), pre = td.querySelector(".copied pre");
       if (pr.textContent !== v.price) {{ pr.textContent = v.price; pr.classList.toggle("none", v.price === "–"); pr.classList.add("flash"); setTimeout(() => pr.classList.remove("flash"), 1200); }}
       ct.textContent = v.count; b.textContent = v.label; b.dataset.text = v.text;
+      for (const k of ["lo", "hi", "last", "basis"]) {{ if (v.ask && v.ask[k] != null) b.dataset[k] = v.ask[k]; }}
       if (v.ask) {{ b.dataset.min = v.ask.min || 1; b.dataset.def = v.ask.def || ""; }} else {{ delete b.dataset.min; delete b.dataset.def; }}
       if (pre && td.querySelector(".copied").hidden) pre.textContent = v.text;  // never rewrite a request the user is reading
     }});
