@@ -20,7 +20,8 @@ from bazaar_sdk import BazaarError, Broker
 VENUE_NAME = "El Club · Where Madrid Trades"      # chosen by the team; used only when (re)opening (an open market cannot be renamed)
 DESCRIPTION = ("Madrid's top-tier market: {fee} fee, no per-card charge, a smart broker matching every tick, best "
                "pairs first. Built by the team leading the board.")
-# FOMO, but only true claims: fee comparison, matching every tick, first come first matched, no per-card charge
+# FOMO and loss aversion, but only true claims: fee comparison, matching every tick, 0 P per card, swaps cost nothing.
+# The server cuts an announcement at 240 characters, so the 0% is always in the first words.
 BRAND = "El Club"          # what we call v03 everywhere; the listed name stays "Mercado Trece · 1% fee" until we reopen
 # Team 5's stall (v10, auto, 0%) is the market score to copy: one line, then other teams' spares and
 # want-to-buy bids. The trade those listings produced is what put them at 12.5; the same auto stall at 0%
@@ -29,15 +30,24 @@ PITCH = ("Hola! Team 13 — El Club ({venue}, listed as 'Mercado Trece'). {fee} 
          "the name is stale. Bids and asks cross every tick. Post your spares and want-to-buy bids here. "
          "El Rastro takes 5% + 1 P per card.")
 ANNOUNCE = [
-    "El Club ({venue}, listed as 'Mercado Trece'): {fee} fee, no per-card charge. The '1%' in the name is stale. "
-    "Bids and asks cross every tick. Post your spares and want-to-buy bids here.",
-    "La última pieza is on El Club ({venue}): {fee}, no per-card charge. Bid for the card you need, ask or swap a spare. "
-    "We cross every tick. El Rastro is 5% + 1 P per card.",
-    "El Club ({venue}) is {fee} and stays there. Post venue={venue}: bids for missing cards, asks and swaps for spares. "
-    "Best bid meets best ask every tick.",
-    "Still paying El Rastro 5% + 1 P per card? El Club ({venue}) is {fee}, 0 P per card. List the card you are missing.",
-    "Card-for-card swaps and cash bids both clear on El Club ({venue}): {fee} fee, no per-card charge, crossed every tick.",
+    "STOP PAYING 5% + 1 P A CARD. El Club ({venue}): {fee} fee, 0 P per card. Every trade on El Rastro hands primas to the "
+    "house. Post your bid or swap here.",
+    "El Rastro does not match bids with asks: it waits for someone to notice. El Club ({venue}) pairs them within a tick. "
+    "{fee} fee, 0 P per card. Post now.",
+    "Your duplicate is someone's last page piece. Swap it card-for-card on El Club ({venue}): {fee} fee, 0 P per card, "
+    "matched every tick.",
+    "Every tick you wait, another team gets the card you need. El Club ({venue}) pairs the best bid with the best ask each "
+    "tick. {fee} fee.",
+    "{fee} FEE. 0 P PER CARD. Matched every tick. (The '1%' in the listed name is stale: markets cannot be renamed.) "
+    "El Club, {venue}.",
+    "Do the maths on your next trade: El Rastro takes 5% + 1 P a card, El Club ({venue}) takes {fee} and 0 P. Same card, "
+    "same price, more primas for you.",
+    "Swap, don't sell: card-for-card swaps cost nothing on El Club ({venue}): {fee} fee, 0 P per card, settled next tick. "
+    "Both pages get closer to complete.",
+    "Filling a page? Post the card you miss as a bid on El Club ({venue}): {fee} fee, 0 P per card, crossed every tick. "
+    "No waiting for a seller to find you.",
 ]
+ANNOUNCE_MAX = 240           # the server cuts an announcement here
 PRE_TEST = ("Market Test soon — and the book is open now. El Club ({venue}, 'Mercado Trece') is {fee}, 0 P per card. "
             "Post the card you are missing or a spare; we cross every tick. El Rastro takes 5% + 1 P per card.")
 # appended to announcements only while we still have a spare to give and rewards left today (a true claim)
@@ -48,9 +58,16 @@ REWARD_MIN_GAIN = 2          # every reward is still a sale that gains us value
 REWARDS_PER_DAY = 4
 REWARD_TICKS = 60
 
-ANNOUNCE_EVERY = 20          # normal cadence (ticks)
+ANNOUNCE_SECONDS = 300       # normal cadence: one message every 5 minutes
+ANNOUNCE_MIN_TICKS = 10      # never denser than other markets already announce (10 ticks)
 ANNOUNCE_PRETEST_EVERY = 10  # denser reminders when a bench session is near
 PRETEST_HOURS = 0.35         # ~ game-hour window before a scheduled Market Test
+
+
+def announce_every(tick_seconds, pretest=False) -> int:
+    """Ticks between two announcements: 5 minutes of wall clock (10 ticks at 30 s, 20 at 15 s), denser before a Market Test."""
+    every = max(ANNOUNCE_MIN_TICKS, round(ANNOUNCE_SECONDS / (tick_seconds or 30)))
+    return min(every, ANNOUNCE_PRETEST_EVERY) if pretest else every
 
 
 def fee_text(bps) -> str:
@@ -73,7 +90,7 @@ class Market:
         self.force_zero_for_bench(tick)  # fee changes need a notice: drop before the Market Test
         self.fee_safety()
         self.sync_fee(tick)
-        every = ANNOUNCE_PRETEST_EVERY if self.bench_soon() else ANNOUNCE_EVERY
+        every = announce_every(ctx.clock.get("tick_seconds"), self.bench_soon())
         if tick - st.get("announce_tick", -99) >= every:
             self.announce(tick)
         self.reward_traders(tick)
@@ -249,8 +266,9 @@ class Market:
             text = PRE_TEST.format(fee=ft, venue=venue)
         else:
             text = ANNOUNCE[(st.get("announce_n", 0)) % len(ANNOUNCE)].format(fee=ft, venue=venue)
-        if self.rewards_left() and self.reward_spare():
-            text += REWARD_PITCH.format(price=REWARD_PRICE)
+        reward = REWARD_PITCH.format(price=REWARD_PRICE)
+        if self.rewards_left() and self.reward_spare() and len(text) + len(reward) <= ANNOUNCE_MAX:  # never cut the pitch mid-word
+            text += reward
         try:
             Broker(ctx.raw.url, st["broker_key"]).announce(text)
             st["announce_tick"], st["announce_n"] = tick, st.get("announce_n", 0) + 1

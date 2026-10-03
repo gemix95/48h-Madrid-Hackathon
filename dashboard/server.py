@@ -138,6 +138,20 @@ def swaps_payload():
     return {**v, "opportunities": [{**r, "auto": AUTO.state(r)} for r in v["opportunities"]], "auto": AUTO.snapshot()}
 
 
+_ann = {"n": -1, "v": []}
+
+
+def announcements():
+    """Every announcement on the big screen, newest first: ours and the other teams' (from our copy of the public feed)."""
+    n = len(INTEL.events)
+    if _ann["n"] != n:
+        evs = sorted((e for e in list(INTEL.events.values()) if e.get("type") == "venue.announcement"), key=lambda e: -e["id"])[:60]
+        _ann["v"] = [{"id": e["id"], "tick": e.get("tick"), "venue": (e.get("payload") or {}).get("venue"),
+                      "name": (e.get("payload") or {}).get("name"), "text": str((e.get("payload") or {}).get("text") or "")[:300]} for e in evs]
+        _ann["n"] = n
+    return _ann["v"]
+
+
 def log_hand(rec):
     """Same log as agent/hand.py, so every swap sent from the dashboard is traceable."""
     try:
@@ -371,7 +385,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "history": history, "served_at": time.time(),
                                    "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60),
                                    "origins": message_origins(INDEX, cache.get("threads"), (cache.get("me") or {}).get("id")),
-                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard(), "swaps": swaps_payload()}).encode()
+                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard(), "swaps": swaps_payload(), "announcements": announcements()}).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):
             self._send(200, "application/json", json.dumps(strategy.describe()).encode())

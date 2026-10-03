@@ -191,6 +191,9 @@ tr.good td { background: color-mix(in srgb, var(--good) 11%, transparent); }
 .pulse { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; margin-left: 6px; border-radius: 999px;
   background: var(--series-2); color: #fff; font-size: 11px; font-weight: 700; line-height: 1; vertical-align: 1px; animation: pulse 1.6s ease-out infinite; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--series-2) 65%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.mk { font-size: 13px; padding: 5px 0; } .mk + .mk { border-top: 1px solid var(--grid); }
+.mk-more { margin-top: 4px; } .mk-more summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); }
+.mk-list { max-height: 260px; overflow: auto; margin-top: 4px; }
 .swap-note { font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 6px; margin-bottom: 10px; background: var(--surface-2); }
 .cell .x { position: absolute; top: -7px; right: -6px; background: var(--series-2); color: #fff; border-radius: 999px; font-size: 10px;
   font-weight: 700; padding: 1px 5px; border: 2px solid var(--surface-1); }
@@ -392,6 +395,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
   <main class="tab" id="tab-market">
     <div class="grid">
       <section class="card s12"><h2>Markets <span class="hint">every place we can trade: our agent scans all of them, lists on the best three, and haggles with sellers</span></h2><div id="markets"></div></section>
+      <section class="card s12"><h2>Marketing <span class="hint">what every market says on the big screen, ours and the other teams'</span></h2><div id="marketing"></div></section>
       <section class="card s8"><h2>Every market's offers <span class="hint">best for us first, after each market's fee</span></h2>
         <div class="empty" style="margin:0 0 8px">Offers posted by other teams. <b>Gives</b> = what they hand over, <b>Wants</b> = what they ask. <b>For us</b> = what we would gain by accepting now (card's value to us − price − fee). Green = worth taking. <b>Missing for our pages</b> = they sell a card we don't have yet.</div>
         <div id="boardbar" style="display:flex;gap:10px;align-items:center;margin-bottom:8px"></div><div id="board"></div></section>
@@ -1185,6 +1189,16 @@ function market(d, M) {
     + `<h2 style="margin-top:18px">Haggles with other teams</h2>` + (haggles.length ? haggles.map(r => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--grid)"><span class="muted">${hm(new Date(r.ts * 1000))}</span> ${describe(r)}</div>`).join("") : `<div class="empty">None yet.</div>`);
 }
 
+// ---------- marketing: announcements on the big screen ----------
+const MK = { open: false };
+function marketing(d) {
+  const list = d.announcements || [], mine = (d.venues?.venues || []).find(v => v.owner === d.me.id)?.venue;
+  if (!list.length) { $("marketing").innerHTML = `<div class="empty">No announcements yet.</div>`; return; }
+  const row = a => `<div class="mk"><span class="muted">${hm(tickTime(a.tick, d))}</span> <b>${esc(a.name || a.venue)}</b>${a.venue === mine ? " <span class='chip'>ours</span>" : ""} ${esc(a.text)}</div>`;
+  const [last, ...rest] = list;
+  $("marketing").innerHTML = row(last) + (rest.length ? `<details class="mk-more" ${MK.open ? "open" : ""} ontoggle="MK.open=this.open"><summary>See more · ${rest.length}</summary><div class="mk-list">${rest.map(row).join("")}</div></details>` : "");
+}
+
 // ---------- rivals ----------
 function leaderboard(d) {
   const teams = (d.leaderboard?.teams || []).slice().sort((a, b) => b.score - a.score || a.rank - b.rank);
@@ -1841,12 +1855,12 @@ async function refresh() {
     if (!ok(d.catalog)) { $("err").textContent = "⚠ waiting for catalog…"; return; }
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
       d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length, d.council?.notes?.length, d.council?.state,
-      d.swaps?.auto, (d.swaps?.opportunities || []).map(r => r.auto ? r.auto.at ?? r.auto.why : 0), d.swaps?.deals?.waiting]);
+      d.swaps?.auto, (d.swaps?.opportunities || []).map(r => r.auto ? r.auto.at ?? r.auto.why : 0), d.swaps?.deals?.waiting, d.announcements?.[0]?.id]);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
-      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d)];
+      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable — open http://localhost:8765"; }
 }
