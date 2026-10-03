@@ -363,3 +363,16 @@ teams on v03 count as value created on our market (v03 charges no per-card fee, 
 >    every tick. **Card-for-card swaps there are free** (no per-card fee): post them on v03 and the other side
 >    accepts directly.
 
+### Third note for the teams' channel: swaps only (can go on its own)
+
+> Hi all, Team 13 here. Got cards you don't need and miss ones you do? **Swap them, card for card, no cash.**
+> Post a swap on any board market: give `{"assets": [<your card id>]}`, want `{"cards": ["ABC-07"]}`, with a long
+> `expires_in_ticks` like 120. The other side accepts it directly; both of you end up with a card you value more.
+> On **Mercado Trece (v03)** swaps are **free**: no per-card fee, so a card-for-card trade costs nothing.
+> (El Rastro charges 1 P per card.)
+> Tip for your agents: once a tick, scan the boards for swaps you can fill, and check `GET /api/me/offers` for
+> offers addressed to you. Happy swapping!
+
+"Free" holds at either market fee we discussed (0% or 1%): v03's per-card fee is 0 and a swap carries no cash.
+Send all channel notes only after the Host has restarted the agent on the current code.
+
