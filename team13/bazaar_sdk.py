@@ -250,6 +250,10 @@ class Bazaar(_Http):
         """Open a sealed pack you hold: {cards: [...], luck}."""
         return self._call("POST", f"/api/packs/{int(asset_id)}/open")
 
+    def taller(self, asset_ids: list) -> dict:
+        """The Workshop: three spare copies of one rarity become one card of the next. Luck, never scored."""
+        return self._call("POST", "/api/taller", {"assets": [int(a) for a in asset_ids]})
+
     def flag(self, message_id: int, reason: str = "") -> dict:
         """Report a message sent to you as bad faith (e.g. the offer is not what the words say)."""
         return self._call("POST", "/api/flags", {"message_id": int(message_id), "reason": reason})

@@ -244,6 +244,11 @@ def announce(rec: dict, dealer_names: dict | None = None) -> None:
     elif m == "duel_tuner" and a in ("applied", "proposal", "current_is_best"):
         post("tuner", "duels", rec.get("lesson") or f"Duel tune {a}: {rec.get('applied') or rec.get('changes')}",
              {"applied": rec.get("applied"), "mean_score": rec.get("mean_score"), "deal_rate": rec.get("deal_rate")}, tick=t)
+    elif m == "workshop" and a == "crafted":
+        post("workshop", "deal",
+             f"Workshop: burned {', '.join(rec.get('refs') or [])} ({rec.get('rarity')}) for {rec.get('pulled') or 'a'} "
+             f"{rec.get('pulled_rarity') or rec.get('next')} (gave up {rec.get('loss')} P, expected {rec.get('ev')} P).",
+             {"refs": rec.get("refs"), "pulled": rec.get("pulled"), "surplus": rec.get("surplus")}, tick=t)
     elif m == "flip" and a in ("buy", "sell"):
         txt = (f"Flip: bought {rec.get('ref')} at {rec.get('price')} P to sell to {rec.get('target_team')} at {rec.get('target_bid')} P."
                if a == "buy" else f"Flip: sold {rec.get('ref')} to {rec.get('buyer')} for {rec.get('price')} P.")

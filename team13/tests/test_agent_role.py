@@ -7,18 +7,18 @@ import guard
 
 
 def test_roles():
-    assert agent.parse_role("dealers") == {"duels", "haggler"}
-    assert agent.parse_role("market") == {"venue", "trader", "flipper", "wtb", "loans"}
+    assert agent.parse_role("dealers") == {"duels", "haggler", "workshop"}
+    assert agent.parse_role("market") == {"venue", "trader", "flipper", "wtb", "loans", "workshop"}
     assert agent.parse_role("") == agent.ROLES["all"]
     assert agent.parse_role(" Haggler , trader ") == {"haggler", "trader"}
-    assert not agent.ROLES["dealers"] & agent.ROLES["market"]
+    assert agent.ROLES["dealers"] & agent.ROLES["market"] == {"workshop"}
     assert agent.ROLES["dealers"] | agent.ROLES["market"] == agent.ROLES["all"]
     try:
         agent.parse_role("haggler,nope")
         raise AssertionError("unknown module accepted")
     except SystemExit:
         pass
-    print("roles OK: presets are disjoint and cover every module")
+    print("roles OK: dealers and market share only the workshop, and together cover every module")
 
 
 class FakeCtx:

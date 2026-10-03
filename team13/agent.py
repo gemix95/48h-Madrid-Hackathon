@@ -12,6 +12,7 @@ offers this process made (threads it spoke in, offers it listed).
 Modules, in priority order each tick (one accept per team per tick is shared between them):
   duels    the tournament: never cross our limit, settle before the pie decays
   haggler  the dealer ladder: Boulware concessions, kind words, take finals inside our cap
+  workshop  three duplicates of one rarity become the next rarity, when that card is worth more to us
   trader   team trades at our private values: take good board offers, list spares, bid for what we value most
   market   open our own market at 0% fees as soon as we reach level 2, run the smart broker, invite every team
 
@@ -37,6 +38,7 @@ from haggler import Haggler
 from trader import Trader
 from guard import Guard
 from loans import LoanDesk
+from workshop import Workshop
 from flipper import Flipper
 from wtb import Asker
 from flags import FlagHunter
@@ -57,7 +59,7 @@ VENUE_BOND = 270
 class DryApi:
     """Wraps the SDK: reads pass through, writes are logged and skipped."""
     WRITES = {"open_thread", "say", "accept", "list_offer", "cancel", "open_pack", "duel_say", "duel_accept",
-              "open_venue", "close_thread", "flag", "set_fee", "close_venue"}
+              "open_venue", "close_thread", "flag", "set_fee", "close_venue", "taller"}
 
     def __init__(self, api, log):
         self._api, self._log = api, log
@@ -387,9 +389,9 @@ def single_instance():
 # Several teammates may run an agent on the same key from different machines. The server cannot tell them apart,
 # so each agent owns a disjoint set of modules: two agents never haggle with the same dealer or hit the same offer.
 ROLES = {
-    "all": {"duels", "haggler", "venue", "trader", "flipper", "wtb", "loans"},
-    "dealers": {"duels", "haggler"},               # dealer ladder + tournament (+ flags on dealer messages)
-    "market": {"venue", "trader", "flipper", "wtb", "loans"},  # our market, team trades, flips, asks, loan desk
+    "all": {"duels", "haggler", "venue", "trader", "flipper", "wtb", "loans", "workshop"},
+    "dealers": {"duels", "haggler", "workshop"},   # ladder + tournament; workshop is shared with market (a second POST is refused)
+    "market": {"venue", "trader", "flipper", "wtb", "loans", "workshop"},  # our market, trades, flips, asks, workshop
 }
 
 
@@ -424,6 +426,7 @@ def main():
     ctx.shared = role != ROLES["all"]
     build = [("loans", LoanDesk),  # first: lock a collateral that just arrived before any module could list it
              ("duels", Duels), ("haggler", Haggler), ("venue", Market),
+             ("workshop", Workshop),  # before the trader lists the duplicates we are about to burn
              ("trader", Trader),
              ("flipper", Flipper),  # buy below another team's bid, sell into it
              ("wtb", Asker)]  # ask likely holders that do not collect a set for the cards we need
@@ -431,7 +434,7 @@ def main():
     modules.append(("guard", Guard(ctx)))  # last: undo anything this tick left open that loses value
     switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue",
               "guard": "enable_guard", "flipper": "enable_flipper",
-              "wtb": "enable_wtb", "loans": "enable_loans"}
+              "wtb": "enable_wtb", "loans": "enable_loans", "workshop": "enable_workshop"}
     ctx.solvency = Solvency(ctx)  # public-feed cash bounds: skip offers whose maker cannot pay
     flagger = FlagHunter(ctx)  # proven bad faith in dealer messages to us: a correct flag scores
     # El Consejo: a unique id for this agent (fixed until it restarts), then announce every deal we make

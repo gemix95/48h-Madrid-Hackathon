@@ -567,7 +567,8 @@ class Trader:
         for a in v.spares(reserve=reserve):
             if len(asks) >= MAX_ASKS or budget <= 0 or open_total >= ctx.limit("max_open_offers_per_team", 30):
                 break
-            if a["id"] in locked or any(L.get("asset") == a["id"] for L in asks) or self.protected(a["ref"]):
+            if (a["id"] in locked or a["id"] in set(ctx.state.get("workshop_spent") or [])
+                    or any(L.get("asset") == a["id"] for L in asks) or self.protected(a["ref"])):
                 continue
             loss = v.loss_of_removing([a["ref"]])
             book = v.book(a["ref"])
