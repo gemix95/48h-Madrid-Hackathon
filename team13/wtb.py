@@ -8,7 +8,8 @@ market other than ours.
 Who: holders from the public card ledger (agent/ledger.py: settlements, gifts, listings, rarest card), skipping
 teams that collect that set (agent/team_intel.py lean > 0), teams with no public activity lately, and untrusted ones.
 Price: book x wtb_price_share, never above our value minus trade_min_gain, the team cap (agent/caps.json) or our
-free cash. At most wtb_max_open asks at once, one new ask per tick, the same team and card once per 60 ticks.
+free cash. Short of cash, a swap instead: one of our spares (values.spares()) from a set the holder collects, kept
+only if it still leaves us the minimum gain; swaps need no cash, and Mercado Trece charges no fee on them. At most wtb_max_open asks at once, one new ask per tick, the same team and card once per 60 ticks.
 The guard cancels an ask once we own the card (a second copy is worth less than the price).
 """
 from __future__ import annotations
@@ -65,8 +66,21 @@ class Asker:
                     seen[team] = max(seen.get(team, -1), e.get("tick", -1))
         return {t for t, tick in seen.items() if now - tick <= ACTIVE_TICKS}
 
+    def _swap_card(self, ref, team, leans, locked, gain):
+        """Our spare card that `team` collects and that leaves us at least the minimum gain, or None."""
+        ctx, v = self.ctx, self.ctx.values
+        best = None
+        for a in v.spares():
+            if a["id"] in locked or a["ref"] == ref or leans.get(team, {}).get(a["ref"][:3], 0) <= 0:
+                continue  # only a card from a set they collect makes the swap attractive to them
+            net = gain - v.loss_of_removing([a["ref"]])
+            if net >= ctx.S["trade_min_gain"] and (best is None or net > best[0]):
+                best = (net, a)
+        return best
+
     def plan(self):
-        """[(ref, team, price)] asks worth posting now, best first (no API writes)."""
+        """[(ref, team, price or None, our asset or None)] asks worth posting now, best first (no API writes).
+        Cash when we can afford it, else a swap of one of our spares from a set the holder collects."""
         ctx, S, v = self.ctx, self.ctx.S, self.ctx.values
         intel = getattr(ctx, "intel", None)
         if v is None or intel is None:
@@ -80,12 +94,12 @@ class Asker:
         open_cash = sum((o.get("give") or {}).get("cash") or 0 for o in ctx.my_offers
                         if o.get("maker") == me and o.get("to") and not (o.get("give") or {}).get("assets"))
         free = ctx.me.get("cash", 0) - ctx.reserve() - open_cash
+        locked = ctx.locked_assets() if hasattr(ctx, "locked_assets") else set()
         out = []
         for ref, gain in v.wishlist(limit=40):
             book = v.book(ref)
             price = math.floor(min(book * S.get("wtb_price_share", 0.9), gain - S["trade_min_gain"], caps.get(ref, 10 ** 9)))
-            if price < 0.6 * book or price > free:  # a lowball ask (2 P for a 10 P card) only annoys the holder
-                continue
+            cash_ok = price >= 0.6 * book and price <= free  # a lowball ask (2 P for a 10 P card) only annoys the holder
             for team, cards in hold.items():
                 c = cards.get(ref)
                 if team == me or not c or c[0] <= 0 or team not in active:
@@ -96,25 +110,31 @@ class Asker:
                     continue
                 if now - asks.get(f"{team}:{ref}", -10 ** 6) < RETRY_TICKS:
                     continue
-                out.append((gain - price, ref, team, price))
-        return [(ref, team, price) for _, ref, team, price in sorted(out, reverse=True)]
+                if cash_ok:
+                    out.append((gain - price, ref, team, price, None))
+                elif S.get("wtb_swaps", 1):
+                    sw = self._swap_card(ref, team, leans, locked, gain)
+                    if sw:
+                        out.append((sw[0], ref, team, None, sw[1]))
+        out.sort(key=lambda x: -x[0])
+        return [(ref, team, price, asset) for _, ref, team, price, asset in out]
 
     def step(self):
         ctx, S = self.ctx, self.ctx.S
         me = ctx.me.get("id")
-        mine = [o for o in ctx.my_offers if o.get("maker") == me and o.get("to") and not (o.get("give") or {}).get("assets")]
+        mine = [o for o in ctx.my_offers if o.get("maker") == me and o.get("to")]  # our direct asks, cash or swap
         if len(mine) >= int(S.get("wtb_max_open", 3)):
             return
         plan = self.plan()
         if not plan:
             return
-        ref, team, price = plan[0]
+        ref, team, price, asset = plan[0]
         venue = self._venue()
+        give = {"assets": [asset["id"]]} if asset else {"cash": price}
         try:
-            o = ctx.api.list_offer({"cash": price}, {"cards": [ref]}, venue=venue, to=team,
-                                   expires_in_ticks=int(S.get("wtb_ticks", 120)))
+            o = ctx.api.list_offer(give, {"cards": [ref]}, venue=venue, to=team, expires_in_ticks=int(S.get("wtb_ticks", 120)))
             ctx.state.setdefault("wtb", {})[f"{team}:{ref}"] = ctx.clock.get("tick", 0)
-            ctx.log("wtb", "asked", ref=ref, team=team, price=price, venue=venue, offer=o.get("id"))
+            ctx.log("wtb", "asked", ref=ref, team=team, price=price, swap=asset and asset["ref"], venue=venue, offer=o.get("id"))
         except BazaarError as e:
             ctx.state.setdefault("wtb", {})[f"{team}:{ref}"] = ctx.clock.get("tick", 0)
-            ctx.log("wtb", "ask_refused", ref=ref, team=team, price=price, error=str(e)[:160])
+            ctx.log("wtb", "ask_refused", ref=ref, team=team, price=price, swap=asset and asset["ref"], error=str(e)[:160])

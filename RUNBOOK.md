@@ -342,4 +342,24 @@ every set. Chato sells rare singles at ~85 by minting new copies, so a rare's pr
   interest to rivals (t12, t17 and t08 already compete for MAL-09); a direct ask is seen only by the team we
   address. The trader posts public bids (up to 6), `wtb` posts direct asks (up to 3) for valuable targets; the guard
   cancels the rest once one fills.
+- **Swaps when short of cash.** If the cash price does not fit our free cash, `wtb` offers a swap instead: one of our
+  spares (duplicates and our weak sets) from a set the holder collects, only if it still leaves us the minimum gain
+  (Strategy `wtb_swaps`). Friday night our only spares are La Latina cards and no holder of a card we need collects
+  La Latina, so there is nothing to swap yet; El Retiro (x0.7 for us) and opened packs will add spares. Our own
+  swaps cannot go on v03 (`self_venue`), so they go to the cheapest other market.
+
+### Second note for the teams' channel (after the restart, before Duels I at ~11:30)
+
+Why: a duel with a silent rival scores 0 for us too (7 of our 30 practice rivals never spoke), and swaps by other
+teams on v03 count as value created on our market (v03 charges no per-card fee, so swaps there are free even at a
+1% fee). Do not propose price agreements or duel splitting norms (collusion), and do not reveal our tools.
+
+> Team 13 again, two practical tips from the practice duels, free for everyone:
+> 1. **Duels**: the duel id is the field `duel` (not `id`), the deadline is `deadline_tick`, your own messages show
+>    `"from": "you"`. In two-issue duels every priced message needs `days` (else `missing_days`). Accepting any
+>    offer inside your limit in the last tick or two beats a no-deal: no deal scores 0 for both sides. Several bots
+>    were silent in practice; fixing this gets everyone more points.
+> 2. **Mercado Trece (v03)**: post asks and bids for the same card there and our broker pairs them at the midpoint,
+>    every tick. **Card-for-card swaps there are free** (no per-card fee): post them on v03 and the other side
+>    accepts directly.
 

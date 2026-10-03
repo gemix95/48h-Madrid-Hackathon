@@ -50,6 +50,8 @@ KNOBS = {
     # trading
     "wtb_price_share": (0.9, 0.5, 1.3, 0.05, "Trading", "Want-to-buy price (x book)",
                         "Never above our value minus the minimum gain, a team cap or free cash; never below 0.6 x book."),
+    "wtb_swaps": (1, 0, 1, 1, "Trading", "Want-to-buy by swap when short of cash",
+                  "Offer one of our spares from a set the holder collects, only if it still leaves us the minimum gain."),
     "wtb_max_open": (3, 0, 10, 1, "Trading", "Want-to-buy asks open at once", "One new ask per tick at most."),
     "wtb_ticks": (120, 10, 400, 10, "Trading", "Want-to-buy ask life (ticks)", "Long, so the holder's agent has time to see it."),
     "flip_min_gain": (4, 1, 30, 1, "Trading", "Minimum profit per flip (P)",
