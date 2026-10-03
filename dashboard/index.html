@@ -178,6 +178,10 @@ tr.good td { background: color-mix(in srgb, var(--good) 11%, transparent); }
 .origin.other { background: color-mix(in srgb, var(--warning) 35%, transparent); color: var(--text-primary); }
 .thr-tab.on { background: var(--surface-2); outline: 2px solid var(--hc); }
 .btn-s.on { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+.btn-s:disabled { opacity: .5; cursor: default; }
+.swap-warn { font-size: 12px; padding: 6px 10px; border-radius: 6px; margin-bottom: 10px;
+  background: color-mix(in srgb, var(--warning) 22%, transparent); border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent); }
+.swap-note { font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 6px; margin-bottom: 10px; background: var(--surface-2); }
 .cell .x { position: absolute; top: -7px; right: -6px; background: var(--series-2); color: #fff; border-radius: 999px; font-size: 10px;
   font-weight: 700; padding: 1px 5px; border: 2px solid var(--surface-1); }
 .set.locked { opacity: .45; }
@@ -355,7 +359,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
 
   <main class="tab" id="tab-deals">
     <div class="grid">
-      <section class="card s7"><h2>Negotiations <span class="hint">our offers (blue) vs the dealer's asks (orange) · tabs: hottest on the left (FINAL offer, small gap, haggling, no reply)</span></h2><div id="threads"></div></section>
+      <section class="card s7" id="neg-card"><h2>Negotiations <span class="hint" id="neg-hint">our offers (blue) vs the dealer's asks (orange) · tabs: hottest on the left (FINAL offer, small gap, haggling, no reply)</span></h2><div id="neg-switch"></div><div id="threads"></div><div id="swaps" style="display:none"></div></section>
       <section class="card s5"><h2>Dealers</h2><div id="dealers"></div><div id="levels"></div></section>
       <section class="card s12"><h2>Duels <span class="hint">we only see our own limit; the deal shrinks every round</span></h2><div id="duels"></div></section>
     </div>
@@ -955,6 +959,69 @@ function threads(d, M) {
     bindTips(el, i => { const m = mv[i]; return `<b>${m.who === "us" ? "Our offer" : esc(th.with) + "'s ask"}: ${m.price} P</b>${m.final ? " · FINAL" : ""}<br>tick ${m.tick}${m.text ? "<br>" + esc(m.text).slice(0, 160) : ""}`; });
     const box = el.querySelector(".msgs"); box.scrollTop = box.scrollHeight;
   }
+}
+
+// ---------- swaps (a view of the Negotiations card) ----------
+const NEG = { view: "talk", sub: "opps", mode: "both", note: null };   // card: talk | swaps · swaps: opps | deals · opportunities: both | us
+function negSwitch(d) {
+  const n = (d.swaps?.opportunities || []).filter(r => r.both).length;
+  const b = (v, label) => `<button class="btn-s ${NEG.view === v ? "on" : ""}" onclick="NEG.view='${v}';negSwitch(D);swaps(D,model(D))">${label}</button>`;
+  $("neg-switch").innerHTML = `<div style="display:flex;gap:8px;margin-bottom:10px">${b("talk", "Conversations")}${b("swaps", `Swaps${n ? ` · ${n}` : ""}`)}</div>`;
+  $("neg-card").className = "card " + (NEG.view === "swaps" ? "s12" : "s7");
+  $("neg-hint").style.display = $("threads").style.display = NEG.view === "talk" ? "" : "none";
+  $("swaps").style.display = NEG.view === "swaps" ? "" : "none";
+}
+function swaps(d, M) {
+  if (NEG.view !== "swaps") return;
+  const S = d.swaps, el = $("swaps");
+  if (!S || S.error) { el.innerHTML = `<div class="empty">${S?.error ? `Swaps failed: ${esc(S.error)}` : "No swap data yet. If this stays empty, restart the dashboard server."}</div>`; return; }
+  const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
+  const nm = id => id === d.me.id ? "us" : (names[id] || id);
+  const opps = S.opportunities || [], both = opps.filter(r => r.both), us = opps.filter(r => !r.both), { open, done } = S.deals;
+  const tab = (key, v, label, n) => `<button class="btn-s ${NEG[key] === v ? "on" : ""}" onclick="NEG.${key}='${v}';swaps(D,model(D))">${label} · ${n}</button>`;
+  const bar = `<div style="display:flex;gap:8px;margin-bottom:10px">${tab("sub", "opps", "Opportunities", both.length)}${tab("sub", "deals", "Deals", open.length + done.length)}</div>`;
+  const ts = d.clock?.tick_seconds || 60;
+  const ago = t => { const s = t * ts; return s < 90 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
+  const side = refs => refs.map(r => cardTag(r, d, M)).join("") || "–";
+  let body;
+  if (NEG.sub === "opps") {
+    const rows = NEG.mode === "both" ? both : us, v = S.venue, note = NEG.note;
+    body = `<div class="swap-warn">⚠ <b>Publishes directly.</b> The button posts the offer with our team key; it does not go through the agent.</div>`
+      + (note ? `<div class="swap-note" style="color:${note.wait ? "var(--text-secondary)" : note.ok ? "var(--up)" : "var(--critical)"}">${note.wait ? "Posting…" : esc(note.text)}</div>` : "")
+      + `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">${tab("mode", "both", "Good for both", both.length)}${tab("mode", "us", "Only good for us", us.length)}`
+      + `<span class="muted" style="font-size:12px">${v ? `posts to ${esc(v.name)} · ${fmt((v.fee_bps || 0) / 100)}% fee` : "no market to post on"}</span></div>`
+      + (rows.length ? `<table><thead><tr><th>We get</th><th>From</th><th>We give</th><th class="num">Us</th><th class="num">Them (est.)</th><th></th></tr></thead><tbody>`
+        + rows.slice(0, 30).map(r => `<tr class="${r.both ? "good" : ""}"><td>${cardTag(r.want, d, M)}</td>
+          <td>${esc(nm(r.team))}<div class="muted" style="font-size:11px">${esc(r.evidence)}${r.count > 1 ? ` · ×${r.count}` : ""} · active ${ago(r.idle)}</div></td>
+          <td>${cardTag(r.give, d, M)}${r.listed.length ? `<div class="muted" style="font-size:11px">also for sale for cash (#${r.listed.join(", #")})</div>` : ""}</td>
+          <td class="num" title="card +${fmt(r.gain)} P, spare −${fmt(r.loss)} P"><b style="color:var(--up)">+${fmt(r.ours)}</b></td>
+          <td class="num" title="our estimate of what the other team gains"><b style="color:${r.both ? "var(--up)" : "var(--critical)"}">${r.theirs > 0 ? "+" : ""}${fmt(r.theirs)}</b></td>
+          <td class="num"><button class="btn-s" ${v ? "" : "disabled"} onclick="offerSwap('${esc(r.team)}','${esc(r.want)}',${Number(r.asset)})">Offer swap</button></td></tr>`).join("") + `</tbody></table>`
+        : `<div class="empty">${NEG.mode === "both" ? `No swap that both sides would likely accept right now. "Only good for us" lists the ones that only help us.` : "Nothing else to propose right now."}</div>`)
+      + `<div class="empty" style="margin-top:6px"><b>Us</b> = what the card is worth to us minus what the spare costs us (exact, at our values). <b>Them</b> = our estimate for the other team from the sets it keeps or dumps in the public feed: a guess. We cannot see other teams' cards: holders come from the deals, gifts and listings we saw.</div>`;
+  } else {
+    const vname = id => (d.venues?.venues || []).find(x => x.venue === id)?.name || id || "–";
+    body = `<h2 style="margin-top:0">Open</h2>` + (open.length ? `<table><thead><tr><th>Market</th><th>With</th><th>We give</th><th>We get</th></tr></thead><tbody>`
+        + open.map(o => { const mine = o.maker === d.me.id;
+          return `<tr><td class="sec">${esc(vname(o.venue))}</td><td>${mine ? `to ${esc(nm(o.to))}` : `<b>${esc(nm(o.maker))}</b> offers us`}</td><td>${side(mine ? o.give : o.want)}</td><td>${side(mine ? o.want : o.give)}</td></tr>`; }).join("") + `</tbody></table>`
+      : `<div class="empty">No swap offers open.</div>`)
+      + `<h2 style="margin-top:18px">Done</h2>` + (done.length ? `<table><thead><tr><th>Time</th><th>With</th><th>We gave</th><th>We got</th></tr></thead><tbody>`
+        + done.map(x => `<tr><td class="sec">${hm(tickTime(x.tick, d))}</td><td>${esc(nm(x.with))}</td><td>${side(x.gave)}</td><td>${side(x.got)}</td></tr>`).join("") + `</tbody></table>`
+      : `<div class="empty">No swap has settled with us yet. ${S.deals.market_swaps ? `Between teams, ${S.deals.market_swaps} card-for-card trade${S.deals.market_swaps > 1 ? "s have" : " has"} settled so far.` : "No team has settled a card-for-card trade so far."}</div>`);
+  }
+  el.innerHTML = bar + body;
+}
+async function offerSwap(team, want, asset) {
+  const r = (D.swaps?.opportunities || []).find(x => x.team === team && x.want === want && x.asset === asset), v = D.swaps?.venue;
+  const tn = (D.leaderboard?.teams || []).find(t => t.team === team)?.name || team;
+  if (!r || !confirm(`Post this swap now?\n\nWe give ${r.give} to ${tn} for their ${want}.\nIt goes straight to ${v?.name || "the game"}; the agent does not see it first.`)) return;
+  NEG.note = { wait: true }; swaps(D, model(D));
+  try {
+    const res = await (await fetch("/swap", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ team, want, asset }) })).json();
+    NEG.note = res.ok ? { ok: true, text: `✓ Offer #${res.offer} posted on ${res.venue_name || res.venue}: our ${res.give} for ${want}, to ${tn}.${res.also_listed?.length ? ` That card is also listed for cash (#${res.also_listed.join(", #")}).` : ""}` }
+      : { ok: false, text: `✕ ${res.error}` };
+  } catch (e) { NEG.note = { ok: false, text: "✕ dashboard server unreachable" }; }
+  lastSig = ""; refresh();
 }
 
 // ---------- dealers ----------
@@ -1717,7 +1784,7 @@ async function refresh() {
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
-      () => threads(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d)];
+      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable — open http://localhost:8765"; }
 }

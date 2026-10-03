@@ -39,6 +39,8 @@ DECISIONS = HERE.parent / "team13" / "logs" / "decisions.jsonl"
 BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 import council  # noqa: E402  (team13/council.py: El Consejo, the board where our agents post what they learnt)
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
+import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, and the one write the dashboard makes)
+HAND_LOG = HERE.parent / "logs" / "hand.jsonl"
 # the bots' own logs, so they only exist on the laptop that runs them: agent.py writes decisions.jsonl, agent/hand.py hand.jsonl
 INDEX = LogIndex({"agent": DECISIONS, "manual": HERE.parent / "logs" / "hand.jsonl"})
 
@@ -91,6 +93,40 @@ def get(path, keyed):
         return {"_error": e.code, "_body": e.read().decode(errors="replace")[:300]}
     except Exception as e:
         return {"_error": str(e)}
+
+
+def post(path, body):
+    """The one write the dashboard makes with our key (the Swaps tab's button), shaped like get()."""
+    req = urllib.request.Request(URL + path, data=json.dumps(body).encode(), method="POST",
+                                 headers={"X-Team-Key": KEY, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        return {"_error": e.code, "_body": e.read().decode(errors="replace")[:300]}
+    except Exception as e:
+        return {"_error": str(e)}
+
+
+_swaps = {"key": None, "view": None}
+
+
+def swaps_view():
+    """Swap opportunities and deals for the Negotiations > Swaps tab; recomputed only when the tick, the public feed
+    or our offers changed. Called with `lock` held."""
+    me, cat, offers = cache.get("me"), cache.get("catalog"), (cache.get("offers") or {}).get("offers")
+    if not (isinstance(me, dict) and me.get("assets") is not None and isinstance(cat, dict) and "sets" in cat and offers is not None):
+        return None
+    min_gain, tick = strategy.load().get("trade_min_gain", 3), (cache.get("clock") or {}).get("tick") or me.get("tick") or 0
+    key = (len(INTEL.events), tick, tuple(sorted(o["id"] for o in offers)), min_gain)
+    if _swaps["key"] != key:
+        try:
+            events = sorted(list(INTEL.events.values()), key=lambda e: e["id"])
+            _swaps["view"] = swaps.view(me, cat, events, cache.get("leaderboard"), offers, (cache.get("venues") or {}).get("venues", []), min_gain, tick)
+        except Exception as e:
+            _swaps["view"] = {"error": repr(e)[:200]}
+        _swaps["key"] = key
+    return _swaps["view"]
 
 
 def record(me, clock):
@@ -286,7 +322,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "history": history, "served_at": time.time(),
                                    "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60),
                                    "origins": message_origins(INDEX, cache.get("threads"), (cache.get("me") or {}).get("id")),
-                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard()}).encode()
+                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard(), "swaps": swaps_view()}).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):
             self._send(200, "application/json", json.dumps(strategy.describe()).encode())
@@ -306,6 +342,8 @@ class Handler(BaseHTTPRequestHandler):
                 prop = cache.get("proposal") or {}
                 prop["dismissed"], prop["status"] = prop.get("changes"), "dismissed"
             return self._send(200, "application/json", b'{"ok": true}')
+        if self.path.startswith("/swap"):
+            return self._swap()
         if not self.path.startswith("/strategy"):
             return self._send(404, "text/plain", b"not found")
         try:
@@ -315,6 +353,32 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, "application/json", json.dumps({"ok": True, "current": saved}).encode())
         except ValueError as e:
             self._send(400, "application/json", json.dumps({"ok": False, "error": str(e)}).encode())
+
+    def _swap(self):
+        """Post one swap offer with our key, straight from here: it does not go through the agent or its guard."""
+        reply = lambda res, code=200: self._send(code, "application/json", json.dumps(res).encode())
+        if not (self.headers.get("Content-Type") or "").startswith("application/json"):  # a form on another site cannot send this
+            return reply({"ok": False, "error": "send JSON"}, 415)
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+            req = json.loads(self.rfile.read(min(n, 2000)) or b"{}")
+            team, want, asset = str(req["team"]), str(req["want"]), int(req["asset"])
+        except (ValueError, KeyError, TypeError):
+            return reply({"ok": False, "error": "bad request"}, 400)
+        with lock:
+            me, cat, offers, venues = cache.get("me"), cache.get("catalog"), (cache.get("offers") or {}).get("offers"), (cache.get("venues") or {}).get("venues")
+        if not (isinstance(me, dict) and me.get("assets") is not None and isinstance(cat, dict) and "sets" in cat and offers is not None and venues):
+            return reply({"ok": False, "error": "no team data yet, try again in a few seconds"})
+        res = swaps.post_swap(post, time.time(), me, cat, offers, venues, strategy.load().get("trade_min_gain", 3), team, want, asset)
+        try:  # same log as agent/hand.py, so a swap sent from here is traceable
+            HAND_LOG.parent.mkdir(exist_ok=True)
+            with HAND_LOG.open("a") as f:
+                f.write(json.dumps({"ts": time.time(), "ev": "swap_offer", "team": team, "want": want, "asset": asset, "r": res}) + "\n")
+        except OSError:
+            pass
+        if res.get("ok"):
+            due["offers"] = 0  # show it in Our offers at once
+        reply(res)
 
     def _send(self, code, ctype, body):
         self.send_response(code)
