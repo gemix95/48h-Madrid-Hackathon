@@ -321,8 +321,8 @@ ul{{padding-left:18px;margin:6px 0}}li{{margin:4px 0}}.cols{{display:grid;grid-t
 footer{{margin-top:24px;font-size:13px}}
 .list li{{list-style:none;margin:0 0 10px -18px;padding:8px 0;border-bottom:1px solid var(--line)}}.list li:last-child{{border-bottom:0}}
 .meet{{margin:4px 0 2px;font-size:13px}}
-h3{{font-size:15px;margin:20px 0 6px;color:var(--gold)}}tr.quiet td{{opacity:.62}}
-.active-only tr.quiet{{display:none}}.active-only .set.empty{{display:none}}
+h3{{font-size:15px;margin:20px 0 6px;color:var(--gold)}}
+
 .pill.quietpill{{color:var(--dim)}}.hero{{font-size:20px;line-height:1.35;margin:8px 0 6px;max-width:820px}}
 button.toggle{{float:right;font:inherit;font-size:12px;padding:3px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--dim);cursor:pointer}}
 td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
@@ -345,9 +345,8 @@ Got a spare? <b>Sell it fast</b> to the best buyer.</div>
 <div class="box step"><b class="n">3</b><b>Matched on {vid}</b><br><span class="dim">Buyers and sellers from this board meet on {vid}, our market, and are matched the tick both are there.</span></div>
 </div>
 
-<h2>Cards you can buy or sell now <span class="dim" style="font-weight:400;font-size:14px">· {live} of {len(pub["cards"])} cards have a price</span>
-<button class="toggle" id="showall">show all {len(pub["cards"])} cards</button></h2>
-<div id="deck" class="active-only">{deck()}</div>
+<h2>Every card in the Bazaar <span class="dim" style="font-weight:400;font-size:14px">· {live} have a price now · no price? bid first, on {vid}</span></h2>
+<div id="deck">{deck()}</div>
 
 <h2>Why this is safe to use</h2>
 <div class="box"><ul>
@@ -379,10 +378,7 @@ document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click
 fetch("/board/cards.json").then(r => r.json()).then(cards => {{
   document.querySelectorAll(".thumb[data-card]").forEach(t => {{ const h = cards[t.dataset.card]; if (h) t.innerHTML = h; }});
 }}).catch(() => {{}});
-const deckEl = document.getElementById("deck"), tg = document.getElementById("showall");
-let all = false; try {{ all = localStorage.getItem("board-all") === "1"; }} catch (e) {{}}
-const paint = () => {{ deckEl.classList.toggle("active-only", !all); tg.textContent = all ? "show only active cards" : "show all {len(pub["cards"])} cards"; }};
-tg.addEventListener("click", () => {{ all = !all; try {{ localStorage.setItem("board-all", all ? "1" : "0"); }} catch (e) {{}} paint(); }});
+ }});
 paint();
 setInterval(() => {{ if (Date.now() > busyUntil && !getSelection().toString()) location.reload(); }}, 15000);
 </script></body></html>"""
