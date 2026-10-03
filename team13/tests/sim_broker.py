@@ -8,9 +8,12 @@ Efficiency = realised gains between true limits / maximum possible gains.
 import random, sys
 sys.path.insert(0, ".")
 import smart_broker as sb, starter_plans
+sb.log = lambda **rec: None  # never write simulated events into the live broker log
 
 
-def run(seed, strategy, n=10, ticks=16, arrivals=True):
+def run(seed, strategy, n=10, ticks=16, arrivals=True, server="quotes"):
+    """server: what a match price must respect, "quotes" (ask <= p <= bid) or the hidden "limits"."""
+    sb._probe.update(on=True, accepted=0, refused=0, tries={})
     rnd = random.Random(seed)
     tr = []
     for i in range(n):
@@ -40,9 +43,12 @@ def run(seed, strategy, n=10, ticks=16, arrivals=True):
                          "give": {"cash": t["q"] if t["side"] == "bid" else 0}})
         tracker.update(tick, book)
         book_dict = {"bench_offers": book}
-        if strategy == "smart":
+        probes = []
+        if strategy in ("smart", "probe"):
             plan = sb.smart_bench_plan({}, tracker, tick, lambda p: 0)
             plan = sb.stall_floor(book_dict, plan, lambda p: 0)
+            if strategy == "probe":
+                probes = sb.probe_plan(tracker, {i for s, b, _ in plan for i in (s, b)}, lambda p: 0)
         elif strategy == "stall":
             plan = starter_plans.bench_plan(book_dict)
         else:  # oracle: knows limits and departures
@@ -62,12 +68,21 @@ def run(seed, strategy, n=10, ticks=16, arrivals=True):
             if by[s]["alive"] and by[b]["alive"]:
                 got += by[b]["lim"] - by[s]["lim"]
                 by[s]["alive"] = by[b]["alive"] = False
+        for s, b, p in probes:
+            S, B = by[s], by[b]
+            lo, hi = (S["lim"], B["lim"]) if server == "limits" else (S["q"], B["q"])
+            ok = S["alive"] and B["alive"] and lo <= p <= hi
+            sb.probe_result(s, b, ok)
+            if ok:
+                got += B["lim"] - S["lim"]
+                S["alive"] = B["alive"] = False
     return got / best if best > 0 else 1.0
 
 
 if __name__ == "__main__":
     N = 3000
-    for arrivals in (False, True):
-        for strat in ("stall", "smart", "oracle"):
-            e = [run(s, strat, arrivals=arrivals) for s in range(N)]
-            print(f"arrivals={arrivals!s:5} {strat:6s} {sum(e) / len(e):.3f}")
+    for server in ("quotes", "limits"):
+        for arrivals in (False, True):
+            for strat in ("stall", "smart", "probe", "oracle"):
+                e = [run(s, strat, arrivals=arrivals, server=server) for s in range(N)]
+                print(f"server={server:6} arrivals={arrivals!s:5} {strat:6s} {sum(e) / len(e):.3f}")

@@ -154,6 +154,45 @@ def smart_bench_plan(book, tracker, tick, fee):
     return plan
 
 
+PROBES_PER_TICK = 3     # match attempts per tick on pairs whose quotes do not cross yet (rate limit: 5 req/s)
+PROBE_GIVEUP = 6        # refusals with no acceptance at all: the server checks quotes, stop probing
+_probe = {"on": True, "accepted": 0, "refused": 0, "tries": {}}
+
+
+def probe_plan(tracker, used, fee, max_n=PROBES_PER_TICK):
+    """Pairs whose quotes do not cross but whose estimated limits do, priced at the midpoint of the estimates.
+
+    The Market Test scores gains between TRUE limits; if the server checks a match against those limits rather than
+    the quotes, these are trades the stall never makes (firm traders never relax into a cross)."""
+    if not _probe["on"]:
+        return []
+    out, runs = [], {}
+    for oid, s in tracker.seen.items():
+        if oid not in used:
+            runs.setdefault(s["run"], {"ask": [], "bid": []})[s["side"]].append((oid, s))
+    for run, sides in runs.items():
+        sh = tracker.shade(run)
+        sellers = sorted(((oid, s["quotes"][-1], s["quotes"][-1] * (1 - sh)) for oid, s in sides["ask"]), key=lambda x: x[2])
+        buyers = sorted(((oid, s["quotes"][-1], s["quotes"][-1] * (1 + sh)) for oid, s in sides["bid"]), key=lambda x: -x[2])
+        for (sell, ask, cost), (buy, bid, value) in zip(sellers, buyers):
+            if value < cost:
+                break
+            if bid >= ask or _probe["tries"].get((sell, buy), 0) >= 2:
+                continue
+            price = min(max(round((cost + value) / 2), bid), ask)
+            if price + fee(price) <= value:
+                out.append((sell, buy, price))
+    return out[:max_n]
+
+
+def probe_result(sell, buy, ok, error=""):
+    _probe["tries"][(sell, buy)] = _probe["tries"].get((sell, buy), 0) + 1
+    _probe["accepted" if ok else "refused"] += 1
+    if not ok and not _probe["accepted"] and _probe["refused"] >= PROBE_GIVEUP:
+        _probe["on"] = False
+        log(event="probe_disabled", refused=_probe["refused"], last_error=error[:200])
+
+
 def _bench_quotes(book):
     asks, bids = {}, {}
     for o in book.get("bench_offers") or []:
@@ -268,6 +307,16 @@ def run(url, key):
                         log(event="match", tick=tick, sell=sell, buy=buy, price=price)
                     except BazaarError as e:
                         log(event="match_refused", tick=tick, sell=sell, buy=buy, price=price, error=str(e))
+                if bench:
+                    used = {oid for s, b, _ in plan for oid in (s, b)}
+                    for sell, buy, price in probe_plan(tracker, used, fee):
+                        try:
+                            broker.match(sell, buy, price)
+                            probe_result(sell, buy, True)
+                            log(event="probe_match", tick=tick, sell=sell, buy=buy, price=price)
+                        except BazaarError as e:
+                            probe_result(sell, buy, False, str(e))
+                            log(event="probe_refused", tick=tick, sell=sell, buy=buy, price=price, error=str(e)[:200])
         except BazaarError as e:
             log(event="read_failed", error=str(e))
         time.sleep(1.0)

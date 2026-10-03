@@ -70,6 +70,54 @@ svg .ink { fill: var(--text-secondary); } svg .ink1 { fill: var(--text-primary);
   padding: 10px 12px; font-size: 13px; line-height: 1.5; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
 .tip b { color: var(--tip-ink); font-weight: 650; }
 .tip .muted { color: var(--tip-muted); }
+/* weekend schedule — readable story, not cryptic markers */
+.sched { display: flex; flex-direction: column; gap: 14px; }
+.sched-hero { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; align-items: start;
+  padding: 14px 16px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--hc, var(--series-1)) 40%, var(--border));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--hc, var(--series-1)) 12%, var(--surface-1)), var(--surface-1)); }
+.sched-hero .kicker { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--hc, var(--series-1)); }
+.sched-hero .title { font-size: 18px; font-weight: 700; line-height: 1.25; margin-top: 2px; }
+.sched-hero .blurb { grid-column: 1 / -1; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.sched-hero .eta { text-align: right; }
+.sched-hero .eta b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.sched-hero .eta span { font-size: 12px; color: var(--muted); }
+.sched-hero.empty { --hc: var(--muted); }
+.sched-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.sched-day { position: relative; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+.sched-day.on { border-color: color-mix(in srgb, var(--series-1) 50%, var(--border)); box-shadow: inset 3px 0 0 var(--series-1); }
+.sched-day.past { opacity: .55; }
+.sched-day .dn { font-weight: 700; font-size: 13px; }
+.sched-day .ds { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.sched-day .bar { margin-top: 8px; height: 4px; border-radius: 2px; background: var(--grid); overflow: hidden; }
+.sched-day .bar i { display: block; height: 100%; background: var(--series-1); border-radius: 2px; }
+.sched-rail { position: relative; display: flex; flex-direction: column; gap: 0; }
+.sched-rail::before { content: ""; position: absolute; left: 15px; top: 8px; bottom: 8px; width: 2px; background: var(--grid); }
+.sched-row { position: relative; display: grid; grid-template-columns: 32px 72px 1fr; gap: 10px; align-items: start;
+  padding: 10px 12px 10px 0; border-radius: 10px; cursor: pointer; outline: none; }
+.sched-row:hover, .sched-row:focus-visible, .sched-row.open { background: var(--surface-2); }
+.sched-row.done { opacity: .55; }
+.sched-row.done:hover, .sched-row.done.open { opacity: .85; }
+.sched-dot { width: 14px; height: 14px; margin: 3px 0 0 9px; border-radius: 50%; border: 2px solid var(--hc, var(--axis));
+  background: var(--surface-1); z-index: 1; box-shadow: 0 0 0 3px var(--surface-1); }
+.sched-row.next .sched-dot, .sched-row.live .sched-dot { background: var(--hc, var(--series-1)); animation: sched-pulse 1.8s ease-out infinite; }
+.sched-row.done .sched-dot { background: var(--muted); border-color: var(--muted); }
+@keyframes sched-pulse {
+  0% { box-shadow: 0 0 0 3px var(--surface-1), 0 0 0 3px color-mix(in srgb, var(--hc, var(--series-1)) 40%, transparent); }
+  70% { box-shadow: 0 0 0 3px var(--surface-1), 0 0 0 12px transparent; }
+  100% { box-shadow: 0 0 0 3px var(--surface-1), 0 0 0 3px color-mix(in srgb, var(--hc, var(--series-1)) 40%, transparent); }
+}
+.sched-when { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; line-height: 1.35; }
+.sched-when b { display: block; color: var(--text-primary); font-size: 13px; }
+.sched-main .name { font-weight: 650; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sched-main .one { font-size: 12px; color: var(--text-secondary); margin-top: 2px; line-height: 1.4; }
+.sched-main .more { display: none; margin-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.45;
+  padding: 8px 10px; border-radius: 8px; background: var(--surface-1); border: 1px solid var(--border); }
+.sched-row.open .more, .sched-row:hover .more, .sched-row:focus-visible .more { display: block; }
+.sched-tag { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px; border: 1px solid currentColor; color: var(--hc, var(--muted)); }
+.sched-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.sched-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sched-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .err { color: var(--critical); font-size: 12px; }
 
 /* next moves */
@@ -246,7 +294,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
         <div class="moves" id="moves"></div>
       </section>
       <section class="card s12">
-        <h2>Weekend timeline <span class="hint">hover a marker</span></h2>
+        <h2>Weekend schedule <span class="hint">hover a row for the full story</span></h2>
         <div id="timeline"></div>
       </section>
       <section class="card s12">
@@ -383,15 +431,32 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 const fmt = (n, d = 1) => n == null || isNaN(n) ? "–" : (Math.round(n * 10 ** d) / 10 ** d).toLocaleString();
 const P = n => `${fmt(n)} P`;
 const tip = $("tip");
-function showTip(e, html) { tip.innerHTML = html; tip.style.display = "block";
-  const x = Math.min(e.clientX + 14, innerWidth - 320), y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 8);
-  tip.style.left = x + "px"; tip.style.top = y + "px"; }
-function hideTip() { tip.style.display = "none"; }
-function bindTips(root, getHtml) {
+function showTip(e, html, cls) {
+  tip.className = "tip" + (cls ? " " + cls : "");
+  tip.innerHTML = html; tip.style.display = "block";
+  const pad = 12, w = tip.offsetWidth || 300, h = tip.offsetHeight || 120;
+  const fromPtr = e.clientX != null && e.clientY != null && (e.type === "mousemove" || e.type === "mouseover" || e.type === "pointermove");
+  let x, y;
+  if (fromPtr) { x = e.clientX + 16; y = e.clientY + 16; }
+  else {
+    const r = (e.currentTarget || e.target)?.getBoundingClientRect?.();
+    x = r ? r.left + r.width / 2 + 12 : pad; y = r ? r.bottom + 8 : pad;
+  }
+  if (x + w > innerWidth - pad) x = (fromPtr ? e.clientX : x) - w - 12;
+  if (y + h > innerHeight - pad) y = (fromPtr ? e.clientY : y) - h - 12;
+  tip.style.left = Math.max(pad, x) + "px"; tip.style.top = Math.max(pad, y) + "px";
+}
+function hideTip() { tip.style.display = "none"; tip.className = "tip"; }
+function bindTips(root, getHtml, tipCls) {
   root.querySelectorAll("[data-tip]").forEach(el => {
-    el.addEventListener("mousemove", e => showTip(e, getHtml(el.dataset.tip))); el.addEventListener("mouseleave", hideTip); });
+    el.addEventListener("mousemove", e => showTip(e, getHtml(el.dataset.tip), tipCls));
+    el.addEventListener("mouseleave", hideTip);
+    el.addEventListener("focus", e => showTip(e, getHtml(el.dataset.tip), tipCls));
+    el.addEventListener("blur", hideTip);
+  });
 }
 const ok = v => v && !v._error;
+const api = (url, opt = {}) => fetch(url, { credentials: "same-origin", cache: "no-store", ...opt });
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
 const STATUS = { good: ["var(--good)", "✓"], warning: ["var(--warning)", "!"], serious: ["var(--serious)", "▲"], critical: ["var(--critical)", "●"], info: ["var(--series-1)", "i"] };
 
@@ -448,68 +513,118 @@ setInterval(() => {
   $("live").innerHTML = `<span class="dot" style="background:${fresh ? "var(--good)" : "var(--critical)"}"></span>${age == null ? "connecting…" : fresh ? `live · updated ${age}s ago` : `stale · ${age}s ago`}`;
 }, 500);
 
-// ---------- timeline ----------
-// kinds: 0 duels (the main event), 1 market test, 2 releases/grants and 3 doors (kept in the data, not drawn)
+// ---------- weekend schedule ----------
+// kinds: 0 duels, 1 market test, 2 releases/grants, 3 doors (2–3 kept in data, not listed)
 const EV_KIND = a => a === "duels" ? 0 : a === "bench" ? 1 : (a === "set_release" || a === "grant_all") ? 2 : 3;
 const EV_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--muted)"];
-// plain-language tooltip for an event
-function eventTip(e) {
-  const p = e.params || {}, when = `${dayName(e.wall)} ${hm(e.wall)} (${until(e.wall)})`;
+function eventState(e, nowH) {
+  const delta = (e.at_hours ?? 0) - nowH;
+  if (delta < -0.05) return "done";
+  if (delta <= 0.08) return "live";
+  return "later";
+}
+function eventCopy(e) {
+  const p = e.params || {};
   if (e.kind === 0) {
     const two = (p.issues || []).includes("days");
-    return `<b>${esc(p.name || "Duels")}</b><br>${when}<br>`
-      + (p.practice ? `<b>Practice: does not score.</b> Use it to learn how duels work.<br>` : `<b>Scores points</b> (part of the 30 for negotiating).<br>`)
-      + `Our agent negotiates 1-on-1 with another team's agent, once as buyer and once as seller, against every team.<br>`
-      + `We negotiate ${two ? "price <b>and delivery day</b>: give up the day we care less about to win on price" : "price only"}.<br>`
-      + `<span class="muted">Max ${p.duel_ticks ?? "?"} rounds. Every round the deal loses ${Math.round((p.decay ?? 0) * 100)}% of its value, so close fast. No deal = 0.</span>`;
+    const decay = Math.round((p.decay ?? 0) * 100);
+    const title = p.name || "Duels";
+    const one = p.practice
+      ? "Warm-up vs other teams — does not score. Use it to test the duel bot."
+      : "1-on-1 vs every team (buy once, sell once). Counts toward the 30 negotiating points.";
+    const more = (two ? "You negotiate price and delivery day — give up the day you care less about." : "You negotiate on price only.")
+      + ` ${p.duel_ticks ?? "?"} rounds max; the pie shrinks ~${decay}% each round, so close early. No deal = 0 points.`;
+    return { title, one, more, kindLabel: p.practice ? "Practice" : "Duels" };
   }
   if (e.kind === 1) {
-    return `<b>${esc(p.name || "Market Test")}</b><br>${when}<br>`
-      + `The game gives <b>every market</b> the same fake list of ${p.traders ?? "?"} buyers and sellers. Whoever matches the most pairs wins more of the 30 market points.<br>`
-      + `<span class="muted">Needs our own market (level 2). Without it the free stall plays and earns half. Lasts ${p.ticks ?? "?"} ticks.${/hard/i.test(e.note || "") ? " This one has firmer, more impatient traders." : ""}</span>`;
+    return {
+      title: p.name || "Market test",
+      one: `Same ${p.traders ?? "?"} fake traders hit every market. Best matching wins more of the 30 market points.`,
+      more: `Needs our own market (level 2) — the free stall only earns half. Lasts ${p.ticks ?? "?"} ticks.`
+        + (/hard/i.test(e.note || "") ? " Firmer, less patient traders this round." : ""),
+      kindLabel: "Market",
+    };
   }
-  return `<b>${esc(e.note)}</b><br>${when}`;
+  return { title: e.note || "Event", one: "", more: "", kindLabel: "Other" };
 }
 function timeline(d) {
-  const c = d.clock || {}, sch = d.schedule || {}, ev = (sch.upcoming || []);
-  const days = dayStarts(c), total = days.length ? days[days.length - 1].start + days[days.length - 1].dur : 24;
-  const W = 1200, L = 120, R = 24, top = 40, duelH = 58, mktH = 30, H = top + duelH + mktH + 30;
-  const X = h => L + h / total * (W - L - R);
-  const nowH = c.t_hours || 0;
-  let g = "";
-  days.forEach((day, i) => {
-    const w = (day.dur / total) * (W - L - R), x0 = X(day.start);
-    g += `<rect x="${x0}" y="0" width="${w - 2}" height="${H - 20}" rx="6" fill="var(--surface-2)" opacity="${i % 2 ? 0.55 : 1}"/>`;
-    g += `<text x="${x0 + 8}" y="17" class="ink1" style="font-weight:700;font-size:13px">${esc(day.name)}${day.day === "fri" ? ` <tspan style="font-weight:500;font-size:10px">counts ½</tspan>` : ""}</text>`;
-    g += `<text x="${x0 + 8}" y="32" style="font-size:11px">⏱ tick every <tspan class="ink1" style="font-weight:700">${day.tick_seconds}s</tspan></text>`;
-  });
-  g += `<text x="${L - 10}" y="${top + duelH / 2 + 4}" text-anchor="end" class="ink1" style="font-weight:700">Duels</text><text x="${L - 10}" y="${top + duelH / 2 + 17}" text-anchor="end" style="font-size:10px">vs other teams</text>`;
-  g += `<text x="${L - 10}" y="${top + duelH + mktH / 2 + 4}" text-anchor="end" class="ink">Market test</text>`;
-  for (let h = 0; h <= total; h += 2) g += `<text x="${X(h)}" y="${H - 4}" text-anchor="middle" style="font-size:10px">${h}h</text>`;
+  const c = d.clock || {}, sch = d.schedule || {}, ev = sch.upcoming || [];
+  const days = dayStarts(c), nowH = c.t_hours || 0;
   const items = ev.map((e, i) => ({ ...e, i, kind: EV_KIND(e.action), wall: wallFor(e.at_hours, c, e.action) }));
   const shown = items.filter(e => e.kind < 2);
-  const nextIdx = (shown.find(e => e.at_hours > nowH) || {}).i;
-  shown.forEach(e => {
-    const x = X(e.at_hours), past = e.at_hours < nowH, col = EV_COLORS[e.kind], op = past ? 0.35 : 1;
-    if (e.kind === 0) {
-      const y = top + 20, r = 11, practice = e.params?.practice;
-      g += `<path d="M${x},${y - r} L${x + r},${y} L${x},${y + r} L${x - r},${y} Z" fill="${practice ? "var(--surface-1)" : col}" stroke="${col}" stroke-width="2.5" opacity="${op}"/>`;
-      if (e.i === nextIdx) g += `<circle cx="${x}" cy="${y}" r="17" fill="none" stroke="${col}" stroke-width="2"/>`;
-      const label = (e.params?.name || "Duels").replace("Practice duels", "Practice") + (practice ? " (no score)" : ""), end = x > W - 90;
-      g += `<text x="${x}" y="${y + 29}" text-anchor="${end ? "end" : "middle"}" class="ink1" style="font-size:11px;font-weight:600;opacity:${op}">${esc(label)}</text>`;
-      g += `<rect data-tip="${e.i}" x="${x - 18}" y="${y - 18}" width="36" height="36" fill="transparent"/>`;
-    } else {
-      const y = top + duelH + mktH / 2;
-      g += `<rect x="${x - 5}" y="${y - 5}" width="10" height="10" rx="2" fill="${col}" stroke="var(--surface-1)" stroke-width="2" opacity="${op}"/>`;
-      g += `<rect data-tip="${e.i}" x="${x - 10}" y="${y - 12}" width="20" height="24" fill="transparent"/>`;
-    }
+  const next = shown.find(e => e.at_hours >= nowH - 0.02);
+  const nextIdx = next?.i;
+
+  // day progress cards
+  const dayCards = days.map(day => {
+    const end = day.start + day.dur;
+    const past = nowH >= end, on = nowH >= day.start && nowH < end;
+    const pct = past ? 100 : on ? Math.max(2, Math.min(100, ((nowH - day.start) / day.dur) * 100)) : 0;
+    const win = `${hm(new Date(day.opens))}–${hm(new Date(day.closes))}`;
+    return `<div class="sched-day${on ? " on" : ""}${past ? " past" : ""}">
+      <div class="dn">${esc(day.name)}${day.day === "fri" ? " · ½ weight" : ""}${on ? " · now" : ""}</div>
+      <div class="ds">${win} · tick every ${day.tick_seconds}s</div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+    </div>`;
+  }).join("");
+
+  // up-next hero (always readable — no hover required)
+  let hero;
+  if (!next) {
+    hero = `<div class="sched-hero empty"><div><div class="kicker">Up next</div><div class="title">Nothing left on the clock</div></div>
+      <div class="eta"><b>—</b><span>weekend's timed events are done</span></div>
+      <div class="blurb">Use the quiet time to tune the agent, broker, and pitch.</div></div>`;
+  } else {
+    const cp = eventCopy(next), st = eventState(next, nowH);
+    const eta = st === "live" ? "now" : until(next.wall).replace(/^in /, "");
+    const etaLabel = st === "live" ? "happening" : st === "done" ? "passed" : "until start";
+    hero = `<div class="sched-hero" style="--hc:${EV_COLORS[next.kind]}">
+      <div><div class="kicker">${st === "live" ? "Happening now" : "Up next"}</div>
+        <div class="title">${esc(cp.title)}</div></div>
+      <div class="eta"><b>${esc(eta)}</b><span>${esc(etaLabel)} · ${dayName(next.wall)} ${hm(next.wall)}</span></div>
+      <div class="blurb">${esc(cp.one)}</div></div>`;
+  }
+
+  // story rail — hover/focus opens the longer explanation inline
+  const pastN = shown.filter(e => eventState(e, nowH) === "done").length;
+  const rows = shown.map(e => {
+    const st = eventState(e, nowH), isNext = e.i === nextIdx, cp = eventCopy(e);
+    const cls = st === "done" ? "done" : st === "live" ? "live" : isNext ? "next" : "later";
+    const tag = st === "done" ? "Done" : st === "live" ? "Live" : isNext ? "Next" : cp.kindLabel;
+    const whenRel = st === "done" ? "done" : st === "live" ? "now" : until(e.wall);
+    return `<div class="sched-row ${cls}${isNext ? " open" : ""}" style="--hc:${EV_COLORS[e.kind]}" tabindex="0" role="button"
+      aria-label="${esc(cp.title)}, ${dayName(e.wall)} ${hm(e.wall)}">
+      <div class="sched-dot"></div>
+      <div class="sched-when"><b>${esc(whenRel)}</b>${dayName(e.wall)} ${hm(e.wall)}</div>
+      <div class="sched-main">
+        <div class="name">${esc(cp.title)} <span class="sched-tag">${esc(tag)}</span></div>
+        <div class="one">${esc(cp.one)}</div>
+        <div class="more">${esc(cp.more)}</div>
+      </div>
+    </div>`;
+  }).join("");
+
+  $("timeline").innerHTML = `<div class="sched">
+    ${hero}
+    <div class="sched-days">${dayCards || `<div class="empty">Waiting for the weekend clock…</div>`}</div>
+    <div class="sched-rail">${rows || `<div class="empty">No duels or market tests on the schedule yet.</div>`}</div>
+    <div class="sched-legend">
+      <span><i style="background:var(--series-1)"></i>Duels vs teams</span>
+      <span><i style="background:var(--series-2)"></i>Market test</span>
+      <span class="muted">${pastN ? `${pastN} done · ` : ""}${shown.length - pastN} still ahead</span>
+    </div>
+  </div>`;
+
+  // keep one row expanded at a time on click/keyboard; hover still reveals via CSS
+  $("timeline").querySelectorAll(".sched-row").forEach(row => {
+    row.addEventListener("click", () => {
+      $("timeline").querySelectorAll(".sched-row.open").forEach(r => { if (r !== row) r.classList.remove("open"); });
+      row.classList.toggle("open");
+    });
+    row.addEventListener("keydown", ev => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); row.click(); }
+    });
   });
-  const nx = X(nowH);
-  g += `<line x1="${nx}" x2="${nx}" y1="42" y2="${H - 20}" stroke="var(--text-primary)" stroke-width="2"/><text x="${nx + 4}" y="${H - 22}" class="ink1" style="font-weight:700;font-size:11px">now</text>`;
-  const upcoming = shown.filter(e => e.at_hours >= nowH).slice(0, 3);
-  $("timeline").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Weekend schedule">${g}</svg>
-    <div class="legend" style="margin-top:6px;font-size:11px;gap:12px;color:var(--muted)">${upcoming.map(e => `<span><i class="swatch" style="width:8px;height:8px;background:${EV_COLORS[e.kind]}"></i><b style="color:var(--text-primary)">${until(e.wall)}</b> ${e.kind === 0 ? esc(e.params?.name || "Duels") : "Market test"}</span>`).join("")}</div>`;
-  bindTips($("timeline"), i => eventTip(items[i]));
   return items;
 }
 
@@ -1286,7 +1401,7 @@ function brain(d) {
 // ---------- strategy ----------
 let SD = null, draft = null;   // server description, unsaved edits
 async function loadStrategy() {
-  SD = await (await fetch("/strategy")).json(); draft = { ...SD.current }; strategyForm();
+  SD = await (await api("/strategy")).json(); draft = { ...SD.current }; strategyForm();
   if (D) try { strategyPlan(D, model(D)); } catch (e) { console.error(e); }
 }
 function strategyForm() {
@@ -1314,7 +1429,7 @@ function strategyForm() {
   });
 }
 $("save").onclick = async () => {
-  const r = await (await fetch("/strategy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) })).json();
+  const r = await (await api("/strategy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) })).json();
   if (r.ok) { SD.current = r.current; draft = { ...r.current }; $("saved").textContent = `✓ saved ${hm(new Date())}: the agent uses it from the next tick`; strategyForm(); if (D) strategyPlan(D, model(D)); }
   else $("saved").textContent = "⚠ " + (r.error || "not saved");
 };
@@ -1367,7 +1482,7 @@ function strategyPlan(d, M) {
     html += `<button class="btn" id="recheck" style="margin-top:10px">Re-check now</button>`;
   }
   $("proposal").innerHTML = html;
-  const post = (u, body) => fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const post = (u, body) => api(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
   if ($("apply-prop")) $("apply-prop").onclick = async () => { await post("/strategy", { ...SD.current, ...P.changes }); await loadStrategy(); await post("/strategy/recheck"); $("proposal").innerHTML = `<div class="empty">Applied: the agent uses it from the next tick. Re-checking…</div>`; };
   if ($("dismiss-prop")) $("dismiss-prop").onclick = async () => { await post("/strategy/dismiss"); $("proposal").innerHTML = `<div class="empty">Dismissed.</div>`; };
   if ($("recheck")) $("recheck").onclick = async () => { await post("/strategy/recheck"); $("recheck").textContent = "Checking… (a few seconds)"; };
@@ -1512,21 +1627,33 @@ addEventListener("hashchange", showTab); showTab();
 let lastSig = "";
 async function refresh() {
   try {
-    const d = await (await fetch("/data")).json();
+    const res = await api("/data");
+    if (res.status === 401) {
+      $("err").textContent = "⚠ login required — refresh the page and sign in as team13";
+      return;
+    }
+    if (!res.ok) {
+      $("err").textContent = `⚠ dashboard /data failed (${res.status})`;
+      return;
+    }
+    // Python's json writes bare Infinity/NaN (e.g. a guard "loss"), which JSON.parse rejects
+    const d = JSON.parse((await res.text()).replace(/([:\[,]\s*)-?(?:Infinity|NaN)(?=\s*[,\]}])/g, "$1null"));
+    // Always drive the header from clock + served_at, even before /api/me lands.
+    if (d.served_at) servedAt = d.served_at;
+    if (d.clock) header(d);
     const errs = Object.keys(d).filter(k => k.endsWith("_error"));
     $("err").textContent = errs.length ? `⚠ stale: ${errs.map(k => k.replace("_error", "")).join(", ")}` : "";
     if (!ok(d.me)) { $("err").textContent = "⚠ waiting for team data…"; return; }
-    servedAt = d.served_at;
+    if (!ok(d.catalog)) { $("err").textContent = "⚠ waiting for catalog…"; return; }
     const sig = JSON.stringify([d.me, d.threads, d.offers, d.duels, d.clock?.tick, d.clock?.paused, d.board, d.feed?.events?.length,
       d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length]);
-    header(d);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
       () => threads(d, M), () => dealers(d), () => duels(d), () => market(d, M), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
-  } catch (e) { $("err").textContent = "⚠ dashboard server unreachable"; }
+  } catch (e) { $("err").textContent = "⚠ dashboard server unreachable — open http://localhost:8765"; }
 }
 refresh(); setInterval(refresh, 2000);
 </script>
