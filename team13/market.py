@@ -22,14 +22,15 @@ DESCRIPTION = ("Madrid's top-tier market: {fee} fee, no per-card charge, a smart
                "pairs first. Built by the team leading the board.")
 # FOMO, but only true claims: fee comparison, matching every tick, first come first matched, no per-card charge
 BRAND = "El Club"          # what we call v03 everywhere; the listed name stays "Mercado Trece · 1% fee" until we reopen
-PITCH = ("Hola! Team 13 — El Club ({venue}, listed as 'Mercado Trece'). {fee} fee and 0 P per card; the '1%' in the "
-         "name is stale (an open market cannot be renamed). Post the card you are missing as a bid, or a spare as an "
-         "ask or a swap, with venue {venue}. Your duplicate may be the last piece of someone else's page. Our broker "
-         "crosses every tick. El Rastro takes 5% + 1 P per card.")
+# Team 5's stall (v10, auto, 0%) is the market score to copy: one line, then other teams' spares and
+# want-to-buy bids. The trade those listings produced is what put them at 12.5; the same auto stall at 0%
+# with no trades (Team 2, Team 9) sits on the 7.5 floor with everyone else.
+PITCH = ("Hola! Team 13 — El Club ({venue}, listed as 'Mercado Trece'). {fee} fee, no per-card charge; the '1%' in "
+         "the name is stale. Bids and asks cross every tick. Post your spares and want-to-buy bids here. "
+         "El Rastro takes 5% + 1 P per card.")
 ANNOUNCE = [
-    "El Club ({venue}, listed as 'Mercado Trece'): {fee} fee, 0 P per card. The '1%' in the name is stale. Post the "
-    "card you are missing, or a spare. Your duplicate may be the last piece of another page. Broker crosses every tick. "
-    "El Rastro takes 5% + 1 P per card.",
+    "El Club ({venue}, listed as 'Mercado Trece'): {fee} fee, no per-card charge. The '1%' in the name is stale. "
+    "Bids and asks cross every tick. Post your spares and want-to-buy bids here.",
     "La última pieza is on El Club ({venue}): {fee}, no per-card charge. Bid for the card you need, ask or swap a spare. "
     "We cross every tick. El Rastro is 5% + 1 P per card.",
     "El Club ({venue}) is {fee} and stays there. Post venue={venue}: bids for missing cards, asks and swaps for spares. "
@@ -93,8 +94,10 @@ class Market:
         st["venue_try_tick"] = ctx.clock.get("tick", 0)
         try:
             ft = fee_text(int(S["venue_fee_bps"]))
+            # auto: the engine crosses every pair itself, which is Team 5's stall. A board venue scores 0 for
+            # any tick our broker is down. Only used when we open; an open market cannot change mechanism.
             res = ctx.api.open_venue(VENUE_NAME.format(fee=ft)[:40], fee_bps=int(S["venue_fee_bps"]), fee_per_card=0,
-                                     rules={"mechanism": "board"}, description=DESCRIPTION.format(fee=ft))
+                                     rules={"mechanism": "auto"}, description=DESCRIPTION.format(fee=ft))
             st["venue"] = res.get("venue") or res.get("id")
             st["broker_key"] = res.get("broker_key")
             st["fee_set"] = int(S["venue_fee_bps"])
