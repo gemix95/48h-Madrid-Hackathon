@@ -72,6 +72,13 @@ FEVER = (9.15, 11.15)   # Saturday schedule: "Salamanca fever: Doña Pilar pays 
 FEED_STORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "feed_events.jsonl")
 
 
+def short_name(dealer: dict) -> str:
+    """How we address a dealer: 'Abuela', but 'El Chato', 'Doña Pilar', 'Los Pícaros' (never a bare article)."""
+    name = dealer.get("name") or dealer.get("id", "")
+    first = name.split()[0] if name.split() else name
+    return name if first in ("El", "La", "Los", "Las", "Doña", "Don") else first
+
+
 def S_use_intel(ctx) -> bool:
     return bool(ctx.S.get("use_intel", 1)) and getattr(ctx, "intel", None) is not None
 
@@ -195,7 +202,9 @@ class Haggler:
                 hi_ask = self._opening(stats.get(key), {"list_price": book}, side="sell")
                 # only a sale above our third-best price with this dealer improves the ladder's best three
                 done = sorted((stats.get(key) or {}).get("deals") or [], reverse=True)
-                floor = max(math.ceil(book * 0.6), (done[2] + 1) if len(done) >= 3 else 0)
+                # a level with fewer than three deals scores 0 for each missing one: any price above the dealer's
+                # opening (negotiate() keeps lo >= opening + 2) fills a slot; after that, beat the third-best
+                floor = (done[2] + 1) if len(done) >= 3 else 1
                 if floor >= hi_ask:
                     return None
                 return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": floor,
@@ -421,7 +430,7 @@ class Haggler:
                     continue
                 rounds, curve = self._pace(d, ctx.state.get("dealer_stats", {}).get(plan["key"]))
                 rounds = min([x for x in (rounds, plan.get("rounds")) if x] or [None])  # strict pace or her usual final, the sooner
-                plan.update(k=0, offers=[], dealer=d["id"], name=d.get("name", d["id"]).split()[0], rounds=rounds, curve=curve)
+                plan.update(k=0, offers=[], dealer=d["id"], name=short_name(d), rounds=rounds, curve=curve)
                 ctx.state.setdefault("plans", {})[str(th["id"])] = plan
                 self._counts(d["id"])["opened"] += 1
                 self._opens(d["id"]).append(ctx.clock.get("t_hours") or 0)
