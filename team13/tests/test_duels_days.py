@@ -28,13 +28,14 @@ class Ctx:
         self.accepted.append(i)
 
 
-def duel(role, limit, w, rival_price=None, rival_days=None, rounds=0, deadline=130):
+def duel(role, limit, w, rival_price=None, rival_days=None, rounds=0, deadline=130, decay=0.08, your_offer=None):
     msgs = []
     if rival_price is not None:
         msgs.append({"tick": 99, "from": "Rival X", "text": f"{rival_price} P, day {rival_days}", "price": rival_price, "days": rival_days})
     return {"duel": 1, "id": 1, "session": 3, "status": "live", "role": role, "issues": ["price", "days"],
-            "your_days_weight": w, "your_limit": limit, "deadline_tick": deadline, "decay_per_round": 0.08,
+            "your_days_weight": w, "your_limit": limit, "deadline_tick": deadline, "decay_per_round": decay,
             "rounds": rounds, "messages": msgs, "rival": "Rival X",
+            "your_offer": your_offer,
             "rival_offer": {"price": rival_price, "days": rival_days} if rival_price is not None else None}
 
 
@@ -64,5 +65,37 @@ c = Ctx(); Duels(c).play(duel("seller", 76, 1.28, 56, 0, rounds=6, deadline=103)
 p, d = c.said[-1] if c.said else (None, None)
 ok = (not c.accepted) and d == 10 and p is not None and 77 <= p <= 90
 print(f"last-chance takeable: price {p} days {d} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(5)
+# 6) live session 3: a buyer must not take day 10 when each day costs w (t13 booked −35 P on this shape)
+c = Ctx(); Duels(c).play(duel("buyer", 113, 5.01, 101, 10, rounds=1, deadline=130))
+ok = not c.accepted
+print(f"buyer reject day-10 cost: accepted {bool(c.accepted)} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(6)
+c = Ctx(); Duels(c).play(duel("buyer", 113, 5.01))
+p, d = c.said[-1]
+ok = d == 0 and p < 113
+print(f"buyer opens at day 0: price {p} days {d} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(6)
+# 7) last chance as buyer vs day-10 poison: counter day 0, never take the −P deal
+c = Ctx(); Duels(c).play(duel("buyer", 55, 3.84, 55, 10, rounds=6, deadline=101))
+p, d = c.said[-1] if c.said else (None, None)
+ok = (not c.accepted) and d == 0 and p is not None and p < 55
+print(f"buyer last-chance day-10 poison: accepted {bool(c.accepted)} price {p} days {d} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(7)
+# 8) live session 3 winner shape: buyer cheap day 0 must be taken
+c = Ctx(); Duels(c).play(duel("buyer", 97, 2.75, 54, 0, rounds=2, deadline=130))
+print(f"buyer take day-0 bargain: accepted {bool(c.accepted)} -> {'ok' if c.accepted else 'FAIL'}"); c.accepted or fails.append(8)
+# 9) live session 3 winner shape: seller day 10 at a fat price must be taken
+c = Ctx(); Duels(c).play(duel("seller", 52, 2.31, 104, 10, rounds=2, deadline=130))
+print(f"seller take day-10 fat: accepted {bool(c.accepted)} -> {'ok' if c.accepted else 'FAIL'}"); c.accepted or fails.append(9)
+# 10) old standing offer on the wrong day must be replaced (Hershey 6036: −23 P)
+c = Ctx()
+poison = duel("buyer", 140, 3.5, your_offer={"price": 128, "days": 10})
+poison["messages"] = [{"tick": 98, "from": "you", "text": "128 on day 10", "price": 128, "days": 10}]
+Duels(c).play(poison)
+p, d = c.said[-1] if c.said else (None, None)
+ok = (not c.accepted) and d == 0 and p is not None and p < 140
+print(f"replace poison standing day-10: price {p} days {d} accepted {bool(c.accepted)} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(10)
+# 11) Duels III clock: 12 ticks, 10% decay — buyer still opens day 0
+c = Ctx(); Duels(c).play(duel("buyer", 100, 4.0, deadline=112, decay=0.1))
+p, d = c.said[-1]
+ok = d == 0 and p < 100
+print(f"short-clock buyer open: price {p} days {d} -> {'ok' if ok else 'FAIL'}"); ok or fails.append(11)
 print("ALL OK" if not fails else f"FAILED {fails}")
 sys.exit(1 if fails else 0)

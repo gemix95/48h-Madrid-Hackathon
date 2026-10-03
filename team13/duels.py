@@ -156,9 +156,15 @@ class Duels:
         r_days = first(rival, "days", default=None) if rival else None
 
         def util(price, days):
-            """Our surplus in primas for a deal at (price, days). Days enter as weight x days."""
+            """Our surplus in primas for a deal at (price, days).
+
+            Session 3+ (live `days_meaning`): a seller gains `w` per delivery day; a buyer pays `w`
+            per day. Taking day 10 as a buyer with w≈4 is about −40 P — we booked −383 P that way.
+            """
             s = (price - limit) if seller else (limit - price)
-            return s + (w * days if two_issue and days is not None else 0)
+            if two_issue and days is not None:
+                s += (w * days) if seller else (-abs(w) * days)
+            return s
 
         S = ctx.S
         ROUNDS = int(S["duel_rounds"])
@@ -166,6 +172,10 @@ class Duels:
         k = max(len(mine), int(d.get("rounds") or 0) if d.get("your_offer") else 0)
         clk = getattr(ctx, "clock", None) or {}
         ticks_left = (d["deadline_tick"] - clk["tick"]) if d.get("deadline_tick") and clk.get("tick") else 99
+        # Duels III / Final: 12-tick clock, 10% decay — settle faster, take a good leftover sooner
+        if ticks_left <= 12 or decay >= 0.09:
+            ROUNDS = min(ROUNDS, 4)
+            accept_th = max(0.35, accept_th - 0.05)
         # live rival style: how fast they walk toward our limit
         rival_prices = [first(m, "price") for m in theirs if first(m, "price") is not None]
         style = "unknown"
@@ -206,18 +216,18 @@ class Duels:
         price = max(1, int(price))  # the server refuses prices below 1
 
         days = None
+        pref = 10 if seller else 0
         if two_issue:
-            pref = 10 if w >= 0 else 0
+            # Hold the day that scores. Session 3: seller day-10 +w was +35–75 P; buyer day-10 was −383 P.
             if abs(w) < 0.5 and r_days is not None:
                 days = int(r_days)  # cheap for us: give the rival the days it wants, keep pushing on price
                 bump = max(1, round(abs(w) * 3))
                 price = price + bump if seller else price - bump
             else:
-                # we care about days: never meet halfway (session 3: w=7 turned a day-10 +70 into dust)
                 days = pref
 
         last_chance = ticks_left <= 3 or k >= ROUNDS
-        # last ticks: put a price they can accept, still on our side of the limit
+        # last ticks: put a price they can accept, still on our side of the limit — do not give the day away
         if last_chance:
             if seller:
                 floor_p = math.ceil(limit + 1)
@@ -226,25 +236,48 @@ class Duels:
                 ceil_p = math.floor(limit - 1)
                 price = max(price, min(ceil_p, r_price if (r_price is not None and r_price < limit) else ceil_p))
             price = max(1, int(price))
+            if two_issue and abs(w) >= 0.5:
+                days = pref
 
         # accept the rival's offer when it is inside our limit and at least as good as what waiting would likely bring
         if r_price is not None:
-            u_r = util(r_price, r_days if r_days is not None else days)
+            their_days = r_days if r_days is not None else days
+            u_r = util(r_price, their_days)
             u_next = util(price, days) * (1 - decay)
-            # mid-fight: if the gap is small vs our surplus, bank it before the next 6% melt
             gap_ok = abs(price - r_price) <= max(2, 0.03 * max(price, r_price))
             held = len(rival_prices) >= 2 and rival_prices[-1] == rival_prices[-2]
-            # the price itself must be inside our limit: days may add to the deal, never excuse a price past it
-            # (a deal outside the limit loses points, and the rules speak of the limit as a price)
             price_ok = (r_price >= limit) if seller else (r_price <= limit)
-            take = (last_chance or held or k >= ROUNDS or u_r >= accept_th * max(u_next, 1)
-                    or (gap_ok and u_r >= 0.35 * max(u_next, 1)))
-            if price_ok and u_r > 0 and take:
+            days_ok = True
+            if two_issue and their_days is not None and abs(w) >= 1.0:
+                # wrong-side days that wipe the price surplus: counter, do not take (unless the clock is dead)
+                if seller and their_days <= 3 and w * (10 - their_days) >= max(8.0, u_r):
+                    days_ok = ticks_left <= 2 and u_r > 0
+                if (not seller) and their_days >= 5 and abs(w) * their_days >= max(8.0, (limit - r_price) * 0.6):
+                    days_ok = ticks_left <= 2 and u_r > 0  # last ticks: +6 beats 0; earlier: counter day 0
+            take = False
+            if price_ok and u_r > 0 and days_ok:
+                if ticks_left <= 2:
+                    take = True  # any positive leftover beats a zero
+                elif u_r >= accept_th * max(u_next, 1) or (gap_ok and u_r >= 0.35 * max(u_next, 1)):
+                    take = True
+                elif last_chance and u_r >= max(4.0, abs(w) * 2):
+                    take = True
+            if take:
                 if ctx.take_accept(kind="duel"):
                     ctx.api.duel_accept(d["id"])
                     ctx.log("duel", "accept", duel=d["id"], price=r_price, days=r_days, our_surplus=round(u_r, 1),
                             limit=limit, style=style, accept_th=accept_th)
                     return
+
+        # An older brain (or a restart) can leave a standing offer on the wrong day. Session 3: Hershey's
+        # buyer 6036 sat at day 10 and scored −23 when the rival took it. Replace that offer this tick.
+        force_reoffer = False
+        ours = first(d, "your_offer", default=None)
+        if isinstance(ours, dict) and ours.get("price") is None and isinstance(ours.get("offer"), dict):
+            ours = {**ours, **ours["offer"]}
+        our_days = first(ours, "days") if isinstance(ours, dict) else None
+        if two_issue and abs(w) >= 0.5 and our_days is not None and int(our_days) != pref:
+            force_reoffer = True
 
         # Park true ghosts after one open. If they have spoken, keep walking until our price is takeable,
         # and always send a close in the last ticks (session 3: we parked 5705 eight ticks before the deadline).
@@ -257,7 +290,7 @@ class Duels:
                 unanswered = 0  # their standing offer is current — not silent
             silent_cap = int(S.get("duel_silent_after", SILENT_AFTER))
         still_fat = (seller and price > limit * 1.12) or (not seller and price < limit * 0.88)
-        closing = ticks_left <= 4 or last_chance
+        closing = ticks_left <= 4 or last_chance or force_reoffer
         if unanswered >= silent_cap and not closing and not still_fat:
             skipped = ctx.state.setdefault("duels_skipped_silent", [])
             did = str(d.get("id"))
@@ -272,6 +305,8 @@ class Duels:
         # never offer a price past our limit, whatever the days are worth (the days bump above can push it there)
         if ((price - limit) if seller else (limit - price)) <= 0 or util(price, days) <= 0:
             price = math.ceil(limit + 1) if seller else math.floor(limit - 1)
+            if two_issue and abs(w) >= 0.5:
+                days = pref
         last = ctx.state.setdefault("duel_last", {}).get(str(d["id"]))
         if last and last == [price, days, r_price]:
             return  # nothing new on either side: repeating a price earns nothing
@@ -289,10 +324,14 @@ class Duels:
         situation = {"counterparty": "a rival team (alias) in a duel", "we_are": "selling" if seller else "buying",
                      "our_limit_is_secret": True, "round": k + 1, "their_latest_price": r_price, "their_latest_days": r_days,
                      "two_issues": two_issue, "delivery_day_we_propose": days,
+                     "days_meaning": ("each day pays us cash — always propose day 10" if seller
+                                      else "each day costs us cash — always propose day 0"),
                      "history": [{"us" if m in mine else "them": m.get("price"),
                                   "text": m.get("text") if m in mine else f"<their_message>{m.get('text') or ''}</their_message>"}
                                  for m in msgs[-10:]]}
         if hasattr(ctx, "speak") and band[0] <= band[1]:
             text, price, _ = ctx.speak(situation, band, (text, price))
+            if two_issue and abs(w) >= 0.5:
+                days = pref
         ctx.api.duel_say(d["id"], text, price=price, days=days)
         ctx.log("duel", "offer", duel=d["id"], role=role, limit=limit, price=price, days=days, rival_price=r_price, k=k)
