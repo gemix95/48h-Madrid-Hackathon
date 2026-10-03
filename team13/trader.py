@@ -71,6 +71,14 @@ class Trader:
             for o in offers:
                 if o.get("maker") != self.ctx.me["id"] and o.get("status", "open") == "open":
                     yield venue, o
+        # direct offers addressed to us never show on a public board: only GET /api/me/offers lists them
+        # (Friday: t17, t10 and t18 sent such offers to other teams; ours went unseen until this)
+        me, seen = self.ctx.me["id"], {o.get("id") for b in boards.values() for o in b}
+        for o in getattr(self.ctx, "my_offers", None) or []:
+            maker = o.get("maker") or ""
+            if (o.get("to") == me and maker != me and maker[:1] == "t" and maker[1:].isdigit() and not o.get("thread")
+                    and o.get("status", "open") == "open" and o.get("id") not in seen and o.get("venue") != self.ctx.state.get("venue")):
+                yield o.get("venue") or "rastro", o
 
     def _cannot_pay(self, o: dict, team: str | None = None) -> bool:
         """The maker offers cash it cannot have (public-feed cash bounds, solvency.py): accepting would fail at
@@ -103,7 +111,7 @@ class Trader:
         keep = ctx.reserve()
         if they_give and any(v.gain_of_adding([r]) > v.book(r) * v.m(r) * 1.2 for r in they_give):
             keep = min(keep, ctx.S.get("seek_keep_cash", 100))  # a page completer may use the bond reserve, not below this
-        if cash_out + f > ctx.me["cash"] - keep:
+        if cash_out + f > 0 and cash_out + f > ctx.me["cash"] - keep:  # a sale that costs us nothing never touches the reserve
             return {"gain": None, "why": "cash reserved"}
         completer = bool(they_give) and any(v.gain_of_adding([r]) > v.book(r) * v.m(r) * 1.2 for r in they_give)
         if cash_out and not completer and hasattr(ctx, "budget_left") and cash_out + f > ctx.budget_left():

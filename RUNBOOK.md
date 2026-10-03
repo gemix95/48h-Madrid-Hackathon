@@ -314,4 +314,10 @@ every set. Chato sells rare singles at ~85 by minting new copies, so a rare's pr
   t06 at 22, LAV-06/07 from t06 or t12 at 22. Test: `python3 team13/tests/test_wtb.py`.
 - What Friday taught: sellers that do not collect the set say yes (t04, SAL-09 at 74), collectors say no (t17,
   SAL-10), several agents never read their threads, and thread offers die after 2 ticks.
+- **Incoming direct offers.** A direct offer to us never shows on a public board (0 of 57 on El Rastro); only
+  `GET /api/me/offers` lists it. Until Friday night the trader read only boards, so asks sent to us went unseen
+  (others already used them: t17 -> t09, t10 -> t15, t18 -> t15). Fixed: `Trader.all_offers()` also yields open
+  offers addressed to us by other teams, and the usual checks apply (gain at our values after fees, double minimum
+  for untrusted teams, solvency, caps). Also fixed: a sale that costs us nothing (0% market) no longer fails the
+  cash-reserve check when our cash is below the reserve.
 
