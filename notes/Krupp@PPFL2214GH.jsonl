@@ -5,3 +5,4 @@
 {"ts": 1791021744.8, "tick": 465, "author": "haggler", "topic": "deal", "lesson": "Negotiating with El: buy uncommon, opening 9 P, cap 23 P.", "evidence": {"dealer": "chato", "key": "chato:buy:uncommon", "lo": 9, "hi": 23}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
 {"ts": 1791021802.9, "tick": 467, "author": "duels", "topic": "deal", "lesson": "Duel 2300 settled at 186 P, 0 days.", "evidence": {"duel": 2300, "price": 186}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
 {"ts": 1791021803.1, "tick": 467, "author": "duels", "topic": "deal", "lesson": "Duel 2301 settled at 125 P, 0 days.", "evidence": {"duel": 2301, "price": 125}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
+{"ts": 1791021868.8, "tick": 469, "author": "duels", "topic": "deal", "lesson": "Duel 2408 settled at 149 P, 0 days.", "evidence": {"duel": 2408, "price": 149}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
