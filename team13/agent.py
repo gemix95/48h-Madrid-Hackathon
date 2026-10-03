@@ -125,7 +125,7 @@ class Context:
         line = json.dumps(rec, default=str)
         self._logf.write(line + "\n")
         print(line[:300], flush=True)
-        if self.announce:
+        if getattr(self, "announce", None):  # the negotiator logs while __init__ runs, before announce is set
             try:
                 self.announce(rec)
             except Exception:  # the board must never stop a tick
