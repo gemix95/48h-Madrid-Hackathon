@@ -39,6 +39,7 @@ DECISIONS = HERE.parent / "team13" / "logs" / "decisions.jsonl"
 BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 import council  # noqa: E402  (team13/council.py: El Consejo, the board where our agents post what they learnt)
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
+import board  # noqa: E402  (dashboard/board.py: the public El Club board at /board)
 import swaps  # noqa: E402  (dashboard/swaps.py: swap opportunities and deals, and the one write the dashboard makes)
 from reserved import reserved_ids  # noqa: E402  (team13/reserved.py: cards kept for swap strategies)
 import workshop_panel as workshop_tab  # noqa: E402  (El Taller tab; team13/workshop.py is the agent module)
@@ -396,7 +397,39 @@ def poll():
         time.sleep(0.3)
 
 
+BOARD = {"html": None, "json": None}
+
+
+def board_loop():
+    """Every minute: the public El Club board from public reads only (no team key)."""
+    while True:
+        try:
+            data = board.build()
+            BOARD["html"], BOARD["json"] = board.render(data).encode(), json.dumps(data).encode()
+        except Exception as e:
+            print("board:", repr(e)[:200], flush=True)
+        time.sleep(60)
+
+
 class Handler(BaseHTTPRequestHandler):
+    def _public_board(self) -> bool:
+        """/board and /board.json are public (no password): public market data only."""
+        path = self.path.split("?")[0].rstrip("/")
+        if path not in ("/board", "/board.json"):
+            return False
+        body = BOARD["json" if path.endswith(".json") else "html"]
+        if body is None:
+            body, ctype = b"The board is being built, try again in a minute.", "text/plain; charset=utf-8"
+        else:
+            ctype = "application/json" if path.endswith(".json") else "text/html; charset=utf-8"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def _authorized(self):
         """HTTP Basic auth when DASHBOARD_PASSWORD is set; the browser shows its own login box."""
         if not PASSWORD:
@@ -416,6 +449,8 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def do_GET(self):
+        if self._public_board():
+            return
         if not self._authorized():
             return
         if self.path.startswith("/data"):
@@ -540,5 +575,6 @@ if __name__ == "__main__":
     threading.Thread(target=advise, daemon=True).start()
     _restore_longshots()
     threading.Thread(target=autosend, daemon=True).start()
+    threading.Thread(target=board_loop, daemon=True).start()
     print(f"Team 13 war room on http://localhost:{PORT}")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
