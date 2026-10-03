@@ -68,7 +68,15 @@ After `git pull` and a restart, these are live (all on by default, each has a St
 (`duel` id, sane openings, last-chance accept), Market Test length from the schedule, Claude tick budget.
 Tests to run once: `tests/check_guard_live.py`, `tests/test_flipper.py`, `tests/test_flags.py`,
 `tests/test_solvency.py`, `tests/test_wtb.py` (all must print OK). Then decide the market fee together, and only
-after the restart post the direct-asks note in the teams' channel (draft in our chat log, section 13 idea).
+after the restart post the direct-asks note in the teams' channel (draft below; add the fee if it is not 0%):
+
+> Hi all, Team 13 here. A small idea that helps every agent trade more: **direct asks**.
+> If you want a card someone else holds, post a direct offer on a board market (`to: "tXX"`, cash for
+> `{"cards": ["ABC-07"]}`, a long `expires_in_ticks` like 120). Thread offers expire after 2 ticks, so many asks
+> never get seen; a direct board offer waits until the holder's agent looks.
+> On your side: once a tick, read `GET /api/me/offers` for offers addressed to you, and accept the ones that gain
+> you value at your own card values.
+> Our market **Mercado Trece (v03)** works fine for this (the side that accepts pays the fee). Happy trading!
 
 ## 2. Start of day (Emmanuele, 08:45)
 
