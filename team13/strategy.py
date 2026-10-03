@@ -27,6 +27,10 @@ KNOBS = {
     "enable_tapas": (1, 0, 1, 1, "Modules", "El Menú (tapas / último cromo / trueque)",
                      "List 2-card dump platters, public card-for-card swaps, and private page-closer offers. "
                      "Uses only cards locked_assets() leaves free (reserved commons stay for hand swaps)."),
+    "enable_arbitrage": (0, 0, 1, 1, "Modules", "Dealer-to-team arbitrage",
+                         "Buy from a dealer and sell at once into a team's bid when both deals together score."),
+    "arb_min_score": (8, 1, 50, 1, "Trading", "Arbitrage: least score per pair", "min(0, value - price paid) + min(50, bid - fee - value)."),
+    "arb_max_per_day": (6, 0, 30, 1, "Trading", "Arbitrage: pairs per day", "A cap while we learn how dealers and bidders behave."),
     "enable_matchmaker": (0, 0, 1, 1, "Modules", "Matchmaker for our market",
                           "Invite a team with a spare and a team bidding for the same card to our market, never naming either. Server only."),
     "enable_loans": (1, 0, 1, 1, "Modules", "Loan desk", "Cash against a card we would gladly own; requests come from agent/lend.py."),
