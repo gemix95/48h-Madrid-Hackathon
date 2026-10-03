@@ -16,7 +16,9 @@ Strategy, from the rules and the kickoff deck:
 """
 from __future__ import annotations
 
+import json
 import math
+import os
 import random
 
 from bazaar_sdk import BazaarError
@@ -66,6 +68,8 @@ VISIT_TEXTS = [
 VISIT_HOURS = 2.0       # game hours between two visits
 VISIT_CLOSE_TICKS = 3   # leave the visit thread open this long for her answer (and the gift), then close it
 PERSONA_QUOTA = 10      # the game: at most 10 conversations per hour with one dealer
+FEVER = (9.15, 11.15)   # Saturday schedule: "Salamanca fever: Doña Pilar pays 25 % over book for Salamanca"
+FEED_STORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "feed_events.jsonl")
 
 
 def S_use_intel(ctx) -> bool:
@@ -210,29 +214,58 @@ class Haggler:
                                                     "rounds": self._rounds(dealer["id"])}
         return None
 
+    def _team_acquired(self) -> set:
+        """Asset ids we received in trades with teams (public feed). Never sold to a dealer: if team-trade value is
+        counted on what we hold at the end, selling them could undo that gain. Refreshed every 30 ticks."""
+        st, tick = self.__dict__.setdefault("_ta", {"tick": -99, "ids": set()}), self.ctx.clock.get("tick", 0)
+        if tick - st["tick"] >= 30:
+            ids, me = set(), self.ctx.me.get("id")
+            try:
+                with open(FEED_STORE) as f:
+                    for line in f:
+                        if '"settlement"' not in line:
+                            continue
+                        p = (json.loads(line).get("payload") or {})
+                        if p.get("persona") or not any(str(x).startswith("t") and x != me for x in p.get("parties") or []):
+                            continue
+                        ids.update(i["id"] for i in p.get("items") or [] if i.get("to") == me and i.get("id"))
+                st.update(tick=tick, ids=ids)
+            except (OSError, ValueError):
+                pass
+        return st["ids"]
+
+    def _fever(self, dealer, ref) -> bool:
+        """Salamanca fever (Saturday 9.15-11.15 game hours): Pilar pays 25% over book for Salamanca."""
+        t = self.ctx.clock.get("t_hours") or 0
+        return dealer["id"] == "pilar" and ref.startswith("SAL-") and FEVER[0] <= t < FEVER[1]
+
     def _ladder_card(self, dealer, buys):
-        """For a level-3+ dealer with fewer than three deals: the uncommon/rare she buys that costs us least.
-        Private values only score in trades with teams, so a dealer sale costs no points; complete pages and pages
-        one card from complete are never touched (their completer is the big team-trade gain)."""
+        """For a level-3+ dealer: the uncommon/rare she buys that we would miss least. The ladder keeps our best three
+        deals per level, so a better-priced sale still improves it after three. Collections never score and dealer
+        sales are not team trades, so a sale costs no points. Never sold: a card from a page one card from complete
+        (its completer is a big team-trade gain), and a card we got from a team. In Salamanca fever, SAL first."""
         ctx, v = self.ctx, self.ctx.values
         if (dealer.get("level") or 0) < 3:
             return None
-        if sum(1 for t in ctx.threads if t.get("with") == dealer["id"] and t["status"] == "deal") >= 3:
+        if sum(1 for t in ctx.threads if t.get("with") == dealer["id"] and t["status"] == "deal") >= ctx.S.get("ladder_max_deals", 6):
             return None
-        locked, best = ctx.locked_assets(), None
+        locked, best, from_teams = ctx.locked_assets(), None, self._team_acquired()
         for a in v.assets:
             if a.get("kind") != "card" or a.get("rarity") not in buys or a.get("rarity") not in ("uncommon", "rare"):
                 continue
             card = v.cards.get(a["ref"]) or {}
-            if a["id"] in locked or not card.get("page"):
+            if a["id"] in locked or a["id"] in from_teams or not card.get("page"):
                 continue
             page = v.page_cards(card["set"])
-            if sum(1 for r in page if v.held[r] > 0) >= len(page) - 1:
+            if sum(1 for r in page if v.held[r] > 0) == len(page) - 1:
                 continue
-            loss = v.loss_of_removing([a["ref"]])
-            if best is None or loss < best[1]:
-                best = (a, loss)
-        return (best[0], v.book(best[0]["ref"])) if best else None
+            key = (not self._fever(dealer, a["ref"]), v.loss_of_removing([a["ref"]]))
+            if best is None or key < best[1]:
+                best = (a, key)
+        if not best:
+            return None
+        a = best[0]
+        return a, v.book(a["ref"]) * (1.25 if self._fever(dealer, a["ref"]) else 1.0)
 
     def _intel(self, dealer_id, plan):
         """Attach what other teams got for this kind of item: a target to close at, a cap never to exceed."""

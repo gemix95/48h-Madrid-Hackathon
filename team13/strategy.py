@@ -64,6 +64,8 @@ KNOBS = {
                         "Boulware-style up to the cap, reaching it at the round this dealer usually names its final (every team's conversations)."),
     "flag_bluffs_picaros": (1, 0, 1, 1, "Dealers", "Flag Los Pícaros' false finals",
                             "They are announced as bad faith: a price called final and beaten later in the same thread is flagged."),
+    "ladder_max_deals": (6, 3, 12, 1, "Dealers", "Ladder sales per dealer (level 3+)",
+                         "The ladder keeps the best three deals per level: more sales only help if they are priced better."),
     "abuela_visits": (1, 0, 1, 1, "Dealers", "Abuela gift visits",
                       "Every 2 game hours one kind message to Abuela, no price and no buy: she gives kind teams a small gift."),
     "abuela_haggle_per_hour": (6, 0, 10, 1, "Dealers", "Abuela haggles per hour",
