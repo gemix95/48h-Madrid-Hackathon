@@ -344,7 +344,7 @@ def run(url, key):
                 if fee_bps or per_card:
                     log_fee_blocks(book, fee)
                 plan += starter_plans.public_plan(book)
-                if auctions is not None:  # lots wait for their last tick, then go to the best bid (second price + 1)
+                if auctions is not None:  # no-op since lots are settled by the seller (auctions.py)
                     try:
                         plan = auctions.broker_plan(plan, book.get("offers") or [], tick)
                     except Exception as e:

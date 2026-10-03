@@ -8,7 +8,7 @@ so we keep a corridor:
   low  = cash if the team paid every fee it touched -> below it the team surely can
 
 An accepted offer whose maker cannot pay fails at settlement and wastes our one accept of the tick, so the trader
-and the flipper skip bids whose cash is above the maker's `high`.
+skips bids whose cash is above the maker's `high`.
 """
 from __future__ import annotations
 

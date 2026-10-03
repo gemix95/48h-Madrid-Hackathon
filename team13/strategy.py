@@ -22,7 +22,6 @@ KNOBS = {
     "enable_venue": (1, 0, 1, 1, "Modules", "Open our market", "Open our own market as soon as we reach level 2."),
     "broker_in_agent": (1, 0, 1, 1, "Modules", "Broker inside the agent", "0 when the broker runs on our server (systemd bazaar-broker): one broker per venue. Takes effect next tick; an already running broker thread stops only with an agent restart."),
     "enable_guard": (1, 0, 1, 1, "Modules", "Guard", "Last each tick: cancel any open offer of ours that loses value at our private values or breaks a team cap."),
-    "enable_flipper": (1, 0, 1, 1, "Modules", "Flipper", "Buy a card a team sells below another team's bid and sell into that bid (profit after both fees)."),
     "enable_wtb": (1, 0, 1, 1, "Modules", "Want-to-buy asks", "Direct offers to teams that probably hold a card we need and do not collect its set."),
     "enable_tapas": (1, 0, 1, 1, "Modules", "El Menú (tapas / último cromo / trueque)",
                      "List 2-card dump platters, public card-for-card swaps, and private page-closer offers. "
@@ -42,8 +41,6 @@ KNOBS = {
                        "the link while we are still building it. Turn it on when we announce the board ourselves."),
     "enable_concierge": (0, 0, 1, 1, "Modules", "Concierge for our market",
                          "A bid or ask on our market with no counterparty: ask likely holders (bid) or collectors (ask), never naming the maker."),
-    "enable_matchmaker": (0, 0, 1, 1, "Modules", "Matchmaker for our market",
-                          "Invite a team with a spare and a team bidding for the same card to our market, never naming either. Server only."),
     "enable_loans": (1, 0, 1, 1, "Modules", "Loan desk", "Cash against a card we would gladly own; requests come from agent/lend.py."),
     "enable_workshop": (1, 0, 1, 1, "Modules", "Workshop",
                         "Three duplicate copies of one rarity become one card of the next. The pull is luck and "

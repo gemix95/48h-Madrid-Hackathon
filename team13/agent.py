@@ -5,7 +5,7 @@
 
 Several teammates on the same key (the server cannot tell agents apart): give each a disjoint role and its own budget,
     AGENT_ROLE=dealers AGENT_BUDGET=60 python3 agent.py   # duels + haggler (+ flags)
-    AGENT_ROLE=market  AGENT_BUDGET=60 python3 agent.py   # venue + trader + flipper + wtb + tapas
+    AGENT_ROLE=market  AGENT_BUDGET=60 python3 agent.py   # venue + trader + wtb + tapas
 AGENT_ROLE is all (default), dealers, market, or a comma list of modules. With a split role, guard only cancels the
 offers this process made (threads it spoke in, offers it listed).
 
@@ -48,11 +48,9 @@ from haggler import Haggler
 from trader import Trader
 from guard import Guard
 from loans import LoanDesk
-from matchmaker import Matchmaker
 from arbitrage import Arbitrage
 from concierge import Concierge
 from workshop import Workshop
-from flipper import Flipper
 from wtb import Asker
 from tapas import Tapas
 from flags import FlagHunter
@@ -534,9 +532,9 @@ def single_instance(label: str = "all"):
 # Several teammates may run an agent on the same key from different machines. The server cannot tell them apart,
 # so each agent owns a disjoint set of modules: two agents never haggle with the same dealer or hit the same offer.
 ROLES = {
-    "all": {"duels", "haggler", "venue", "trader", "flipper", "wtb", "tapas", "loans", "workshop", "matchmaker", "arbitrage", "concierge"},
-    "dealers": {"duels", "haggler", "matchmaker", "arbitrage", "concierge"},   # workshop runs on the market agent so two processes never double-craft
-    "market": {"venue", "trader", "flipper", "wtb", "tapas", "loans", "workshop"},
+    "all": {"duels", "haggler", "venue", "trader", "wtb", "tapas", "loans", "workshop", "arbitrage", "concierge"},
+    "dealers": {"duels", "haggler", "arbitrage", "concierge"},   # workshop runs on the market agent so two processes never double-craft
+    "market": {"venue", "trader", "wtb", "tapas", "loans", "workshop"},
 }
 
 
@@ -571,7 +569,7 @@ def main():
     args = ap.parse_args()
     role = parse_role(args.role)
     if args.no_trade:
-        role -= {"trader", "flipper", "wtb", "loans"}
+        role -= {"trader", "wtb", "loans"}
     label = role_label(args.role)
     spath = state_path_for(args.role)
     if not args.dry_run:
@@ -586,17 +584,15 @@ def main():
              ("workshop", Workshop),  # before the trader lists the duplicates we are about to burn
              ("trader", Trader),
              ("tapas", Tapas),  # El Menú: platters, public trueque, page-closer DMs (after trader so it sees the book)
-             ("flipper", Flipper),  # buy below another team's bid, sell into it
              ("wtb", Asker),  # ask likely holders that do not collect a set for the cards we need
-             ("matchmaker", Matchmaker),  # brings a buyer and a seller of one card to our market, anonymously
              ("arbitrage", Arbitrage),  # buy from a dealer, sell at once into a team's bid, when both deals score
              ("concierge", Concierge)]  # an offer on our market with no counterparty: ask the teams likely to take it
     modules = [(name, cls(ctx)) for name, cls in build if name in role]
     modules.append(("guard", Guard(ctx)))  # last: undo anything this tick left open that loses value
     switch = {"duels": "enable_duels", "haggler": "enable_haggler", "trader": "enable_trader", "venue": "enable_venue",
-              "guard": "enable_guard", "flipper": "enable_flipper",
+              "guard": "enable_guard",
               "wtb": "enable_wtb", "tapas": "enable_tapas", "loans": "enable_loans",
-              "matchmaker": "enable_matchmaker", "arbitrage": "enable_arbitrage", "concierge": "enable_concierge", "workshop": "enable_workshop"}
+              "arbitrage": "enable_arbitrage", "concierge": "enable_concierge", "workshop": "enable_workshop"}
     ctx.solvency = Solvency(ctx)  # public-feed cash bounds: skip offers whose maker cannot pay
     flagger = FlagHunter(ctx)  # proven bad faith in dealer messages to us: a correct flag scores
     # El Consejo: a unique id for this agent (fixed until it restarts), then announce every deal we make

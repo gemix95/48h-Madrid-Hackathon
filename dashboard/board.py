@@ -140,8 +140,8 @@ def _pair_text(c, vid, deadline, sell):
     """Both sides of a pair get the same card, the same price and the same tick. Facts and one ready call, no
     instructions: we hand over what we can see, the decision stays with them."""
     ref, name, meet, saves = c["ref"], c.get("name") or c["ref"], c["meet"], c.get("saves") or 0
-    body = (f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":{meet}}}}}' if sell
-            else f'{{"venue":"{vid}","give":{{"cash":{meet}}},"want":{{"cards":["{ref}"]}}}}')
+    body = (f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":YOUR_PRICE}}}}' if sell
+            else f'{{"venue":"{vid}","give":{{"cash":YOUR_PRICE}},"want":{{"cards":["{ref}"]}}}}')
     return (f"{ref} ({name}) \u00b7 meeting price {meet} P \u00b7 window: until tick {deadline} \u00b7 market {vid}\n\n"
             f"A buyer and a seller of {ref} are live on two different markets, so neither can see the other. "
             f"Both are reading the same line on the same public page, with the same price and the same tick.\n\n"
@@ -155,8 +155,8 @@ def _pair_text(c, vid, deadline, sell):
 def _price_text(c, vid, price, sell):
     """Buy at the cheapest price in the Bazaar, or sell to the best buyer: one call that puts that price on our market."""
     ref, name = c["ref"], c.get("name") or c["ref"]
-    body = (f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":{price}}}}}' if sell
-            else f'{{"venue":"{vid}","give":{{"cash":{price}}},"want":{{"cards":["{ref}"]}}}}')
+    body = (f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":YOUR_PRICE}}}}' if sell
+            else f'{{"venue":"{vid}","give":{{"cash":YOUR_PRICE}},"want":{{"cards":["{ref}"]}}}}')
     what = (f"sell {ref} ({name}) for {price} P, the best price a buyer pays for it anywhere in the Bazaar right now"
             if sell else f"buy {ref} ({name}) for {price} P, the cheapest it is offered anywhere in the Bazaar right now")
     return (f"El Club Board ({vid}): {what}.\n\n"
@@ -203,11 +203,21 @@ def _post_text(c, vid, sell):
             f"{vid} charges 0 and cannot trade against you: a team cannot trade on its own venue (RULES, Markets).")
 
 
-def _button(text, label):
+MAX_PRICE = 100000  # a sanity cap for the price field, far above any card's value
+
+
+def _button(text, label, ask=None):
+    """A copy button. With ask = {"def": suggested price, "min": lowest allowed}, the click first asks for the price,
+    checks it (a whole number from min to MAX_PRICE) and puts it into the call in place of YOUR_PRICE."""
     text = html.escape(text, quote=True)
-    return (f'<button class="trade" data-text="{text}">{label}</button>'
-            f'<div class="copied" hidden><div class="lbl">Read it, then run it <span class="ok">copied ✓</span></div>'
-            f'<pre>{text}</pre></div>')
+    attrs, form = "", ""
+    if ask:
+        attrs = f' data-def="{ask.get("def") or ""}" data-min="{ask.get("min") or 1}"'
+        form = ('<form class="pricef"><label>Your price <input type="number" inputmode="numeric" step="1" required> P</label>'
+                '<button type="submit">Copy request</button><div class="err small"></div></form>')
+    return (f'<button class="trade" data-text="{text}"{attrs}>{label}</button>'
+            f'<div class="copied" hidden>{form}<div class="lbl"{" hidden" if ask else ""}>Read it, then run it <span class="ok">copied ✓</span></div>'
+            f'<pre{" hidden" if ask else ""}>{text}</pre></div>')
 
 
 def _choice(c, vid, deadline, sell):
@@ -215,12 +225,12 @@ def _choice(c, vid, deadline, sell):
     settles next tick), buy or sell at the best price in the Bazaar on our market, or post your own side."""
     want = "buy" if sell else "sell"   # selling means taking a resting bid; buying means taking a resting ask
     resting = next((o for o in c["on_ours"] if o["side"] == want), None)
-    if resting:
-        return _accept_text(c, resting, vid), ("Sell in 1 click" if sell else "Buy in 1 click")
+    if resting:  # the price is the resting offer's: nothing to ask
+        return _accept_text(c, resting, vid), ("Sell in 1 click" if sell else "Buy in 1 click"), None
     price = c.get("sell_at") if sell else c.get("buy_at")
     if price:
-        return _price_text(c, vid, price, sell), ("Sell in 1 click" if sell else "Buy in 1 click")
-    return _post_text(c, vid, sell), ("Sell in 1 click" if sell else "Bid in 1 click")
+        return _price_text(c, vid, price, sell), ("Sell in 1 click" if sell else "Buy in 1 click"), {"def": price, "min": 1}
+    return _post_text(c, vid, sell), ("Sell in 1 click" if sell else "Bid in 1 click"), {"def": None, "min": 1}
 
 
 def _howto(c, vid, deadline, sell):
@@ -244,9 +254,9 @@ def live(data: dict) -> dict:
     for c in pub["cards"]:
         sides = {}
         for sell, key in ((False, "buy"), (True, "sell")):
-            text, label = _choice(c, vid, pub["deadline"], sell)
+            text, label, ask = _choice(c, vid, pub["deadline"], sell)
             price, count = _side_top(c, sell)
-            sides[key] = {"price": price, "count": count, "label": label, "text": text}
+            sides[key] = {"price": price, "count": count, "label": label, "text": text, "ask": ask}
         out[c["ref"]] = sides
     return {"at": pub["at"], "tick": pub["tick"], "cards": out}
 
@@ -287,40 +297,81 @@ _LAST = {}
 
 
 def _auctions_html(data, vid):
-    """Open lots on our market: reserve, best bid so far, bids, ticks left, and a ready bid call."""
+    """Lots: the open ones with every bid on our book (offer id, price), the ended ones with their published ranking,
+    and the rules in plain words."""
     try:
         import auctions
-        lots = [l for l in auctions.load().values() if l.get("status") == "open"]
+        lots = list(auctions.load().values())
+        grace, rules = auctions.ACCEPT_TICKS, auctions.RULES
     except Exception:
-        lots = []
+        lots, grace, rules = [], 8, ""
     tick = data.get("tick") or 0
     cards = {c["ref"]: c for c in data["cards"]}
+    esc = html.escape
+
+    def card_cell(lot):
+        c = cards.get(lot["ref"]) or {"name": lot["ref"]}
+        return (f'<td class="cardcell"><div class="thumb" data-card="{esc(lot["ref"])}"></div><div class="cardtxt">'
+                f'<b>{esc(lot["ref"])}</b><div>{esc(str(c.get("name") or ""))}</div>'
+                f'<div class="dim small">lot {lot["lot"]} · seller {esc(lot["seller"])}</div></div></td>')
+
+    def bid_list(bids, win=None):
+        if not bids:
+            return '<span class="dim">no bid at or above the reserve</span>'
+        return "<br>".join((f'<b>offer {b["id"]} · {b["price"]} P</b> ← winner' if b["id"] == win else f'offer {b["id"]} · {b["price"]} P')
+                           for b in bids[:6]) + (f'<br><span class="dim">+{len(bids) - 6} more</span>' if len(bids) > 6 else "")
+
     rows = []
-    for lot in sorted(lots, key=lambda l: l["end"]):
-        c = cards.get(lot["ref"]) or {"ref": lot["ref"], "name": lot["ref"]}
-        bids = sorted((x["price"] for x in (c.get("bids") or []) if x.get("ours") and x["price"] >= lot["reserve"]), reverse=True)
-        best = bids[0] if bids else None
-        step = max(lot["reserve"], (best + 1) if best else lot["reserve"])
-        body = f'{{"venue":"{vid}","give":{{"cash":{step}}},"want":{{"cards":["{lot["ref"]}"]}}}}'
-        text = (f"El Club auction on {vid}: {lot['ref']} ({c.get('name') or lot['ref']}), reserve {lot['reserve']} P, ends at tick {lot['end']}.\n\n"
-                + _curl(body) +
-                f"\n\nBid what the card is worth to you: the highest bid wins and pays the second-highest bid + 1 "
-                f"(never below the reserve, never above its own bid). Raise by posting a higher bid; cancel any time before the end.")
-        rows.append(f'<tr><td class="cardcell"><div class="thumb" data-card="{html.escape(lot["ref"])}"></div><div class="cardtxt">'
-                    f'<b>{html.escape(lot["ref"])}</b><div>{html.escape(str(c.get("name") or ""))}</div></div></td>'
-                    f'<td><div class="price">{lot["reserve"]} P</div><div class="dim small">reserve</div></td>'
-                    f'<td><div class="price">{(str(best) + " P") if best else "–"}</div><div class="dim small">{len(bids)} bid{"s" if len(bids) != 1 else ""}</div></td>'
-                    f'<td><div class="price">{max(0, lot["end"] - tick)}</div><div class="dim small">ticks left</div></td>'
-                    f'<td>{_button(text, "Bid in 1 click")}</td></tr>')
-    table = (f'<div class="wrap"><table class="deck"><thead><tr><th>Lot</th><th>Reserve</th><th>Best bid</th><th>Ends</th><th></th></tr></thead>'
-             f'<tbody>{"".join(rows)}</tbody></table></div>') if rows else '<div class="box dim">No lot right now. Be the first: auction a card below.</div>'
-    how_ask = _curl(f'{{"venue":"{vid}","give":{{"assets":[YOUR_ASSET_ID]}},"want":{{"cash":RESERVE}},"expires_in_ticks":34}}')
-    how_reg = f'curl "http://217.160.143.83/board/auction?offer=OFFER_ID&ticks=30"'
-    how = (f"Auction a card on {vid}: two calls.\n\n1) Put it up, with your reserve price (the least you accept):\n"
-           f"{how_ask}\n\n2) Make it a lot for 30 ticks (OFFER_ID = the id step 1 returned):\n{how_reg}\n\n"
-           f"Teams that collect the set hear about it; on the last tick the highest bid wins at the second-highest + 1.")
-    return (f'<h2 id="auctions">Live auctions <span class="dim" style="font-weight:400;font-size:14px">· on {vid}: the highest bid wins, pays the second bid + 1</span></h2>'
-            f'{table}<div style="margin:8px 0 18px">{_button(how, "Auction your card in 2 calls")}</div>')
+    for lot in sorted((l for l in lots if l["status"] == "open"), key=lambda l: l["end"]):
+        c = cards.get(lot["ref"]) or {}
+        bids = sorted(({"id": x["id"], "price": x["price"]} for x in c.get("bids") or [] if x.get("ours") and x["price"] >= lot["reserve"]),
+                      key=lambda b: (-b["price"], b["id"]))
+        step = max(lot["reserve"], bids[0]["price"] + 1 if bids else lot["reserve"])
+        text = (f"Lot {lot['lot']} on {vid}: {lot['ref']} ({c.get('name') or lot['ref']}), reserve {lot['reserve']} P, "
+                f"closes at tick {lot['end']}.\n\nYour bid:\n\n"
+                + _curl(f'{{"venue":"{vid}","give":{{"cash":YOUR_PRICE}},"want":{{"cards":["{lot["ref"]}"]}}}}') +
+                f"\n\nYou pay your own bid if you win. Cancel any time before the close: DELETE /api/offers/OFFER_ID.")
+        rows.append(f'<tr>{card_cell(lot)}<td><div class="price">{lot["reserve"]} P</div><div class="dim small">reserve</div></td>'
+                    f'<td class="small">{bid_list(bids)}</td>'
+                    f'<td><div class="price">{max(0, lot["end"] - tick)}</div><div class="dim small">ticks left · closes at {lot["end"]}</div></td>'
+                    f'<td>{_button(text, "Bid in 1 click", {"def": step, "min": lot["reserve"]})}</td></tr>')
+    done = []
+    for lot in sorted((l for l in lots if l["status"] in ("ended", "closed")), key=lambda l: -l["closed_tick"])[:6]:
+        rk, gone = lot.get("ranking") or [], set(lot.get("left_book") or [])
+        live = [b for b in rk if b["id"] not in gone]
+        win = live[0]["id"] if live else None
+        if lot["status"] == "ended" and win:
+            state = f"seller: accept offer {win} by tick {lot['accept_by']}"
+        elif lot["status"] == "ended":
+            state = "no bid left on the book"
+        else:
+            state = "closed"
+        gone_txt = f'<div class="dim small">left the book since the close (accepted or cancelled): {", ".join(map(str, sorted(gone)))}</div>' if gone else ""
+        done.append(f'<tr>{card_cell(lot)}<td><div class="price">{lot["reserve"]} P</div><div class="dim small">reserve</div></td>'
+                    f'<td class="small">{bid_list(rk, win)}{gone_txt}</td>'
+                    f'<td><div class="dim small">closed at tick {lot["closed_tick"]}</div><div class="small">{esc(state)}</div></td><td></td></tr>')
+    head = '<thead><tr><th>Lot</th><th>Reserve</th><th>Bids on the book (offer id · price)</th><th>Ends</th><th></th></tr></thead>'
+    table = (f'<div class="wrap"><table class="deck">{head}<tbody>{"".join(rows)}</tbody></table></div>' if rows
+             else '<div class="box dim">No open lot right now. Be the first: auction a card below.</div>')
+    results = (f'<h3>Results</h3><div class="wrap"><table class="deck">{head}<tbody>{"".join(done)}</tbody></table></div>' if done else "")
+    how = (f"Auction a card on {vid}: one call, no ask, the card stays with you until you accept a bid.\n\n"
+           f'curl "http://217.160.143.83/board/auction?card=CARD_ID&reserve=RESERVE&ticks=30&seller=YOUR_TEAM_ID"\n\n'
+           f"CARD_ID like LAT-10; RESERVE = the least you accept; ticks 8 to 60 (30 ticks = 7.5 minutes); "
+           f"YOUR_TEAM_ID like t07.\n\nWhen it closes, accept the best bid still on the book within {grace} ticks:\n\n"
+           f'curl -X POST https://bazaar.causaprima.ai/api/offers/OFFER_ID/accept -H "X-Team-Key: $BAZAAR_KEY" '
+           f"-H \"Content-Type: application/json\" -d '{{\"assets\":[YOUR_ASSET_ID]}}'")
+    steps = (f'<div class="box rules"><b>How an auction works</b><ol>'
+             f'<li><b>The seller keeps the card.</b> No ask is posted, so nobody can buy it around the auction.</li>'
+             f'<li><b>Bids are ordinary open bids on {vid}</b> (cash for that card, at least the reserve). Everyone sees every bid: '
+             f'<code>GET /api/venues/{vid}/offers</code>. Raise with a higher bid, withdraw by cancelling.</li>'
+             f'<li><b>At the closing tick we publish the ranking</b> of the bids still on the book, best first, a tie to the earlier offer: '
+             f'here and in <a href="/board/lots.json">/board/lots.json</a>. Compare it with the book yourself.</li>'
+             f'<li><b>The seller accepts the best bid still on the book</b> within {grace} ticks. The winner pays its own bid, 0% fee.</li>'
+             f'<li>If the seller does not accept, nothing trades and every bid stays yours to cancel. We never touch the card or the cash; '
+             f'Team 13 cannot bid or sell on its own market.</li></ol></div>')
+    return (f'<h2 id="auctions">Auctions <span class="dim" style="font-weight:400;font-size:14px">· on {vid}: open bids, '
+            f'the seller accepts the best, you pay your own bid</span></h2>{steps}{table}{results}'
+            f'<div style="margin:8px 0 18px">{_button(how, "Auction your card in 1 call")}</div>')
 
 
 def render(data: dict) -> str:
@@ -415,7 +466,7 @@ td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 table.deck td{{vertical-align:middle}}td.cardcell{{display:flex;gap:12px;align-items:center;min-width:240px}}
 .thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
 .cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
-td.side button.trade{{margin-top:6px}}
+td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
 .setnav{{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;margin:6px 0 4px;background:var(--bg)}}
 .setnav a{{text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;font-size:13px}}
 .setnav a:hover{{border-color:var(--gold);color:var(--gold)}}.setnav .n{{color:var(--dim);margin-left:6px;font-size:12px}}
@@ -427,7 +478,7 @@ button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}
 <h1>El Club Board</h1>
 <div class="hero">Find the card you need at the <b>best price in the Bazaar</b> and buy it in one click.
 Got a spare? <b>Sell it fast</b> to the best buyer.</div>
-<div class="hero2">Not for sale anywhere? <b>Bid on {vid}</b>: we ask the teams that hold the card, without naming you.
+<div class="hero2">Not for sale anywhere? <b>Bid on {vid}</b>: we will find this card for you.
 Selling something nobody bids for? We ask the teams that collect its set.</div>
 <div class="dim">Prices from all {pub["markets"]} markets · tick <span id="tick">{pub["tick"]}</span> · updated <span id="upd">{when}</span> · live, every 15 s</div>
 <div class="steps">
@@ -461,12 +512,39 @@ JSON: <a href="board.json">board.json</a> · Team 13</footer>
 </main>
 <script>
 let busyUntil = 0;
-document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click", async () => {{
-  const box = b.nextElementSibling, text = b.dataset.text;
-  box.hidden = false; busyUntil = Date.now() + 60000;
-  try {{ await navigator.clipboard.writeText(text); box.querySelector(".ok").textContent = "copied ✓"; }}
-  catch (e) {{ const r = document.createRange(); r.selectNodeContents(box.querySelector("pre"));
-    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); box.querySelector(".ok").textContent = "selected: press Ctrl/Cmd+C"; }}
+async function copyOut(box, text) {{
+  const pre = box.querySelector("pre"), lbl = box.querySelector(".lbl");
+  pre.textContent = text; pre.hidden = false; lbl.hidden = false;
+  try {{ await navigator.clipboard.writeText(text); lbl.querySelector(".ok").textContent = "copied ✓"; }}
+  catch (e) {{ const r = document.createRange(); r.selectNodeContents(pre);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); lbl.querySelector(".ok").textContent = "selected: press Ctrl/Cmd+C"; }}
+}}
+// A whole number from min to MAX; anything else is refused with the reason.
+function checkPrice(raw, min) {{
+  const v = String(raw).trim();
+  if (!/^[0-9]+$/.test(v)) return [null, "Enter a whole number of P (digits only)."];
+  const n = parseInt(v, 10);
+  if (n < min) return [null, min > 1 ? `At least ${{min}} P (the reserve).` : "At least 1 P."];
+  if (n > {MAX_PRICE}) return [null, "That is more than any card is worth; check the number."];
+  return [n, ""];
+}}
+document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click", () => {{
+  const box = b.nextElementSibling, form = box.querySelector("form.pricef");
+  box.hidden = false; busyUntil = Date.now() + 120000;
+  if (!b.dataset.min) {{ copyOut(box, b.dataset.text); return; }}
+  const inp = form.querySelector("input");
+  inp.min = b.dataset.min; inp.max = {MAX_PRICE};
+  if (!inp.value && b.dataset.def) inp.value = b.dataset.def;
+  box.querySelector("pre").hidden = true; box.querySelector(".lbl").hidden = true;
+  inp.focus(); inp.select();
+}}));
+document.querySelectorAll("form.pricef").forEach(f => f.addEventListener("submit", ev => {{
+  ev.preventDefault();
+  const box = f.parentElement, b = box.previousElementSibling, err = f.querySelector(".err");
+  const [n, why] = checkPrice(f.querySelector("input").value, parseInt(b.dataset.min || "1", 10));
+  err.textContent = why;
+  if (n === null) return;
+  copyOut(box, b.dataset.text.split("YOUR_PRICE").join(String(n)));
 }}));
 fetch("/board/cards.json").then(r => r.json()).then(cards => {{
   document.querySelectorAll(".thumb[data-card]").forEach(t => {{ const h = cards[t.dataset.card]; if (h) t.innerHTML = h; }});
@@ -481,7 +559,9 @@ async function refresh() {{
       const v = ((d.cards || {{}})[td.dataset.ref] || {{}})[td.dataset.side]; if (!v) return;
       const pr = td.querySelector(".price"), ct = td.querySelector(".count"), b = td.querySelector("button.trade"), pre = td.querySelector(".copied pre");
       if (pr.textContent !== v.price) {{ pr.textContent = v.price; pr.classList.toggle("none", v.price === "–"); pr.classList.add("flash"); setTimeout(() => pr.classList.remove("flash"), 1200); }}
-      ct.textContent = v.count; b.textContent = v.label; b.dataset.text = v.text; if (pre) pre.textContent = v.text;
+      ct.textContent = v.count; b.textContent = v.label; b.dataset.text = v.text;
+      if (v.ask) {{ b.dataset.min = v.ask.min || 1; b.dataset.def = v.ask.def || ""; }} else {{ delete b.dataset.min; delete b.dataset.def; }}
+      if (pre && td.querySelector(".copied").hidden) pre.textContent = v.text;  // never rewrite a request the user is reading
     }});
   }} catch (e) {{}}
 }}

@@ -122,7 +122,7 @@ def peer_lessons(exclude_agent: str | None = None, exclude_host: str | None = No
             continue
         top = note.get("topic") or ""
         auth = note.get("author") or ""
-        if top not in want and auth not in ("haggler", "trader", "tuner", "market", "duels", "flipper"):
+        if top not in want and auth not in ("haggler", "trader", "tuner", "market", "duels"):
             continue
         if top == "deal" and auth == "haggler" and not (note.get("lesson") or "").startswith("Negotiating"):
             continue  # closed haggles are coordination, not lessons
@@ -299,11 +299,6 @@ def announce(rec: dict, dealer_names: dict | None = None) -> None:
              f"Workshop: burned {', '.join(rec.get('refs') or [])} ({rec.get('rarity')}) for {rec.get('pulled') or 'a'} "
              f"{rec.get('pulled_rarity') or rec.get('next')} (gave up {rec.get('loss')} P, expected {rec.get('ev')} P).",
              {"refs": rec.get("refs"), "pulled": rec.get("pulled"), "surplus": rec.get("surplus")}, tick=t)
-    elif m == "flip" and a in ("buy", "sell"):
-        txt = (f"Flip: bought {rec.get('ref')} at {rec.get('price')} P to sell to {rec.get('target_team')} at {rec.get('target_bid')} P."
-               if a == "buy" else f"Flip: sold {rec.get('ref')} to {rec.get('buyer')} for {rec.get('price')} P.")
-        post("flipper", "deal", txt, {"ref": rec.get("ref"), "price": rec.get("price")}, tick=t)
-
 
 def _jsonl(path: Path, tail_bytes: int = 4_000_000) -> list:
     if not path.exists():

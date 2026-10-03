@@ -496,8 +496,9 @@ class Market:
             pass
         if lots:
             l = lots[0]
-            text = (f"AUCTION on {venue}: {l['ref']}, reserve {l['reserve']} P, ends at tick {l['end']}. Bid on {venue}: "
-                    f"the highest bid wins at the second bid + 1. Live: http://217.160.143.83/board#auctions")
+            text = (f"AUCTION on {venue}: {l['ref']}, reserve {l['reserve']} P, ends at tick {l['end']}. Post an open bid for "
+                    f"{l['ref']} on {venue}; every bid is public, the seller accepts the best one, you pay your own bid. "
+                    f"Rules and live bids: http://217.160.143.83/board#auctions")
         elif pairs:
             where, ref, ask, bid = pairs[0][:4]
             text = MATCH_PITCH.format(ref=ref, ask=ask, bid=bid, where=where, venue=venue, brand=BRAND)

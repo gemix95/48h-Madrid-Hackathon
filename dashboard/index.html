@@ -2684,7 +2684,7 @@ function intelTab(d, M) {
 }
 
 // ---------- council ----------
-const COUNCIL_ICON = { trader: "💱", haggler: "🤝", market: "🏪", guard: "🛡", agent: "⚙️", tuner: "🎛", wtb: "🔎", duels: "⚔️", flipper: "🔁", Admin: "👤" };
+const COUNCIL_ICON = { trader: "💱", haggler: "🤝", market: "🏪", guard: "🛡", agent: "⚙️", tuner: "🎛", wtb: "🔎", duels: "⚔️", Admin: "👤" };
 // which agent a note is from (its unique id, fixed until it restarts) and its role; the tuner's notes are about one
 const councilWho = n => n.role === "tuner" ? (n.agent ? ` · about ${esc(n.agent)}` : "") : n.agent ? ` · ${esc(n.agent)}${n.role ? ` (${esc(n.role)})` : ""}` : "";
 const KNOB_NAME = { trade_ask_start: "Spare asking price (× book)", trade_bid_start: "Opening bid (× book)" };
