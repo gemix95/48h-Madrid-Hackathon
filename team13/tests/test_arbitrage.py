@@ -95,4 +95,22 @@ g.api.cancel = lambda oid: g.cancelled.append(oid)
 Guard(g).step()
 assert g.cancelled == [8], g.cancelled   # 58 P for a card worth 35 is cancelled, unless it is the arbitrage pair
 
+# the accept slot is busy (another of our agents took it): retry, never drop the card while the bid lives
+c4 = Ctx(); a4 = arbitrage.Arbitrage(c4); a4.step()
+c4.clock["tick"] = 1301; c4.api.thread_state = {"status": "open", "standing_offers": [{"id": 9, "maker": "picaros", "status": "open", "give": {"types": ["card:LAT-10"]}, "want": {"cash": 55}}]}
+a4.step(); c4.values.assets = [{"id": 777, "ref": "LAT-10"}]
+fails = {"n": 2}
+real_accept = c4.api.accept
+def flaky(oid, assets=None):
+    if oid == 18535 and fails["n"] > 0:
+        fails["n"] -= 1
+        raise arbitrage.BazaarError("rate_limited: one accept per tick")
+    return real_accept(oid, assets)
+c4.api.accept = flaky
+for t in (1302, 1303, 1304):
+    c4.clock["tick"] = t; a4.step()
+assert c4.api.accepted[-1] == (18535, [777]) and c4.state["arb"]["active"] is None, c4.api.accepted
+# a bar far below the dealer's list is skipped when min_reach is set
+c5 = Ctx(); c5.values.gain_of_adding = lambda refs: 10.0
+assert not arbitrage.candidates(c5, *_args(c5), 8, min_reach=0.85) or all(p["cap"] >= 0.85 * p["list"] for _, p in arbitrage.candidates(c5, *_args(c5), 8, min_reach=0.85))
 print("arbitrage ok: pick, haggle, right card only, bid re-checked, sold into the bid, ladder slack, guard exemption")

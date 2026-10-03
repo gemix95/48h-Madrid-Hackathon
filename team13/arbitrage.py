@@ -28,6 +28,7 @@ FEED_STORE = os.path.join(HERE, "logs", "feed_events.jsonl")
 SCAN_EVERY = 5         # ticks between scans while idle
 MIN_BID_LIFE = 30      # ticks a bid must still live when we start (a haggle takes ~6-12 ticks)
 MAX_ROUNDS = 12        # our offers to the dealer before we walk
+SELL_TRIES = 20        # ticks we keep trying to sell into the bid (the accept slot is shared by three agents)
 START_SHARE = 0.72     # first offer as a share of the dealer's list price
 
 
@@ -61,7 +62,7 @@ def fee(price, venue) -> int:
     return math.ceil((venue.get("fee_bps") or 0) * price / 10000) + (venue.get("fee_per_card") or 0)
 
 
-def candidates(ctx, venues, boards, makers, dealers, min_score, ladder_slack=0) -> list:
+def candidates(ctx, venues, boards, makers, dealers, min_score, ladder_slack=0, min_reach=0.0) -> list:
     """[(score at our max price, plan)] best first, from open team bids and dealer menus."""
     v, me = ctx.values, ctx.me.get("id")
     sells = [(d["id"], s["rarity"], s.get("sets"), s["list_price"], d.get("level")) for d in dealers if d.get("status") == "active"
@@ -98,8 +99,8 @@ def candidates(ctx, venues, boards, makers, dealers, min_score, ladder_slack=0) 
                     continue
                 cap = min(pmax, L)  # never above the dealer's list price
                 start = math.floor(L * START_SHARE)
-                if cap < start:
-                    continue
+                if cap < start or cap < L * min_reach:
+                    continue  # the dealer walks long before such a bar (Pícaros walked from 46 of 63, three times)
                 plan = {"ref": ref, "dealer": did, "bid": o["id"], "bid_price": B, "bid_venue": vid, "net_in": net_in,
                         "value": round(V, 1), "list": L, "cap": cap, "price": start, "level": level,
                         "dealer_deals": closed.get(did, 0), "ladder_slot": slot, "bar": round(bar, 1)}
@@ -150,7 +151,7 @@ class Arbitrage:
         busy = {t.get("with") for t in ctx.threads if t.get("kind") == "persona" and t.get("status") == "open"}
         reserve = ctx.reserve()
         for sc, plan in candidates(ctx, venues, boards, makers, dealers, S.get("arb_min_score", 8),
-                                   S.get("arb_ladder_slack", 0)):
+                                   S.get("arb_ladder_slack", 0), S.get("arb_min_reach", 0.85)):
             if plan["dealer"] in busy or ctx.me.get("cash", 0) - plan["cap"] < reserve:
                 continue
             try:
@@ -217,6 +218,9 @@ class Arbitrage:
                     ctx.log("arb", "card_not_arrived", ref=a["ref"])
                     st["active"] = None
                 return
+            if tick == a.get("sell_tick"):
+                return
+            a["sell_tick"] = tick
             if not ctx.take_accept():
                 return
             asset = max(x["id"] for x in copies)
@@ -226,9 +230,15 @@ class Arbitrage:
                         value=a["value"], score=round(score(a["value"], a.get("paid") or a["cap"], a["net_in"]), 1))
                 day = ctx.day_key()
                 st["done"][day] = st["done"].get(day, 0) + 1
+                st["active"] = None
             except BazaarError as e:
-                ctx.log("arb", "sell_refused", ref=a["ref"], bid=a["bid"], error=str(e)[:160])  # we keep the card
-            st["active"] = None
+                # the team's one accept per tick is shared by our three agents, and the server may be busy: retry while
+                # the bid lives; only a vanished bid ends the pair, and then we say so (the card stays with us)
+                a["sell_tries"] = a.get("sell_tries", 0) + 1
+                ctx.log("arb", "sell_retry", ref=a["ref"], bid=a["bid"], tries=a["sell_tries"], error=str(e)[:160])
+                if a["sell_tries"] >= SELL_TRIES or not self._bid_open(a):
+                    ctx.log("arb", "stuck_with_card", ref=a["ref"], bid=a["bid"], paid=a.get("paid"), value=a["value"])
+                    st["active"] = None
 
     def _abort(self, st, a):
         try:

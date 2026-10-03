@@ -30,6 +30,8 @@ KNOBS = {
     "enable_arbitrage": (0, 0, 1, 1, "Modules", "Dealer-to-team arbitrage",
                          "Buy from a dealer and sell at once into a team's bid when both deals together score."),
     "arb_min_score": (8, 1, 50, 1, "Trading", "Arbitrage: least score per pair", "min(0, value - price paid) + min(50, bid - fee - value)."),
+    "arb_min_reach": (0.85, 0, 1, 0.05, "Trading", "Arbitrage: least cap / dealer list",
+                      "Skip a pair whose highest price is below this share of the dealer's list: the dealer walks first."),
     "arb_max_per_day": (6, 0, 30, 1, "Trading", "Arbitrage: pairs per day", "A cap while we learn how dealers and bidders behave."),
     "arb_ladder_slack": (0, 0, 20, 1, "Trading", "Arbitrage: ladder slack at an empty dealer",
                          "P off the least score when the dealer's best three still has an empty slot. The ladder keeps "
