@@ -60,15 +60,20 @@ KNOBS = {
                       "One flip at a time; never more than this, and never below the cash reserve."),
     "trade_min_gain": (3, 0, 20, 1, "Trading", "Minimum gain per trade (P)",
                        "A trade must create at least this much value for us, at our values, after fees."),
+    "dump_min_gain": (1, 0, 10, 1, "Trading", "Minimum gain when dumping Retiro/Latina/extras (P)",
+                      "Pure sales of El Retiro, La Latina, or 2nd/3rd copies may clear at this lower floor so cash comes back fast. "
+                      "Page protection (8/10+) still blocks selling the last copy."),
     "trade_bid_share": (0.4, 0, 1, 0.05, "Trading", "Share of free cash for bids",
                         "The rest stays free for dealer deals."),
-    "trade_max_asks": (8, 0, 30, 1, "Trading", "Spares listed at once", ""),
+    "trade_max_asks": (12, 0, 30, 1, "Trading", "Spares listed at once",
+                       "Higher = dump Retiro/Latina/extras faster (still capped by the server's 12 new listings/tick)."),
     "trade_max_bids": (6, 0, 30, 1, "Trading", "Bids open at once", ""),
-    "trade_ask_start": (1.25, 0.8, 2.0, 0.05, "Trading", "Spare asking price (× book)",
-                        "Starts here, then drops toward a floor that still gains us value."),
+    "trade_ask_start": (1.05, 0.8, 2.0, 0.05, "Trading", "Spare asking price (× book)",
+                        "Starts here, then drops toward a floor that still gains us value. Hard dumps also undercut rivals and cap at 1.0× book."),
     "trade_bid_start": (0.6, 0.3, 1.0, 0.05, "Trading", "Opening bid (× book)",
                         "Starts here, then rises toward what the card is worth to us minus our minimum gain."),
-    "trade_reprice_ticks": (8, 2, 40, 1, "Trading", "Ticks between price changes", ""),
+    "trade_reprice_ticks": (4, 2, 40, 1, "Trading", "Ticks between price changes",
+                            "Dumps reprice every 3 ticks regardless; this sets the pace for other asks/bids."),
     "trade_all_markets": (1, 0, 1, 1, "Trading", "Trade on every market",
                           "Scan every market (El Rastro, starter stalls, team venues), value offers after each market's fee, "
                           "and spread our listings over the busiest, cheapest ones."),
@@ -89,10 +94,9 @@ KNOBS = {
     "duel_accept": (0.5, 0.4, 1.0, 0.05, "Duels", "Accept threshold",
                     "Take the rival's offer when it gives us this share of what our next offer would."),
     # market
-    "venue_fee_bps": (100, 0, 1000, 25, "Market", "Our market fee (bps)",
-                      "100 = 1%. Fees round up, so 1% costs 1 P on a typical 24 P trade, the same as Team 6's 0.5% and far below "
-                      "El Rastro (5% + 1 P per card). Fees earned do not score but fund our deals. Safety: if the Market Test ever "
-                      "has a match refused because of the fee, the agent drops it to 0% at once."),
+    "venue_fee_bps": (0, 0, 1000, 25, "Market", "Our market fee (bps)",
+                      "0 = free (Saturday default). Fees never score; a positive fee blocks thin Market Test pairs. "
+                      "El Rastro is 5% + 1 P/card — FOMO copy and invites use this live value. Safety drops to 0% if a test match is fee-blocked."),
     "day_budget": (120, 20, 400, 10, "Money", "Buying budget per game day (P)",
                    "Most we spend on dealer purchases, bids and posted offers per day (Friday, Saturday, Sunday each get "
                    "their own). Page completers are exempt. The ladder scores how well we buy, not how much."),
@@ -118,7 +122,7 @@ PRESETS = {
     "Previous defaults": {"haggle_open": 0.45, "haggle_rounds": 12, "duel_rounds": 6, "duel_anchor": 0.6, "duel_accept": 0.9},
     "Fast closer": {"haggle_open": 0.6, "haggle_rounds": 7, "haggle_curve": 1.5, "trade_min_gain": 2,
                     "trade_ask_start": 1.1, "trade_bid_start": 0.75, "duel_rounds": 4, "duel_accept": 0.8},
-    "Market first": {"reserve_cash": 270, "trade_bid_share": 0.2, "haggle_buy_cards": 0, "venue_fee_bps": 100},
+    "Market first": {"reserve_cash": 270, "trade_bid_share": 0.2, "haggle_buy_cards": 0, "venue_fee_bps": 0},
 }
 
 # Simulated scores per preset (tests/tournament.py, see tests/RESULTS.md)

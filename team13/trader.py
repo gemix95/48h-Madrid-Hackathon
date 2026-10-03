@@ -18,6 +18,8 @@ RASTRO_BPS, RASTRO_PER_CARD = 500, 1
 MAX_ASKS, MAX_BIDS = 8, 6
 BID_SHARE = 0.4         # at most this share of our free cash sits in open bids (the rest is for dealer deals)
 REPRICE_TICKS = 8
+DUMP_REPRICE_TICKS = 3  # Retiro / Latina / extras: walk to the floor in ~5 steps (~2.5 min at 30 s ticks)
+DUMP_REPRICE_STEPS = 5
 
 
 def fee(price: float, n_cards: int, bps=RASTRO_BPS, per_card=RASTRO_PER_CARD) -> float:
@@ -94,6 +96,16 @@ class Trader:
             return True
         return False
 
+    def sale_min_gain(self, refs_we_give: list) -> float:
+        """Minimum private-value gain for a pure sale. Dump neighbourhoods / extras clear at 1 P (or dump_min_gain)."""
+        S, v = self.ctx.S, self.ctx.values
+        base = float(S.get("trade_min_gain", MIN_GAIN))
+        if not refs_we_give:
+            return base
+        if all(v.dump_tier(r) in ("hard", "extra") for r in refs_we_give):
+            return float(S.get("dump_min_gain", 1))
+        return base
+
     def evaluate(self, offer: dict) -> dict:
         """What accepting `offer` would gain us, at our values, after that market's fees."""
         ctx, v = self.ctx, self.ctx.values
@@ -119,7 +131,8 @@ class Trader:
         caps = team_caps()
         if len(they_give) == 1 and they_give[0] in caps and cash_out > caps[they_give[0]]:
             return {"gain": None, "why": f"above the team cap of {caps[they_give[0]]} P"}
-        return {"gain": gain, "give": they_give, "want": they_want, "cash_in": cash_in, "cash_out": cash_out, "fee": f}
+        return {"gain": gain, "give": they_give, "want": they_want, "cash_in": cash_in, "cash_out": cash_out, "fee": f,
+                "min_gain": self.sale_min_gain(they_want) if they_want and not they_give else float(ctx.S.get("trade_min_gain", MIN_GAIN))}
 
     def cheapest_rival_ask(self, ref: str):
         """Lowest price another team asks on El Rastro for a single card of the same ref (else same rarity)."""
@@ -148,6 +161,19 @@ class Trader:
             return sorted(pool)[len(pool) // 2] if pool else None  # median of recent listings, not one outlier
         return min(pool) if pool else None
 
+    def best_rival_bid(self, ref: str):
+        """Highest cash bid another team posts for this card (WTB we can undercut-into / fill)."""
+        mine = self.ctx.me["id"]
+        bids = []
+        for _, o in self.all_offers():
+            give, want = o.get("give") or {}, o.get("want") or {}
+            if o.get("maker") == mine or not give.get("cash") or give.get("assets"):
+                continue
+            refs = refs_of(want, self.ctx)
+            if len(refs) == 1 and refs[0] == ref:
+                bids.append(give["cash"])
+        return max(bids) if bids else None
+
     def assets_for(self, refs: list) -> list:
         """Which of our copies to hand over: the highest serial first (keep low serials, they are nicer)."""
         out, locked = [], self.ctx.locked_assets()
@@ -175,7 +201,8 @@ class Trader:
             if self._cannot_pay(o):
                 continue
             ev = self.evaluate(o)
-            if ev.get("gain") is not None and ev["gain"] >= ctx.S["trade_min_gain"] and (best is None or ev["gain"] > best[1]["gain"]):
+            need = ev.get("min_gain", ctx.S["trade_min_gain"]) if ev.get("gain") is not None else None
+            if ev.get("gain") is not None and need is not None and ev["gain"] >= need and (best is None or ev["gain"] > best[1]["gain"]):
                 best = (o, ev)
         if not best:
             return
@@ -183,7 +210,8 @@ class Trader:
         # double-check with the server's own value of what we receive (page bonus included)
         try:
             exact = sum(ctx.api.value(r)["your_value"] for r in ev["give"])
-            if ev["give"] and exact - ev["cash_out"] - ev["fee"] - ctx.values.loss_of_removing(ev["want"]) < ctx.S["trade_min_gain"] - 1:
+            need = ev.get("min_gain", ctx.S["trade_min_gain"])
+            if ev["give"] and exact - ev["cash_out"] - ev["fee"] - ctx.values.loss_of_removing(ev["want"]) < need - 1:
                 ctx.log("trade", "skip_after_check", offer=o["id"], est=ev["gain"], exact=exact)
                 return
         except BazaarError:
@@ -214,7 +242,7 @@ class Trader:
             if theirs:
                 o = theirs[-1]
                 ev = self.evaluate(o)
-                need = ctx.S["trade_min_gain"] * (2 if hasattr(ctx, "is_untrusted") and ctx.is_untrusted(th.get("with")) else 1)
+                need = ev.get("min_gain", ctx.S["trade_min_gain"]) * (2 if hasattr(ctx, "is_untrusted") and ctx.is_untrusted(th.get("with")) else 1)
                 if ev.get("gain") is not None and ev["gain"] >= need and not self._cannot_pay(o, th.get("with")) and ctx.take_accept():
                     try:
                         ctx.api.accept(o["id"], assets=self.assets_for(ev["want"]) or None)
@@ -312,9 +340,14 @@ class Trader:
                 ref, bid = w_refs[0], give["cash"]
                 loss = v.loss_of_removing([ref])
                 bps, per = ctx.venue_fee(venue)
-                p_min = math.ceil(loss + S["trade_min_gain"] + per + bps * bid / 10000)
-                if bid < p_min <= 2 * bid:
-                    cands.append((bid - loss, "sell", venue, maker, ref, bid, p_min, o))
+                min_g = self.sale_min_gain([ref])
+                p_min = math.ceil(loss + min_g + per + bps * bid / 10000)
+                # Dump sales: chase thin WTB bids further (up to 3×) so Retiro/Latina/extras clear.
+                stretch = 3.0 if v.dump_tier(ref) in ("hard", "extra") else 2.0
+                if bid < p_min <= stretch * bid:
+                    # Prefer filling dump WTB over marginal buy haggles.
+                    score = (bid - loss) + (40 if v.dump_tier(ref) in ("hard", "extra") else 0)
+                    cands.append((score, "sell", venue, maker, ref, bid, p_min, o))
         if S.get("trade_seek_needed", 1):
             cands += self.seek_candidates(busy, tried, tick)  # ranked with everything else: big page completers win
         for score, side, venue, maker, ref, posted, limit, o in sorted(cands, key=lambda c: -c[0]):
@@ -491,11 +524,12 @@ class Trader:
                 except BazaarError as e:
                     ctx.log("trade", "cancel_refused", offer=oid, error=str(e))
 
-        # reprice stale listings toward their floor
+        # reprice stale listings toward their floor (dumps walk faster)
         for oid, L in list(listed.items()):
-            if budget <= 1 or tick - L["tick"] < REPRICE:
+            every = int(L.get("reprice_every") or REPRICE)
+            if budget <= 1 or tick - L["tick"] < every:
                 continue
-            new = self._price(L, tick, REPRICE)
+            new = self._price(L, tick, every)
             if new == L["price"]:
                 continue
             try:
@@ -511,7 +545,7 @@ class Trader:
         locked = ctx.locked_assets()
         asks = [L for L in listed.values() if L["kind"] == "ask"]
         bids = [L for L in listed.values() if L["kind"] == "bid"]
-        # asks: spares, priced from book (what others may value) down to a floor that still gains us MIN_GAIN
+        # asks: dump Retiro/Latina + extras first (v.spares is ranked), priced to clear under rivals / into WTB
         for a in v.spares():
             if len(asks) >= MAX_ASKS or budget <= 0 or open_total >= ctx.limit("max_open_offers_per_team", 30):
                 break
@@ -519,14 +553,31 @@ class Trader:
                 continue
             loss = v.loss_of_removing([a["ref"]])
             book = v.book(a["ref"])
+            tier = v.dump_tier(a["ref"])
+            dump = tier in ("hard", "extra")
             venue = markets[len(asks) % min(3, len(markets))]  # rotate over the 3 best markets: more buyers see us
-            floor = math.ceil(loss + MIN_GAIN + self.fee_at(venue, book, 1))
-            start = max(floor, math.ceil(book * S["trade_ask_start"]))
-            rival = self.cheapest_rival_ask(a["ref"])
-            if S.get("use_intel", 1) and rival is not None and rival - 1 < start:
-                start = max(floor, rival - 1)  # undercut the cheapest competing listing, never below our floor
-            L = {"kind": "ask", "ref": a["ref"], "asset": a["id"], "start": start, "floor": floor, "born": tick, "venue": venue}
-            L["price"] = self._price(L, tick, REPRICE)
+            min_g = self.sale_min_gain([a["ref"]])
+            # Acceptor pays the venue fee: our floor is private-value loss + min gain (no fee pad on dumps).
+            if dump:
+                floor = max(1, math.ceil(loss + min_g))
+                start = max(floor, math.ceil(book * min(float(S["trade_ask_start"]), 1.0)))
+                reprice_every = min(REPRICE, DUMP_REPRICE_TICKS)
+                steps = DUMP_REPRICE_STEPS
+            else:
+                floor = math.ceil(loss + min_g + self.fee_at(venue, book, 1))
+                start = max(floor, math.ceil(book * S["trade_ask_start"]))
+                reprice_every, steps = REPRICE, 10
+            rival = self.cheapest_rival_ask(a["ref"]) if S.get("use_intel", 1) else None
+            if rival is not None:
+                under = 2 if tier == "hard" else 1
+                start = max(floor, min(start, rival - under))
+            wtb = self.best_rival_bid(a["ref"])
+            if wtb is not None and wtb >= floor:
+                # Price at the live WTB so the bid can take us next tick (clear inventory for cash).
+                start = max(floor, min(start, wtb))
+            L = {"kind": "ask", "ref": a["ref"], "asset": a["id"], "start": start, "floor": floor, "born": tick,
+                 "venue": venue, "tier": tier, "reprice_every": reprice_every, "reprice_steps": steps}
+            L["price"] = self._price(L, tick, reprice_every)
             try:
                 o = ctx.api.list_offer({"assets": [a["id"]]}, {"cash": L["price"]}, venue=venue)
                 L["tick"] = tick
@@ -534,7 +585,8 @@ class Trader:
                 asks.append(L)
                 budget -= 1
                 open_total += 1
-                ctx.log("trade", "list_ask", ref=a["ref"], price=L["price"], floor=floor, our_value=round(loss, 1), venue=venue)
+                ctx.log("trade", "list_ask", ref=a["ref"], price=L["price"], floor=floor, our_value=round(loss, 1),
+                        venue=venue, tier=tier)
             except BazaarError as e:
                 ctx.log("trade", "list_refused", ref=a["ref"], venue=venue, error=str(e)[:160])
                 if e.code == "venue_not_live":
@@ -600,8 +652,9 @@ class Trader:
 
     @staticmethod
     def _price(L, tick, every=REPRICE_TICKS):
-        """Walk from the start price toward the floor (asks down, bids up) over ~10 reprices."""
-        steps = max(0, (tick - L["born"]) // every)
-        x = min(1.0, steps / 10)
+        """Walk from the start price toward the floor (asks down, bids up). Dumps use fewer steps."""
+        span = max(1, int(L.get("reprice_steps") or 10))
+        steps = max(0, (tick - L["born"]) // max(1, every))
+        x = min(1.0, steps / span)
         p = L["start"] + (L["floor"] - L["start"]) * x
         return int(math.ceil(p) if L["kind"] == "ask" else math.floor(p))

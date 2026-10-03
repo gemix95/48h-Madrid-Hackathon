@@ -1,4 +1,8 @@
 {
- "seek_keep_cash": 270,
- "venue_fee_bps": 100
+ "dump_min_gain": 1,
+ "seek_keep_cash": 100,
+ "trade_ask_start": 1.05,
+ "trade_max_asks": 12,
+ "trade_reprice_ticks": 4,
+ "venue_fee_bps": 0
 }
