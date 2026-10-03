@@ -428,7 +428,7 @@ def poll():
         time.sleep(0.3)
 
 
-BOARD = {"html": None, "json": None}
+BOARD = {"html": None, "json": None, "live": None}
 ARB = {"data": None, "html": None}
 
 
@@ -452,7 +452,8 @@ def board_loop():
     while True:
         try:
             data = board.build()
-            BOARD["html"], BOARD["json"] = board.render(data).encode(), json.dumps(board.public(data)).encode()  # redacted: no other markets
+            BOARD["html"], BOARD["json"] = board.render(data).encode(), json.dumps(board.public(data)).encode()
+            BOARD["live"] = json.dumps(board.live(data)).encode()  # the light feed the page polls every 15 s
         except Exception as e:
             print("board:", repr(e)[:200], flush=True)
         time.sleep(15)  # a Sunday tick is 15 s
@@ -469,6 +470,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json" if path.endswith(".json") else "text/css")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+        if path == "/board/live.json":
+            body = BOARD["live"] or b"{}"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
             return True

@@ -210,17 +210,45 @@ def _button(text, label):
             f'<pre>{text}</pre></div>')
 
 
-def _howto(c, vid, deadline, sell):
-    """The best call this card can offer, in this order: take an offer resting on our market (one call, settles next
-    tick), meet a counterparty that exists elsewhere at a published price, or post your own side."""
+def _choice(c, vid, deadline, sell):
+    """(text, label) of the best call this card can offer, in this order: take an offer resting on our market (one call,
+    settles next tick), buy or sell at the best price in the Bazaar on our market, or post your own side."""
     want = "buy" if sell else "sell"   # selling means taking a resting bid; buying means taking a resting ask
     resting = next((o for o in c["on_ours"] if o["side"] == want), None)
     if resting:
-        return _button(_accept_text(c, resting, vid), "Sell in 1 click" if sell else "Buy in 1 click")
+        return _accept_text(c, resting, vid), ("Sell in 1 click" if sell else "Buy in 1 click")
     price = c.get("sell_at") if sell else c.get("buy_at")
     if price:
-        return _button(_price_text(c, vid, price, sell), "Sell in 1 click" if sell else "Buy in 1 click")
-    return _button(_post_text(c, vid, sell), "Sell in 1 click" if sell else "Bid in 1 click")
+        return _price_text(c, vid, price, sell), ("Sell in 1 click" if sell else "Buy in 1 click")
+    return _post_text(c, vid, sell), ("Sell in 1 click" if sell else "Bid in 1 click")
+
+
+def _howto(c, vid, deadline, sell):
+    return _button(*_choice(c, vid, deadline, sell))
+
+
+def _side_top(c, sell):
+    price = c.get("sell_at") if sell else c.get("buy_at")
+    n = c["buyers"] if sell else c["sellers"]
+    if price:
+        word = ("buyer" if sell else "offer") + ("s" if n != 1 else "")
+        return f"{price} P", f"{n} {word}"
+    return "–", ("no buyer yet" if sell else "no seller yet")
+
+
+def live(data: dict) -> dict:
+    """The light feed the page polls every tick: per card and side, the price line, the count line and the button."""
+    pub = public(data)
+    vid = (pub.get("our_venue") or {}).get("venue", "v24")
+    out = {}
+    for c in pub["cards"]:
+        sides = {}
+        for sell, key in ((False, "buy"), (True, "sell")):
+            text, label = _choice(c, vid, pub["deadline"], sell)
+            price, count = _side_top(c, sell)
+            sides[key] = {"price": price, "count": count, "label": label, "text": text}
+        out[c["ref"]] = sides
+    return {"at": pub["at"], "tick": pub["tick"], "cards": out}
 
 
 def _note(c, vid):
@@ -266,12 +294,10 @@ def render(data: dict) -> str:
                 by_set[k], _ = [], order.append(k)
             by_set[k].append(c)
         def side(c, sell):
-            price = c.get("sell_at") if sell else c.get("buy_at")
-            n = c["buyers"] if sell else c["sellers"]
-            word = ("buyer" if sell else "offer") + ("s" if n != 1 else "")
-            top = (f'<div class="price">{price} P</div><div class="dim small">{n} {word}</div>' if price
-                   else f'<div class="price none">–</div><div class="dim small">{"no buyer yet" if sell else "no seller yet"}</div>')
-            return f'<td class="side">{top}{_howto(c, vid, deadline, sell)}</td>'
+            price, count = _side_top(c, sell)
+            none = " none" if price == "–" else ""
+            return (f'<td class="side" data-ref="{html.escape(c["ref"])}" data-side="{"sell" if sell else "buy"}">'
+                    f'<div class="price{none}">{price}</div><div class="dim small count">{count}</div>{_howto(c, vid, deadline, sell)}</td>')
 
         def row(c):
             quiet = "quiet" if c["state"] == "quiet" else ""
@@ -330,7 +356,7 @@ td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 table.deck td{{vertical-align:middle}}td.cardcell{{display:flex;gap:12px;align-items:center;min-width:240px}}
 .thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
 .cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
-td.side button.trade{{margin-top:6px}}
+td.side button.trade{{margin-top:6px}}.price.flash{{background:color-mix(in srgb,var(--gold) 25%,transparent);border-radius:6px;transition:background 1s}}
 table td{{vertical-align:middle}}
 button.trade{{margin-top:6px;font:inherit;font-size:13px;padding:5px 12px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer}}
 button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}.ok{{color:var(--green);font-weight:600;margin-left:6px}}
@@ -338,7 +364,7 @@ button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}
 <h1>El Club Board</h1>
 <div class="hero">Find the card you need at the <b>best price in the Bazaar</b> and buy it in one click.
 Got a spare? <b>Sell it fast</b> to the best buyer.</div>
-<div class="dim">Prices from all {pub["markets"]} markets · tick {pub["tick"]} · updated {when} · refreshes every 15 s</div>
+<div class="dim">Prices from all {pub["markets"]} markets · tick <span id="tick">{pub["tick"]}</span> · updated <span id="upd">{when}</span> · live, every 15 s</div>
 <div class="steps">
 <div class="box step"><b class="n">1</b><b>Find your card</b><br><span class="dim"><b>Buy</b> shows the cheapest seller in the Bazaar, <b>Sell</b> the best buyer.</span></div>
 <div class="box step"><b class="n">2</b><b>Click and paste</b><br><span class="dim">The button copies one ready call. Paste it to your agent, or run it yourself.</span></div>
@@ -380,5 +406,20 @@ fetch("/board/cards.json").then(r => r.json()).then(cards => {{
 }}).catch(() => {{}});
  }});
 paint();
-setInterval(() => {{ if (Date.now() > busyUntil && !getSelection().toString()) location.reload(); }}, 15000);
+async function refresh() {{
+  try {{
+    const r = await fetch("/board/live.json", {{cache: "no-store"}}); if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById("tick").textContent = d.tick;
+    document.getElementById("upd").textContent = new Date(d.at * 1000).toLocaleTimeString([], {{hour: "2-digit", minute: "2-digit", second: "2-digit"}});
+    document.querySelectorAll("td.side[data-ref]").forEach(td => {{
+      const v = ((d.cards || {{}})[td.dataset.ref] || {{}})[td.dataset.side]; if (!v) return;
+      const pr = td.querySelector(".price"), ct = td.querySelector(".count"), b = td.querySelector("button.trade"), pre = td.querySelector(".copied pre");
+      if (pr.textContent !== v.price) {{ pr.textContent = v.price; pr.classList.toggle("none", v.price === "–"); pr.classList.add("flash"); setTimeout(() => pr.classList.remove("flash"), 1200); }}
+      ct.textContent = v.count; b.textContent = v.label; b.dataset.text = v.text; if (pre) pre.textContent = v.text;
+    }});
+  }} catch (e) {{}}
+}}
+setInterval(refresh, 15000);
+setInterval(() => {{ if (Date.now() > busyUntil && !getSelection().toString()) location.reload(); }}, 600000);
 </script></body></html>"""
