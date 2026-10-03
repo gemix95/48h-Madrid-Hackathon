@@ -37,6 +37,9 @@ import advisor  # noqa: E402  (team13/advisor.py: recalibrates on every team's d
 RECHECK = threading.Event()
 DECISIONS = HERE.parent / "team13" / "logs" / "decisions.jsonl"
 BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
+from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
+# the bots' own logs, so they only exist on the laptop that runs them: agent.py writes decisions.jsonl, agent/hand.py hand.jsonl
+INDEX = LogIndex({"agent": DECISIONS, "manual": HERE.parent / "logs" / "hand.jsonl"})
 
 
 def tail(path, n=150):
@@ -261,6 +264,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             return
         if self.path.startswith("/data"):
+            INDEX.refresh()
             with lock:
                 try:  # what the agent is doing right now (its own state file; read-only)
                     st = json.loads(STATE.read_text())
@@ -269,7 +273,9 @@ class Handler(BaseHTTPRequestHandler):
                 except (OSError, ValueError):
                     agent_state = {}
                 body = json.dumps({**cache, "api_spend": api_spend(), "agent_state": agent_state, "history": history, "served_at": time.time(),
-                                   "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60)}).encode()
+                                   "decisions": tail(DECISIONS), "broker_log": tail(BROKER_LOG, 60),
+                                   "origins": message_origins(INDEX, cache.get("threads"), (cache.get("me") or {}).get("id")),
+                                   "log_sources": INDEX.status(), "guard": INDEX.recent_guard()}).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):
             self._send(200, "application/json", json.dumps(strategy.describe()).encode())
@@ -311,6 +317,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    INDEX.refresh()  # read the logs written so far once, before the first page load
     threading.Thread(target=poll, daemon=True).start()
     threading.Thread(target=listen, daemon=True).start()
     threading.Thread(target=advise, daemon=True).start()

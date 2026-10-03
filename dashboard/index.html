@@ -124,6 +124,10 @@ tr.good td { background: color-mix(in srgb, var(--good) 11%, transparent); }
 .result b.big { font-size: 16px; } .result .muted { font-size: 12px; }
 .msg .px { font-size: 13px; font-weight: 800; }
 .final-chip { background: var(--critical); color: #fff; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; letter-spacing: .04em; }
+.origin { font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 4px; cursor: help; white-space: nowrap; }
+.origin.agent { background: color-mix(in srgb, var(--series-1) 16%, transparent); color: var(--series-1); }
+.origin.manual { background: color-mix(in srgb, var(--series-3) 22%, transparent); color: var(--series-3); }
+.origin.other { background: color-mix(in srgb, var(--warning) 35%, transparent); color: var(--text-primary); }
 .thr-tab.on { background: var(--surface-2); outline: 2px solid var(--hc); }
 .btn-s.on { background: var(--series-1); border-color: var(--series-1); color: #fff; }
 .cell .x { position: absolute; top: -7px; right: -6px; background: var(--series-2); color: #fff; border-radius: 999px; font-size: 10px;
@@ -806,14 +810,15 @@ function threads(d, M) {
     const spread = us.length && them.length ? Math.abs(them[them.length - 1].price - us[us.length - 1].price) : null;
     const topic = th.topic ? Object.entries(th.topic).map(([k, v]) => `${k} ${Object.values(v).join(" ")}`).join(", ") : "";
     const msgs = (th.messages || []).map(m => { const u = isUs(m, me.id), p = msgPrice(m);
-      return `<div class="msg ${u ? "us" : ""}"><div class="who" title="tick ${m.tick ?? "?"}"><i class="swatch" style="background:${u ? "var(--series-1)" : "var(--series-2)"}"></i>${u ? "Team 13" : esc(th.with)}${p != null ? ` <span class="px" style="color:${u ? "var(--series-1)" : "var(--series-2)"}">${p} P</span>` : ""}${m.final || m.offer?.final ? ` <span class="final-chip">FINAL · take it or leave it</span>` : ""}</div>${esc(m.text)}<span class="mtime" title="tick ${m.tick ?? "?"}">${hm(tickTime(m.tick, d))}</span></div>`; }).join("");
+      return `<div class="msg ${u ? "us" : ""}"><div class="who" title="tick ${m.tick ?? "?"}"><i class="swatch" style="background:${u ? "var(--series-1)" : "var(--series-2)"}"></i>${u ? "Team 13" : esc(th.with)}${u ? originBadge(d, m) : ""}${p != null ? ` <span class="px" style="color:${u ? "var(--series-1)" : "var(--series-2)"}">${p} P</span>` : ""}${m.final || m.offer?.final ? ` <span class="final-chip">FINAL · take it or leave it</span>` : ""}</div>${esc(m.text)}<span class="mtime" title="tick ${m.tick ?? "?"}">${hm(tickTime(m.tick, d))}</span></div>`; }).join("");
+    const gd = (d.guard || []).find(g => g.thread === th.id);
     const verb = x.side === "sell" ? "Sell" : "Buy", prep = x.side === "sell" ? "to" : "from", lastThem = them[them.length - 1];
     const subject = Object.keys(th.topic || {}).length ? `${verb} ${esc(x.name)} ${prep} ${esc(th.with)}` : `Chat with ${esc(th.with)}`;
     const gainTxt = x.gain != null ? ` <span class="muted">worth ≈ ${fmt(x.worth, 0)} P to us →</span> <b style="color:${x.gain >= 0 ? "var(--up)" : "var(--critical)"}">${x.gain >= 0 ? "+" : ""}${fmt(x.gain, 0)} P</b>` : "";
     const result = th.status === "deal"
       ? `<div class="result" style="--rc:var(--good)"><b class="big" style="color:var(--up)">✓ ${x.side === "sell" ? "Sold" : "Bought"} ${esc(x.name)}${x.price != null ? ` for ${x.price} P` : ""}</b> ${x.what} <span class="muted">${prep} ${esc(th.with)}</span>${gainTxt}</div>`
       : th.status !== "open"
-      ? `<div class="result" style="--rc:var(--muted)"><b class="big">✕ No deal</b> <span>${subject}</span> ${x.what}<span class="muted">· ${esc(th.status === "walked" ? `${th.with} walked away` : th.closed_reason === "final_offer_refused" ? "we turned down the final offer" : th.closed_reason ? th.closed_reason.replace(/_/g, " ") : "conversation closed without a deal")}</span></div>`
+      ? `<div class="result" style="--rc:var(--muted)"><b class="big">✕ No deal</b> <span>${subject}</span> ${x.what}<span class="muted">· ${esc(gd ? "our guard cancelled the offer" : th.status === "walked" ? `${th.with} walked away` : th.closed_reason === "final_offer_refused" ? "we turned down the final offer" : th.closed_reason ? th.closed_reason.replace(/_/g, " ") : "conversation closed without a deal")}</span>${gd ? `<div style="flex-basis:100%;font-size:12px">🛡️ Guard: ${guardOffer(gd)} <span class="muted">· ${guardWhy(gd)}</span></div>` : ""}</div>`
       : lastThem?.final
       ? `<div class="result" style="--rc:var(--critical)"><b class="big" style="color:var(--critical)">FINAL offer from ${esc(th.with)}: ${lastThem.price} P</b> <span>take it or ${esc(th.with)} walks</span> <span class="muted">· ${verb.toLowerCase()} ${esc(x.name)}</span> ${x.what}</div>`
       : `<div class="result" style="--rc:var(--serious)"><b class="big">● Open</b> <span>${subject}</span> ${x.what}${lastThem ? ` · <b style="color:var(--series-2)">${esc(th.with)} ${lastThem.price} P</b>` : ""}${us.length ? ` · <b style="color:var(--series-1)">us ${us[us.length - 1].price} P</b>` : ""}${spread != null ? ` · <span class="muted">gap ${spread} P</span>` : ""}</div>`;
@@ -996,7 +1001,7 @@ function feed(d) {
         cat: dealers[p.with] ? "haggle" : "market", us: p.team === me || p.with === me });
       continue;
     }
-    const us = p.team === me || e.actor === me || (p.parties || []).includes(me);
+    let us = p.team === me || e.actor === me || (p.parties || []).includes(me);
     let icon = "•", cat = "news", txt = "", why = "";
     switch (e.type) {
       case "settlement": {
@@ -1019,7 +1024,10 @@ function feed(d) {
           : `<b>${esc(nm(e.actor))}</b> offers ${sideTxt(g)} for ${sideTxt(w)}`;
         why = `on ${esc(p.venue === "rastro" ? "El Rastro" : p.venue || "a market")}`;
         break; }
-      case "offer.cancelled": cat = "market"; icon = "↩️"; txt = `${esc(nm(e.actor))} withdrew an offer`; break;
+      case "offer.cancelled": { cat = "market"; const gd = (d.guard || []).find(x => x.offer === p.offer);
+        if (gd) { icon = "🛡️"; us = true; txt = `<b>Guard</b> cancelled our offer: ${guardOffer(gd)}`; why = guardWhy(gd); }
+        else { icon = "↩️"; txt = `${esc(nm(e.actor))} withdrew an offer`; }
+        break; }
       case "pack.opened": cat = "deal"; icon = "📦"; txt = `<b>${esc(nm(p.team))}</b> opened a ${esc(packs[p.pack] || p.pack || "pack")}${p.best ? ` and pulled ${card(p.best)}` : ""}`; break;
       case "gift.given": cat = "gift"; icon = "🎁"; txt = `${esc(nm(e.actor))} gave <b>${esc(nm(p.team))}</b> a free card: ${(p.cards || []).map(card).join(", ")}`; why = "gifts don't score, but the card can be traded"; break;
       case "announcement": cat = "news"; icon = "📣"; txt = `<b>${esc(p.text || "")}</b>`; break;
@@ -1058,6 +1066,26 @@ function feed(d) {
   $("feed-chips").querySelectorAll("[data-f]").forEach(el => el.onclick = () => { feedFilter = el.dataset.f; feed(D); });
 }
 
+// ---------- who did it: origin of our messages, and what the guard cancelled ----------
+// The bots' logs only exist on the laptop that runs them; without an agent log here the server sends no origins and we show none.
+const ORIGIN = { agent: ["🤖 agent", "Sent by team13/agent.py (found in its log)"], manual: ["✋ manual", "Sent by hand with agent/hand.py"],
+  other: ["⚠ not the agent", "No log on this laptop has this message: another program or another laptop sent it with our key"] };
+function originBadge(d, m) {
+  const o = d.origins?.[m.id];
+  return o ? ` <span class="origin ${o}" title="${ORIGIN[o][1]}">${ORIGIN[o][0]}</span>` : "";
+}
+const guardSide = x => Array.isArray(x) ? (x.length ? x.map(esc).join(", ") : "nothing") : (x ? `${x} P` : "nothing");
+const guardOffer = g => `we were giving <b>${guardSide(g.give)}</b> for <b>${guardSide(g.want)}</b>`;
+const guardWhy = g => g.why === "over_team_cap" ? "the bid was above the team's price cap for that card (agent/caps.json)"
+  : g.why === "loses_value" ? `at our values it gave up ${fmt(g.loss, 0)} P and got back ${fmt(g.gain, 0)} P (−${fmt(g.loss - g.gain, 0)} P)`
+  : esc(String(g.why || "").replace(/_/g, " "));
+// the agent log tail the page holds, plus the guard's cancellations that the server keeps for longer
+function decisionsOf(d) {
+  const have = new Set((d.decisions || []).filter(r => r.module === "guard").map(r => `${r.ts}|${r.offer}`));
+  return [...(d.decisions || []), ...(d.guard || []).filter(g => !have.has(`${g.ts}|${g.offer}`)).map(g => ({ module: "guard", action: "cancelled", ...g }))]
+    .sort((a, b) => a.ts - b.ts);
+}
+
 // ---------- agent brain ----------
 function describe(r) {
   const x = { ...r }; for (const k of ["ts", "tick", "module", "action", "plan", "trace", "detail", "payload"]) delete x[k];
@@ -1077,6 +1105,7 @@ function describe(r) {
     case "trade.list_bid": return `Offered <b>${r.price} P</b> for ${esc(r.ref)} (worth ${r.our_value} to us)`;
     case "trade.accept": case "trade.accept_team": return `✓ <b>Trade done</b>: +${r.gain} P of value for us`;
     case "pack.opened": return `Opened a pack: ${esc((r.cards || []).map(c => c[0]).join(", "))}`;
+    case "guard.cancelled": return "Guard cancelled one of our offers";
     case "duel.offer": return `Duel #${r.duel} (${esc(r.role)}, our limit ${r.limit}): offered <b>${r.price}</b>${r.days != null ? `, day ${r.days}` : ""}`;
     case "duel.accept": return `✓ <b>Duel deal</b> at ${r.price}, our surplus ${r.our_surplus}`;
     case "venue.opened": return `✓ <b>Opened our market</b> ${esc(r.venue)}`;
@@ -1084,7 +1113,7 @@ function describe(r) {
   }
 }
 function activity(d) {
-  const recs = (d.decisions || []).filter(r => r.module !== "dry").slice(-8).reverse();
+  const recs = decisionsOf(d).filter(r => r.module !== "dry").slice(-8).reverse();
   $("activity").innerHTML = recs.map(r => `<div><span class="t">${hm(new Date(r.ts * 1000))}</span>${CAT[catOf(r)][0]} ${story(r)[0]}</div>`).join("")
     || `<div class="empty">Nothing yet. Start the agent: <code>cd team13 && python3 agent.py</code></div>`;
 }
@@ -1107,7 +1136,7 @@ const MOD_LABEL = { haggle: "Dealer", trade: "Trade", duel: "Duel", venue: "Venu
 let brainFilter = "all";
 const CAT = { // story categories: icon, label, which decisions belong
   deal: ["🤝", "Deals"], offer: ["💬", "Haggling"], trade: ["🏷️", "Market"], ai: ["✨", "AI"], learn: ["🧠", "Learning"],
-  market: ["🏪", "Our market"], duel: ["⚔️", "Duels"], warn: ["⚠️", "Problems"], info: ["•", "Other"] };
+  market: ["🏪", "Our market"], duel: ["⚔️", "Duels"], guard: ["🛡️", "Guard"], warn: ["⚠️", "Problems"], info: ["•", "Other"] };
 function catOf(r) {
   const a = r.action || "", m = r.module;
   if (/refused|error|crash|fallback/.test(a)) return "warn";
@@ -1118,6 +1147,7 @@ function catOf(r) {
   if (m === "learn") return "learn";
   if (m === "market" || m === "venue") return "market";
   if (m === "duel") return "duel";
+  if (m === "guard") return "guard";
   return "info";
 }
 function story(r) {  // [sentence, why]
@@ -1154,12 +1184,13 @@ function story(r) {  // [sentence, why]
     case "duel.accept": return [`✓ <b>Duel won: deal at ${r.price}</b>`, `our surplus ${r.our_surplus}`];
     case "duel.raw": return ["Saw a new duel", "its format is logged for tuning"];
     case "pack.opened": return [`Opened a pack: ${esc((r.cards || []).map(c => c[0]).join(", "))}`, ""];
+    case "guard.cancelled": return [`<b>Guard cancelled our offer</b>: ${guardOffer(r)}`, guardWhy(r)];
     case "flag.candidate": return [`Possible lie by ${dn(r.dealer)}: says ${r.stated} P, offers ${r.structured} P`, "flagging is off; turn on to report it"];
     default: return [esc((r.action || "").replace(/_/g, " ")), ""];
   }
 }
 function brain(d) {
-  const all = (d.decisions || []).filter(r => r.module !== "dry");
+  const all = decisionsOf(d).filter(r => r.module !== "dry");
   const recs = all.slice().reverse();
   // ---- right now
   const st = d.agent_state || {}, threads = d.threads?.threads || [];
