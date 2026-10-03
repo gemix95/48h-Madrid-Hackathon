@@ -141,6 +141,15 @@ KNOBS = {
                     "Sell up to 3 cards we value least (never from a complete or 8/10 page) to fill the level's best-three."),
     "reserve_cash": (270, 0, 400, 10, "Market", "Cash kept for the market bond (P)",
                      "The bond is 250 + 20. Set 0 to spend everything on deals."),
+    "cashback_on": (1, 0, 1, 1, "Market", "Cashback on El Club",
+                    "Each side of every trade between two teams on our market gets cashback_p P back, as a cash offer it accepts."),
+    "cashback_p": (1, 1, 5, 1, "Market", "Cashback per side (P)", "Buyer and seller alike, net of the fee of the market it is paid on."),
+    "cashback_day_cap": (20, 0, 100, 1, "Market", "Cashback budget per day (P)", "Cashback accepted plus cashback offers still open."),
+    "cashback_per_team": (2, 1, 10, 1, "Market", "Cashback payouts per team per day",
+                          "Two teams cannot farm it by trading back and forth."),
+    "cashback_check_p": (4, 1, 20, 1, "Market", "Check profit every (P paid)",
+                         "After every N P accepted, today's promo stops unless our market-making points from trades on "
+                         "El Club (mm_points) grew since the last check."),
 }
 
 # "Tournament winner" = the defaults: best robust settings in tests/tournament.py (see tests/RESULTS.md)

@@ -12,10 +12,13 @@ We can never trade on our own venue (self_venue), so this module only ever helps
 from __future__ import annotations
 
 import json
+import math
+import re
 import threading
 from pathlib import Path
 
 from bazaar_sdk import BazaarError, Broker
+from venues import safe_markets
 
 VENUE_NAME = "El Club · Where Madrid Trades"      # chosen by the team; used only when (re)opening (an open market cannot be renamed)
 DESCRIPTION = ("Madrid's top-tier market: {fee} fee, no per-card charge, a smart broker matching every tick, best "
@@ -58,6 +61,25 @@ REWARD_MIN_GAIN = 2          # every reward is still a sale that gains us value
 REWARDS_PER_DAY = 4
 REWARD_TICKS = 60
 
+# cashback (knobs cashback_*): both sides of every trade between two teams on El Club get P back, as a cash offer
+CASHBACK_ANNOUNCE = ("CASHBACK at El Club ({venue}): every trade between two teams here pays {p} P back to EACH side, today "
+                     "while the {cap} P promo lasts ({left} P left). {fee} fee, 0 P per card. We send it as a cash offer: accept it.")
+CASHBACK_PITCH = " Today: {p} P cashback to each side of every trade at El Club."
+CASHBACK_TEXT = ("El Club cashback: thanks for trading at El Club ({venue}). Here is {p} P back, a gift with nothing asked in "
+                 "return: accept offer #{oid} with POST /api/offers/{oid}/accept (no assets needed). It settles next tick.")
+CASHBACK_TICKS = 60
+TEAM = re.compile(r"^t\d+$")
+
+
+def council_note(topic, text, evidence=None, tick=None):
+    """A note on El Consejo (the shared board); never stops a tick."""
+    try:
+        import council
+        council.post("market", topic, text, evidence, tick=tick)
+    except Exception:
+        pass
+
+
 ANNOUNCE_SECONDS = 300       # normal cadence: one message every 5 minutes
 ANNOUNCE_MIN_TICKS = 10      # never denser than other markets already announce (10 ticks)
 ANNOUNCE_PRETEST_EVERY = 10  # denser reminders when a bench session is near
@@ -93,7 +115,11 @@ class Market:
         every = announce_every(ctx.clock.get("tick_seconds"), self.bench_soon())
         if tick - st.get("announce_tick", -99) >= every:
             self.announce(tick)
-        self.reward_traders(tick)
+        elif self.cashback_active() and not self._cb().get("announced"):
+            self.announce(tick)  # the promo starts: tell the big screen now, not in 5 minutes
+        self.cashback(tick)
+        if not self.cashback_active():
+            self.reward_traders(tick)  # the card reward only when no cashback is on offer
         self.invite(tick)
 
     # ------------------------------------------------------------------ opening
@@ -262,20 +288,158 @@ class Market:
         ctx, st = self.ctx, self.ctx.state
         ft = fee_text(int(ctx.S["venue_fee_bps"]))
         venue = st.get("venue") or "v03"
+        cashback = self.cashback_active()
         if self.bench_soon():
             text = PRE_TEST.format(fee=ft, venue=venue)
+        elif cashback:
+            text = self.cashback_announcement()
         else:
             text = ANNOUNCE[(st.get("announce_n", 0)) % len(ANNOUNCE)].format(fee=ft, venue=venue)
         reward = REWARD_PITCH.format(price=REWARD_PRICE)
-        if self.rewards_left() and self.reward_spare() and len(text) + len(reward) <= ANNOUNCE_MAX:  # never cut the pitch mid-word
-            text += reward
+        if not cashback and self.rewards_left() and self.reward_spare() and len(text) + len(reward) <= ANNOUNCE_MAX:
+            text += reward  # never cut the pitch mid-word
         try:
             Broker(ctx.raw.url, st["broker_key"]).announce(text)
             st["announce_tick"], st["announce_n"] = tick, st.get("announce_n", 0) + 1
+            if cashback and "CASHBACK" in text:
+                self._cb()["announced"] = tick
             ctx.log("market", "announced", text=text, pretest=bool(self.bench_soon()))
         except BazaarError as e:
             st["announce_tick"] = tick  # do not retry every tick (respect API limits)
             ctx.log("market", "announce_refused", error=str(e)[:200])
+
+    # ------------------------------------------------------------------ cashback: P back to both sides of every trade on El Club
+    def _cb(self) -> dict:
+        """Today's cashback book, started afresh every game day (only trades from then on are paid)."""
+        ctx, st = self.ctx, self.ctx.state
+        day = ctx.clock.get("today", "day")
+        cb = st.get("cashback")
+        if not cb or cb.get("day") != day:
+            cb = st["cashback"] = {"day": day, "start": ctx.clock.get("tick", 0), "paid": [], "offers": {}, "spent": 0,
+                                   "per_team": {}, "mm_mark": self._mm(), "spent_mark": 0, "paused": None, "checks": [],
+                                   "announced": None}
+        return cb
+
+    def _mm(self) -> float:
+        """Our live market-making points from value other teams create on our venue (/api/me)."""
+        return float((self.ctx.me.get("score") or {}).get("mm_points") or 0.0)
+
+    def cashback_left(self) -> int:
+        cb = self._cb()
+        out = sum(o["gross"] for o in cb["offers"].values() if o["status"] == "open")
+        return max(0, int(self.ctx.S.get("cashback_day_cap", 20)) - cb["spent"] - out)
+
+    def cashback_active(self) -> bool:
+        S = self.ctx.S
+        return (bool(S.get("cashback_on", 0)) and bool(self.ctx.state.get("venue")) and not self._cb()["paused"]
+                and self.cashback_left() >= int(S.get("cashback_p", 1)))
+
+    def cashback_announcement(self) -> str:
+        S, st = self.ctx.S, self.ctx.state
+        return CASHBACK_ANNOUNCE.format(venue=st.get("venue") or "v03", p=int(S.get("cashback_p", 1)),
+                                        cap=int(S.get("cashback_day_cap", 20)), left=self.cashback_left(),
+                                        fee=fee_text(int(S["venue_fee_bps"])))
+
+    def _fee(self, venue: str) -> tuple:
+        v = next((x for x in getattr(self.ctx, "venues", None) or [] if x.get("venue") == venue), None)
+        return ((v.get("fee_bps") or 0), (v.get("fee_per_card") or 0)) if v else (500, 1)  # El Rastro: 5% + 1 P/card
+
+    def cashback(self, tick):
+        """Pay new trades on our venue, settle the book (accepted / expired) and, every cashback_check_p P accepted,
+        keep the promo only if our market-making points from those trades grew."""
+        ctx, S = self.ctx, self.ctx.S
+        intel, venue, me = getattr(ctx, "intel", None), ctx.state.get("venue"), ctx.me.get("id")
+        if not S.get("cashback_on", 0) or not intel or not venue:
+            return
+        cb = self._cb()
+        events = list(intel.events.values())[-600:]
+        self._cashback_settle(cb, events, tick, me)
+        self._cashback_check(cb, tick)
+        if not self.cashback_active():
+            return
+        amount = int(S.get("cashback_p", 1))
+        for e in events:
+            p = e.get("payload") or {}
+            if e.get("type") != "settlement" or p.get("venue") != venue or p.get("kind") not in ("trade", "match"):
+                continue
+            sid = p.get("settlement")
+            if sid in cb["paid"] or (p.get("tick") or e.get("tick") or 0) < cb["start"]:
+                continue
+            cb["paid"].append(sid)  # one decision per trade
+            for team in p.get("parties") or []:
+                if team == me or not TEAM.match(str(team)):
+                    continue  # bench traders of the Market Test are not teams
+                if cb["per_team"].get(team, 0) >= int(S.get("cashback_per_team", 2)) or self.cashback_left() < amount:
+                    ctx.log("market", "cashback_skipped", team=team, settlement=sid, why="team or day cap")
+                    continue
+                self._pay_cashback(cb, team, amount, sid, tick)
+
+    def _pay_cashback(self, cb, team, amount, sid, tick):
+        ctx = self.ctx
+        where = next((v for v in safe_markets(ctx, team) if self._fee(v)[0] == 0), "rastro")  # free markets first
+        bps = self._fee(where)[0]
+        gross = amount
+        while gross - math.ceil(bps * gross / 10000) < amount:  # the side that accepts pays the fee: it nets `amount`
+            gross += 1
+        try:
+            o = ctx.api.list_offer({"cash": gross}, {}, venue=where, to=team, expires_in_ticks=CASHBACK_TICKS)
+        except BazaarError as err:
+            ctx.log("market", "cashback_refused", team=team, settlement=sid, error=str(err)[:200])
+            return
+        cb["offers"][str(o["id"])] = {"team": team, "settlement": sid, "tick": tick, "amount": amount, "gross": gross,
+                                      "venue": where, "status": "open"}
+        cb["per_team"][team] = cb["per_team"].get(team, 0) + 1
+        ctx.log("market", "cashback_offered", team=team, offer=o["id"], amount=amount, gross=gross, venue=where, settlement=sid)
+        self._cashback_message(team, o["id"], amount, tick)
+
+    def _cashback_message(self, team, oid, amount, tick):
+        """How to collect it, in a thread (agents rarely accept an offer nobody explained). Closed after 6 quiet ticks."""
+        ctx, st = self.ctx, self.ctx.state
+        if len([t for t in ctx.threads if t["status"] == "open"]) >= ctx.limit("max_open_threads_per_team", 6) - 2:
+            return  # keep the dealers' conversation slots: the offer alone still pays
+        try:
+            th = ctx.api.open_thread(team, venue="rastro")
+            ctx.api.say(th["id"], CASHBACK_TEXT.format(p=amount, oid=oid, venue=st.get("venue")))
+            st.setdefault("invite_threads", {})[str(th["id"])] = {"team": team, "tick": tick}
+        except BazaarError as e:
+            ctx.log("market", "cashback_message_refused", team=team, error=str(e)[:160])
+
+    def _cashback_settle(self, cb, events, tick, me):
+        """An offer that left our book was accepted if a cash-only settlement with that team at that amount followed."""
+        open_ids = {str(o.get("id")) for o in getattr(self.ctx, "my_offers", None) or []}
+        for oid, o in cb["offers"].items():
+            if o["status"] != "open" or oid in open_ids or o["tick"] >= tick:
+                continue
+            paid = any(e.get("type") == "settlement" and (e.get("tick") or 0) >= o["tick"]
+                       and set((e.get("payload") or {}).get("parties") or []) == {me, o["team"]}
+                       and (e.get("payload") or {}).get("price") == o["gross"]
+                       and not any(i.get("kind") == "card" for i in (e.get("payload") or {}).get("items") or [])
+                       for e in events)
+            if paid:
+                o["status"] = "paid"
+                cb["spent"] += o["gross"]
+                self.ctx.log("market", "cashback_paid", team=o["team"], offer=int(oid), gross=o["gross"], spent=cb["spent"])
+            elif tick >= o["tick"] + CASHBACK_TICKS + 2:  # past its expiry and no settlement in the feed
+                o["status"] = "expired"
+                self.ctx.log("market", "cashback_expired", team=o["team"], offer=int(oid))
+
+    def _cashback_check(self, cb, tick):
+        """Every cashback_check_p P accepted: did our market-making points from trades on El Club grow? If not, stop
+        today's promo (offers already sent stay valid)."""
+        step = int(self.ctx.S.get("cashback_check_p", 4))
+        while not cb["paused"] and cb["spent"] - cb["spent_mark"] >= step:
+            mm = self._mm()
+            gain, keep = mm - cb["mm_mark"], mm > cb["mm_mark"]
+            cb["checks"].append({"tick": tick, "spent": cb["spent_mark"] + step, "mm_before": cb["mm_mark"], "mm_now": mm, "keep": keep})
+            self.ctx.log("market", "cashback_check", spent=cb["spent_mark"] + step, mm_before=cb["mm_mark"], mm_now=mm,
+                         market_points=round(15 * gain, 2), keep=keep)
+            council_note("cashback", f"Cashback check: {step} P paid since the last check; market-making from trades on El Club "
+                         f"{cb['mm_mark']:.3f} -> {mm:.3f} (about {15 * gain:+.2f} market points): "
+                         f"{'worth it, keep going' if keep else 'not worth it, paused for today'}.",
+                         {"spent": cb["spent_mark"] + step, "mm_before": cb["mm_mark"], "mm_now": mm}, tick)
+            cb["mm_mark"], cb["spent_mark"] = mm, cb["spent_mark"] + step
+            if not keep:
+                cb["paused"] = tick
 
     # ------------------------------------------------------------------ club welcome: reward teams that trade on our venue
     def rewards_left(self):
@@ -399,8 +563,11 @@ class Market:
         text = PITCH.format(venue=venue, fee=ft)
         if self.bench_soon():
             text = PRE_TEST.format(venue=venue, fee=ft) + " " + text
-        reward = bool(self.rewards_left() > 0 and self.reward_spare())
-        if reward:
+        cashback = self.cashback_active()
+        reward = bool(not cashback and self.rewards_left() > 0 and self.reward_spare())
+        if cashback:
+            text += CASHBACK_PITCH.format(p=int(ctx.S.get("cashback_p", 1)))
+        elif reward:
             text += REWARD_PITCH.format(price=REWARD_PRICE)
         if ctx.S.get("llm_negotiator", 1):
             situation = {"counterparty": f"team {target}", "goal": f"invite them to join and trade on our market {BRAND}",
@@ -412,7 +579,10 @@ class Market:
                                    "market_test_soon": bool(self.bench_soon()),
                                    **({"club_welcome": f"their first trade at {BRAND} today earns a private offer of "
                                                        f"one of our spare commons at {REWARD_PRICE} P on El Rastro (commons trade at 8-10 P)"}
-                                      if reward else {})},
+                                      if reward else {}),
+                                   **({"cashback": f"today every trade between two teams at {BRAND} pays "
+                                                   f"{int(ctx.S.get('cashback_p', 1))} P back to each side, sent as a cash offer "
+                                                   f"they accept, while the promo budget lasts"} if cashback else {})},
                          "instruction": "Write a short, friendly invitation. Only state the facts given. No price needed. Create FOMO without false claims."}
             text, _, _ = ctx.speak(situation, (0, 0), (text, 0))
         try:
