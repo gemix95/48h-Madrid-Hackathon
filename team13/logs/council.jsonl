@@ -32,3 +32,7 @@
 {"ts": 1791018549.9, "tick": 358, "author": "trader", "topic": "buying", "lesson": "0 of 6 cards we bid for were bought (0%, last 120 ticks).", "evidence": {"bids": 6, "filled": 0, "bid_fill": 0.0}}
 {"ts": 1791018550.0, "tick": 358, "author": "market", "topic": "our_market", "lesson": "0 trades between other teams on v03, 10 invitations sent, 0 club rewards (last 120 ticks).", "evidence": {"trades_on_our_market": 0, "invites": 10, "club_rewards": 0}}
 {"ts": 1791018550.0, "tick": 358, "author": "guard", "topic": "safety", "lesson": "Cancelled our own offers: 4\u00d7 loses_value (last 120 ticks).", "evidence": {"cancels": {"loses_value": 4}}}
+{"ts": 1791019150.1, "tick": 378, "author": "trader", "topic": "selling", "lesson": "1 of 12 spare cards we listed sold (8%, last 120 ticks).", "evidence": {"asked": 12, "sold": 1, "ask_sell_through": 0.08333333333333333}}
+{"ts": 1791019150.1, "tick": 378, "author": "trader", "topic": "buying", "lesson": "0 of 6 cards we bid for were bought (0%, last 120 ticks).", "evidence": {"bids": 6, "filled": 0, "bid_fill": 0.0}}
+{"ts": 1791019150.1, "tick": 378, "author": "market", "topic": "our_market", "lesson": "0 trades between other teams on v03, 7 invitations sent, 0 club rewards (last 120 ticks).", "evidence": {"trades_on_our_market": 0, "invites": 7, "club_rewards": 0}}
+{"ts": 1791019150.1, "tick": 378, "author": "guard", "topic": "safety", "lesson": "Cancelled our own offers: 3\u00d7 loses_value (last 120 ticks).", "evidence": {"cancels": {"loses_value": 3}}}
