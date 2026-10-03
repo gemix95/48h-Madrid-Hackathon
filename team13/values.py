@@ -10,6 +10,9 @@ from __future__ import annotations
 from collections import Counter
 
 
+NO_REBUY: set = set()  # refs sold to a dealer today (set by the agent each tick)
+
+
 class Values:
     def __init__(self, catalog: dict, me: dict):
         self.catalog = catalog
@@ -153,9 +156,11 @@ class Values:
         return self.spares(reserve=0)[:int(reserve)]
 
     def wishlist(self, limit: int = 12) -> list:
-        """Released cards we lack, ranked by what one copy would be worth to us (page completion included)."""
+        """Released cards we lack, ranked by what one copy would be worth to us (page completion included).
+        Cards we sold to a dealer today are left out: buying them back from teams only burns cash (MAL-06 went to
+        Pilar at 18, came back from a team at 31, went to Pilar again)."""
         cands = [r for r, c in self.cards.items() if c["released"] and not c.get("hidden") and self.held[r] == 0
-                 and c["rarity"] in ("common", "uncommon", "rare")]
+                 and c["rarity"] in ("common", "uncommon", "rare") and r not in NO_REBUY]
         return sorted(((r, self.gain_of_adding([r])) for r in cands), key=lambda x: -x[1])[:limit]
 
     def book(self, ref: str) -> float:

@@ -272,19 +272,24 @@ class Haggler:
     def _team_acquired(self) -> set:
         """Asset ids we received in trades with teams (public feed). Never sold to a dealer: if team-trade value is
         counted on what we hold at the end, selling them could undo that gain. Refreshed every 30 ticks."""
-        st, tick = self.__dict__.setdefault("_ta", {"tick": -99, "ids": set()}), self.ctx.clock.get("tick", 0)
-        if tick - st["tick"] >= 30:
-            ids, me = set(), self.ctx.me.get("id")
+        st, tick = self.__dict__.setdefault("_ta", {"tick": -99, "ids": set(), "pos": 0}), self.ctx.clock.get("tick", 0)
+        if tick != st["tick"]:  # new lines only: a card bought from a team can go to a dealer a few ticks later
+            ids, me = st["ids"], self.ctx.me.get("id")
             try:
                 with open(FEED_STORE) as f:
+                    f.seek(st["pos"])
                     for line in f:
                         if '"settlement"' not in line:
                             continue
                         p = (json.loads(line).get("payload") or {})
+                        if p.get("persona") and tick - (p.get("tick") or 0) <= 400:  # a recent sale to a dealer: no buy-back
+                            nr = self.ctx.state.setdefault("no_rebuy", {}).setdefault(self.ctx.day_key(), [])
+                            nr.extend(r for r in (i.get("ref") for i in p.get("items") or [] if i.get("frm") == me)
+                                      if r and r not in nr)
                         if p.get("persona") or not any(str(x).startswith("t") and x != me for x in p.get("parties") or []):
                             continue
                         ids.update(i["id"] for i in p.get("items") or [] if i.get("to") == me and i.get("id"))
-                st.update(tick=tick, ids=ids)
+                    st.update(tick=tick, ids=ids, pos=f.tell())
             except (OSError, ValueError):
                 pass
         return st["ids"]
@@ -653,6 +658,10 @@ class Haggler:
             sale = {"side": "sell", "ref": plan.get("ref"), "cost": plan.get("cost"),
                     "net": round(price - plan["cost"], 1)} if plan.get("side") == "sell" and price and plan.get("cost") is not None else {}
             ctx.log("haggle", "deal", thread=th["id"], price=price, list=plan.get("list"), rounds=plan["k"], key=plan["key"], **sale)
+            if plan.get("side") == "sell" and plan.get("ref"):  # never buy it back from a team today
+                nr = ctx.state.setdefault("no_rebuy", {}).setdefault(ctx.day_key(), [])
+                if plan["ref"] not in nr:
+                    nr.append(plan["ref"])
             opening = (plan.get("asks") or [None])[0]
             Learner_reward(ctx, plan, price, opening)
             ctx.open_new_packs()

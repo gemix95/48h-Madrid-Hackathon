@@ -12,6 +12,7 @@ import math
 import os
 
 from bazaar_sdk import BazaarError
+import values as values_mod
 from venues import safe_markets
 
 MIN_GAIN = 3.0          # P of private value an accepted trade must create for us
@@ -217,6 +218,8 @@ class Trader:
             if self._cannot_pay(o):
                 continue
             ev = self.evaluate(o)
+            if set(ev.get("give") or []) & values_mod.NO_REBUY:
+                continue  # sold to a dealer today: buying it back burns cash
             need = ev.get("min_gain", ctx.S["trade_min_gain"]) if ev.get("gain") is not None else None
             if ev.get("gain") is not None and need is not None and ev["gain"] >= need and (best is None or ev["gain"] > best[1]["gain"]):
                 best = (o, ev)
