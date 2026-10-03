@@ -169,7 +169,7 @@ def autosend():
             if AUTO.check(r, time.time(), fresh.get("offers", []), me.get("id"), min_gain):
                 AUTO.armed.pop(AUTO.key(r), None)  # the game moved on (asked meanwhile, too many open): not this one
                 continue
-            res = swaps.post_swap(post, time.time(), me, cat, fresh.get("offers", []), venues, min_gain, r["team"], r["want"], r["asset"])
+            res = swaps.post_swap(post, time.time(), me, cat, fresh.get("offers", []), venues, min_gain, r["team"], r["want"], r["asset"], cache.get("leaderboard"))
             AUTO.done(time.time(), r, res)
             log_hand({"ev": "swap_offer", "auto": True, "team": r["team"], "want": r["want"], "asset": r["asset"], "r": res})
             if res.get("ok"):
@@ -420,7 +420,7 @@ class Handler(BaseHTTPRequestHandler):
             me, cat, offers, venues = cache.get("me"), cache.get("catalog"), (cache.get("offers") or {}).get("offers"), (cache.get("venues") or {}).get("venues")
         if not (isinstance(me, dict) and me.get("assets") is not None and isinstance(cat, dict) and "sets" in cat and offers is not None and venues):
             return reply({"ok": False, "error": "no team data yet, try again in a few seconds"})
-        res = swaps.post_swap(post, time.time(), me, cat, offers, venues, strategy.load().get("trade_min_gain", 3), team, want, asset)
+        res = swaps.post_swap(post, time.time(), me, cat, offers, venues, strategy.load().get("trade_min_gain", 3), team, want, asset, cache.get("leaderboard"))
         log_hand({"ev": "swap_offer", "team": team, "want": want, "asset": asset, "r": res})
         if res.get("ok"):
             due["offers"] = 0  # show it in Our offers at once

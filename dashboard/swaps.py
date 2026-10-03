@@ -92,13 +92,15 @@ def last_seen(events: list) -> dict:
     return seen
 
 
-def pick_venue(venues: list, me_id: str):
-    """Cheapest open market that is not ours (self_venue forbids ours); the side that accepts pays its fee."""
+def pick_venue(venues: list, me_id: str, leaderboard=None):
+    """Cheapest open market that is not ours (self_venue forbids ours); the side that accepts pays its fee. Among the
+    equally cheap, the one whose owner scores least: a deal on a team's market counts toward its market-making."""
+    score = {t["team"]: t.get("score") or 0 for t in (leaderboard or {}).get("teams", [])}
     best = None
     for v in venues or []:
         if v.get("status", "open") != "open" or v.get("owner") == me_id:
             continue
-        cost = (v.get("fee_bps", 500), v.get("fee_per_card", 1))
+        cost = (v.get("fee_bps", 500), v.get("fee_per_card", 1), score.get(v.get("owner"), 0))
         if best is None or cost < best[0]:
             best = (cost, v)
     return best[1] if best else None
@@ -284,14 +286,14 @@ def deals(me: dict, events: list, offers: list) -> dict:
 
 
 def view(me: dict, catalog: dict, events: list, leaderboard, offers: list, venues: list, min_gain: float, now_tick: int) -> dict:
-    v = pick_venue(venues, me.get("id"))
+    v = pick_venue(venues, me.get("id"), leaderboard)
     return {"opportunities": opportunities(me, catalog, events, leaderboard, offers, min_gain, now_tick), "deals": deals(me, events, offers),
             "venue": v and {"id": v["venue"], "name": v.get("name"), "fee_bps": v.get("fee_bps", 0), "fee_per_card": v.get("fee_per_card", 0)},
             "min_gain": min_gain, "tick": now_tick}
 
 
 def post_swap(post, now: float, me: dict, catalog: dict, offers: list, venues: list, min_gain: float,
-              team: str, want: str, asset: int) -> dict:
+              team: str, want: str, asset: int, leaderboard=None) -> dict:
     """Offer one of our spares to `team` for `want`, straight to the game with our key (`post(path, body)`).
     Re-checks everything on the server side; the page's numbers are never trusted."""
     v, listed = Values(catalog, me), _listed(me, offers)
@@ -310,7 +312,7 @@ def post_swap(post, now: float, me: dict, catalog: dict, offers: list, venues: l
                 [a["id"] for a in (o.get("give") or {}).get("assets") or []] and want in wanted_refs(o.get("want") or {})), None)
     if dup or now - _recent.get((team, want, asset), -1e9) < 60:
         return {"ok": False, "error": f"already offered{f' (#{dup})' if dup else ' a moment ago'}"}
-    venue = pick_venue(venues, me.get("id"))
+    venue = pick_venue(venues, me.get("id"), leaderboard)
     if not venue:
         return {"ok": False, "error": "no open market other than ours"}
     _recent[(team, want, asset)] = now
