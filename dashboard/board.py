@@ -210,11 +210,11 @@ def _howto(c, vid, deadline, sell):
     want = "buy" if sell else "sell"   # selling means taking a resting bid; buying means taking a resting ask
     resting = next((o for o in c["on_ours"] if o["side"] == want), None)
     if resting:
-        return _button(_accept_text(c, resting, vid), f'{"Sell" if sell else "Buy"} in one click · {resting["price"]} P')
+        return _button(_accept_text(c, resting, vid), "Sell in 1 click" if sell else "Buy in 1 click")
     price = c.get("sell_at") if sell else c.get("buy_at")
     if price:
-        return _button(_price_text(c, vid, price, sell), f'{"Sell" if sell else "Buy"} in one click · {price} P')
-    return _button(_post_text(c, vid, sell), "Sell in one click" if sell else "Bid in one click")
+        return _button(_price_text(c, vid, price, sell), "Sell in 1 click" if sell else "Buy in 1 click")
+    return _button(_post_text(c, vid, sell), "Sell in 1 click" if sell else "Bid in 1 click")
 
 
 def _note(c, vid):
@@ -259,27 +259,38 @@ def render(data: dict) -> str:
             if k not in by_set:
                 by_set[k], _ = [], order.append(k)
             by_set[k].append(c)
+        def side(c, sell):
+            price = c.get("sell_at") if sell else c.get("buy_at")
+            n = c["buyers"] if sell else c["sellers"]
+            word = ("buyer" if sell else "offer") + ("s" if n != 1 else "")
+            top = (f'<div class="price">{price} P</div><div class="dim small">{n} {word}</div>' if price
+                   else f'<div class="price none">–</div><div class="dim small">{"no buyer yet" if sell else "no seller yet"}</div>')
+            return f'<td class="side">{top}{_howto(c, vid, deadline, sell)}</td>'
+
         def row(c):
-            book = f'<br>book {c["book"]} P' if c.get("book") else ""
             quiet = "quiet" if c["state"] == "quiet" else ""
-            return (f'<tr class="{quiet}"><td><b>{html.escape(c["ref"])}</b><br>'
-                    f'<span class="dim small">{html.escape(str(c.get("name") or ""))}</span></td>'
-                    f'<td class="dim small">{html.escape(str(c.get("rarity") or ""))}{book}</td>'
-                    f'<td>{_status(c)}{_note(c, vid)}</td>'
-                    f'<td class="acts">{_howto(c, vid, deadline, False)}{_howto(c, vid, deadline, True)}</td></tr>')
+            meta = " · ".join(x for x in (str(c.get("rarity") or "").capitalize(), str(c.get("set") or "")) if x)
+            return (f'<tr class="{quiet}"><td class="cardcell"><div class="thumb" data-card="{html.escape(c["ref"])}"></div>'
+                    f'<div class="cardtxt"><b>{html.escape(c["ref"])}</b><div>{html.escape(str(c.get("name") or ""))}</div>'
+                    f'<div class="dim small">{html.escape(meta)}</div></div></td>'
+                    f'{side(c, False)}{side(c, True)}</tr>')
 
         out = []
         for name in order:
             cards = [c for c in by_set[name] if not c.get("hidden")]
             rows = "".join(row(c) for c in cards)
             empty = " empty" if all(c["state"] == "quiet" for c in cards) else ""
-            out.append(f'<div class="set{empty}"><h3>{html.escape(name)}</h3><div class="wrap"><table><thead><tr><th>Card</th><th></th>'
-                       f'<th>In the Bazaar</th><th>Best price, one click</th></tr></thead><tbody>{rows}</tbody></table></div></div>')
+            out.append(f'<div class="set{empty}"><h3>{html.escape(name)}</h3><div class="wrap"><table class="deck"><thead><tr>'
+                       f'<th>Card</th><th>For sale <span class="dim">· best price to buy</span></th>'
+                       f'<th>Sell it <span class="dim">· best price you get</span></th></tr></thead><tbody>{rows}</tbody></table></div></div>')
         return "".join(out)
 
     when = time.strftime("%H:%M", time.localtime(pub["at"]))
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>El Club Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/board/cromo.css">
 <style>
 :root{{--bg:#f6f4ef;--card:#fff;--ink:#1d1b16;--dim:#6b665c;--line:#e4dfd3;--gold:#b4832a;--green:#1f7a4d;--amber:#a86b00;--code:#f1ede4}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#14161b;--card:#1c1f26;--ink:#ece8de;--dim:#9a958a;--line:#2c303a;--gold:#e0b45a;--green:#4cc38a;--amber:#f0b34a;--code:#252932}}}}
@@ -309,6 +320,11 @@ h3{{font-size:15px;margin:20px 0 6px;color:var(--gold)}}tr.quiet td{{opacity:.62
 .pill.quietpill{{color:var(--dim)}}.hero{{font-size:20px;line-height:1.35;margin:8px 0 6px;max-width:820px}}
 button.toggle{{float:right;font:inherit;font-size:12px;padding:3px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--dim);cursor:pointer}}
 td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
+:root{{--font-display:"Big Shoulders Display",system-ui,sans-serif;--font-sans:Manrope,system-ui,sans-serif;--color-gold:#e0b45a;--color-muted:#9a958a;--color-base:#1b0c22}}
+table.deck td{{vertical-align:middle}}td.cardcell{{display:flex;gap:12px;align-items:center;min-width:240px}}
+.thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
+.cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
+td.side button.trade{{margin-top:6px}}
 table td{{vertical-align:middle}}
 button.trade{{margin-top:6px;font:inherit;font-size:13px;padding:5px 12px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer}}
 button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}.ok{{color:var(--green);font-weight:600;margin-left:6px}}
@@ -354,6 +370,9 @@ document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click
   catch (e) {{ const r = document.createRange(); r.selectNodeContents(box.querySelector("pre"));
     const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); box.querySelector(".ok").textContent = "selected: press Ctrl/Cmd+C"; }}
 }}));
+fetch("/board/cards.json").then(r => r.json()).then(cards => {{
+  document.querySelectorAll(".thumb[data-card]").forEach(t => {{ const h = cards[t.dataset.card]; if (h) t.innerHTML = h; }});
+}}).catch(() => {{}});
 const deckEl = document.getElementById("deck"), tg = document.getElementById("showall");
 let all = false; try {{ all = localStorage.getItem("board-all") === "1"; }} catch (e) {{}}
 const paint = () => {{ deckEl.classList.toggle("active-only", !all); tg.textContent = all ? "show only active cards" : "show all {len(pub["cards"])} cards"; }};
