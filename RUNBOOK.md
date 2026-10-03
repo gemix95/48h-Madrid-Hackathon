@@ -376,3 +376,45 @@ teams on v03 count as value created on our market (v03 charges no per-card fee, 
 "Free" holds at either market fee we discussed (0% or 1%): v03's per-card fee is 0 and a swap carries no cash.
 Send all channel notes only after the Host has restarted the agent on the current code.
 
+## 14. Saturday morning post-mortem and fixes (11:00-11:30)
+
+What happened (board at ~11:00: 6th, 22.27; at 11:22: 1st again, 28.57):
+- **Market making 3.08-3.33 vs 7.5 for teams on the free stall and 12.5 for the best brokers.** The broker restarted
+  10 times with the agent (it ran as a thread inside it), lost the Market Test's history each time, read the bench
+  book twice (09:51) and made 2 matches in the whole test: efficiency 0.399. The 1% fee also ran into that test.
+- **Team trades -9.5 (`neg_points`) by ~10:40.** Our own accepts were positive (MAL-07 +4.5, MAL-03 +3.8) and the
+  guard cancelled 7 losing offers (one sold a card worth 47.5 for 5), so the loss came from fills of our resting
+  asks and bids by other teams, which never show as `accept`. `agent/diagnose.py` now lists every settlement of ours.
+- **355 `skip_insolvent`.** The agent's feed store has gaps after restarts (the server serves only the last 500
+  events), so other teams' rebuilt cash ran low and good trades were skipped.
+
+Fixes (pushed): `solvency_check` Strategy switch, **off by default**, each skip logged once; `agent/diagnose.py`
+(value-losing actions, our settlements, broker stats per Market Test); the broker as **its own process** so agent
+restarts no longer reset it, plus Emmanuele's stall floor (never below the free stall).
+
+### Run the broker as its own process (Host)
+
+1. `git pull` (if local `strategy.json` blocks it: `git stash && git pull && git stash pop`).
+2. Stop the agent; `pgrep -fl "agent.py|smart_broker.py"` must print nothing (else `kill <pid>`).
+3. `source bazaar.env && cd team13 && nohup ../.venv/bin/python smart_broker.py > logs/broker.out 2>&1 &`
+   then `tail -5 logs/broker.out` shows `"event": "start"`.
+   - `Another broker already runs (logs/broker.lock)`: the agent or an old broker still runs (step 2).
+   - `No broker key yet`: key missing from `team13/state.json`; put `export BROKER_KEY=...` in `broker.env`
+     (git-ignored) and `source ../broker.env` first.
+4. Start the agent as usual; it sees the lock and does not start its own broker thread.
+5. `pgrep -fl "agent.py|smart_broker.py"`: exactly one of each. Five minutes before every Market Test, check again.
+6. After each Market Test: `python3 agent/diagnose.py`.
+
+### A server for the broker (optional, between Market Tests)
+
+The organisers' server is in **Madrid** (34.175.44.115, Google Cloud `europe-southwest1`, Caddy + uvicorn), about
+10 ms connect and 30 ms to answer from the venue. A small VPS (1 vCPU, 2 GB) is plenty for the broker; choose Spain
+or another EU region, not the US. Beware IONOS VPS offers that are 1-year contracts; an hourly cloud server we can
+delete on Sunday fits a weekend better. The server needs only the broker key (never the team key), and the broker
+inside the agent must be off while the server's broker runs: one broker per venue.
+
+### Schedule from 11:20 (game hours now run close to wall hours)
+
+Market Test ~11:50 (16 ticks), Duels I ~12:00, Doña Pilar opens to everyone ~12:20 (we have her already: level 3,
+pays over book for cards she loves, sells Gold packs with 85% epics), Market Tests every 2 game hours after that.
+
