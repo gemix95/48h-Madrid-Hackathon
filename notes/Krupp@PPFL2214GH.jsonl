@@ -11,3 +11,4 @@
 {"ts": 1791022223.4, "tick": 481, "author": "duels", "topic": "deal", "lesson": "Duel 2311 settled at 85 P, 0 days.", "evidence": {"duel": 2311, "price": 85}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
 {"ts": 1791022296.7, "tick": 483, "author": "duels", "topic": "deal", "lesson": "Duel 2347 settled at 135 P, 0 days.", "evidence": {"duel": 2347, "price": 135}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
 {"ts": 1791022409.1, "tick": 487, "author": "duels", "topic": "deal", "lesson": "Duel 2448 settled at 77 P, 0 days.", "evidence": {"duel": 2448, "price": 77}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
+{"ts": 1791022663.4, "tick": 495, "author": "duels", "topic": "deal", "lesson": "Duel 2330 settled at 128 P, 0 days.", "evidence": {"duel": 2330, "price": 128}, "agent": "Krupp", "role": "dealers", "host": "PPFL2214GH"}
