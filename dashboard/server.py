@@ -174,19 +174,22 @@ def autosend():
                 me, cat, offers, venues = cache.get("me"), cache.get("catalog"), (cache.get("offers") or {}).get("offers"), (cache.get("venues") or {}).get("venues")
             if not (v and "opportunities" in v and isinstance(me, dict) and offers is not None and venues):
                 continue
-            min_gain = strategy.load().get("trade_min_gain", 3)
+            S = strategy.load()
+            min_gain = S.get("trade_min_gain", 3)
             r = AUTO.plan(time.time(), v["opportunities"], offers, me.get("id"), min_gain)
             if not r:
-                continue
+                r = AUTO.longshot(time.time(), v["opportunities"], offers, me.get("id"), S)
+                if not r:
+                    continue
             fresh = get("/api/me/offers", True)
             if "_error" in fresh:
                 continue
-            if AUTO.check(r, time.time(), fresh.get("offers", []), me.get("id"), min_gain):
+            if r.get("both") and AUTO.check(r, time.time(), fresh.get("offers", []), me.get("id"), min_gain):
                 AUTO.armed.pop(AUTO.key(r), None)  # the game moved on (asked meanwhile, too many open): not this one
                 continue
             res = swaps.post_swap(post, time.time(), me, cat, fresh.get("offers", []), venues, min_gain, r["team"], r["want"], r["asset"], cache.get("leaderboard"))
             AUTO.done(time.time(), r, res)
-            log_hand({"ev": "swap_offer", "auto": True, "team": r["team"], "want": r["want"], "asset": r["asset"], "r": res})
+            log_hand({"ev": "swap_offer", "auto": "both" if r.get("both") else "longshot", "team": r["team"], "want": r["want"], "asset": r["asset"], "r": res})
             if res.get("ok"):
                 due["offers"] = 0
         except Exception as e:

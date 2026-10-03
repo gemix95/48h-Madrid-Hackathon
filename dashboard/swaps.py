@@ -31,6 +31,9 @@ AUTO_GAP = 30  # at most one automatic send every 30 s
 AUTO_MAX_OPEN = 8  # open swaps of ours (any source) at which nothing sends itself
 AUTO_COOLDOWN = 600  # seconds before the same team is asked for the same card again
 OFFER_LIMIT = 30  # the game refuses a 31st open offer (too_many_offers)
+LONGSHOT_GAP = 90  # long shots (swaps only good for us): at most one every 90 s
+LONGSHOT_COOLDOWN = 1800  # the same card from the same team again only after 30 min (the offer lives ~1 h anyway)
+LONGSHOT_FREE_SLOTS = 4  # never take the last open-offer slots: the agent needs them
 TEAM = re.compile(r"^t\d+$")
 _recent: dict = {}  # (team, card, asset) -> time of the last post, so a double click cannot post twice
 
@@ -191,6 +194,7 @@ class Auto:
     def __init__(self, on: bool = True):
         self.on, self.armed, self.off, self.tried, self.why, self.log, self.last = on, {}, set(), {}, {}, [], -1e9
         self.bar = (None, None)
+        self.last_longshot = -1e9
 
     @staticmethod
     def key(r: dict) -> str:
@@ -239,7 +243,25 @@ class Auto:
         due = sorted((at, k) for k, at in self.armed.items() if at <= now)
         return both[due[0][1]] if due else None
 
+    def longshot(self, now: float, rows: list, offers: list, me_id: str, S: dict):
+        """A swap only good for us (by our estimate the holder loses), sent anyway: a refusal costs nothing, and teams
+        that listed the card for sale value it less than we guess. Several may promise the same spare: the game
+        settles one, the others fail. Returns the row to send now, or None."""
+        if not self.on or not S.get("longshot_swaps", 1) or now - self.last_longshot < LONGSHOT_GAP:
+            return None
+        mine = [o for o in offers if o.get("maker") == me_id]
+        if len(mine) >= OFFER_LIMIT - LONGSHOT_FREE_SLOTS or waiting(offers, me_id) >= S.get("longshot_max_waiting", 16):
+            return None
+        asked = {(o.get("to"), ref) for o in mine for ref in wanted_refs(o.get("want") or {})}
+        cand = [r for r in rows if not r.get("both") and r["ours"] >= S.get("longshot_min_us", 9)
+                and (r["team"], r["want"]) not in asked and self.key(r) not in self.off
+                and now - self.tried.get((r["team"], r["want"]), -1e9) >= LONGSHOT_COOLDOWN]
+        cand.sort(key=lambda r: ("listed" in str(r.get("evidence")), r["ours"]), reverse=True)
+        return cand[0] if cand else None
+
     def done(self, now: float, r: dict, res: dict) -> None:
+        if not r.get("both"):
+            self.last_longshot = now
         self.last = now
         self.tried[(r["team"], r["want"])] = now
         self.armed.pop(self.key(r), None)
