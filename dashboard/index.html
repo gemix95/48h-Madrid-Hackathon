@@ -569,11 +569,18 @@ function timeline(d) {
   const next = shown.find(e => e.at_hours >= nowH - 0.02);
   const nextIdx = next?.i;
 
-  // day progress cards
-  const dayCards = days.map(day => {
-    const end = day.start + day.dur;
-    const past = nowH >= end, on = nowH >= day.start && nowH < end;
-    const pct = past ? 100 : on ? Math.max(2, Math.min(100, ((nowH - day.start) / day.dur) * 100)) : 0;
+  // day progress cards — use calendar "today", not t_hours bands (Fri's wall
+  // duration is 4h, so early Saturday still falls inside Fri when doors reopen)
+  const todayIdx = days.findIndex(d => d.day === c.today);
+  const dayCards = days.map((day, i) => {
+    const on = todayIdx >= 0 ? i === todayIdx : day.day === c.today;
+    const past = todayIdx >= 0 ? i < todayIdx : +new Date(day.closes) <= Date.now();
+    const opens = +new Date(day.opens), closes = +new Date(day.closes), now = Date.now();
+    let pct = past ? 100 : 0;
+    if (on) {
+      if (now >= closes) pct = 100;
+      else if (now > opens) pct = Math.max(2, Math.min(99, ((now - opens) / Math.max(1, closes - opens)) * 100));
+    }
     const win = `${hm(new Date(day.opens))}–${hm(new Date(day.closes))}`;
     return `<div class="sched-day${on ? " on" : ""}${past ? " past" : ""}">
       <div class="dn">${esc(day.name)}${day.day === "fri" ? " · ½ weight" : ""}${on ? " · now" : ""}</div>

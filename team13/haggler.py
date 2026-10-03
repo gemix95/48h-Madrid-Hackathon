@@ -242,9 +242,22 @@ class Haggler:
                 lo = min(lo, 0.85 * min(st["deals"]))  # she went that low before: start below it
             return max(1, math.floor(lo))
         hi = (2 - self.ctx.S["haggle_open"]) * 1.1 * lst  # mirror of the buy opening, for selling
+        if st and st.get("walked") and not st.get("deals"):
+            # she walked out on our asks: open 20% lower per walkout, near her last counter, never below 1.15x book
+            hi = hi * 0.8 ** st["walked"]
+            if st.get("last_counter"):
+                hi = min(hi, 2 * st["last_counter"])
+            hi = max(hi, 1.15 * lst)
         if st and st.get("deals"):
             hi = max(hi, 1.15 * max(st["deals"]))
         return math.ceil(hi)
+
+    @staticmethod
+    def _pace(dealer, st):
+        """(rounds, curve) for this dealer. Strict dealers (Pilar, Chato) walk out on small 'gesture' steps:
+        concede in even steps over few rounds. Patient Abuela keeps the tested Boulware pace."""
+        strict = ((dealer.get("traits") or {}).get("strictness") or 0) >= 0.6 or (st or {}).get("walked", 0) >= 2
+        return (4, 1.0) if strict else (None, None)
 
     # ------------------------------------------------------------------ the loop
     def step(self):
@@ -270,7 +283,8 @@ class Haggler:
                     elif e.code in ("persona_quota", "cooloff", "locked", "sold_out"):
                         ctx.state.setdefault("dealer_blocked", {})[d["id"]] = ctx.clock.get("tick", 0) + 5
                     continue
-                plan.update(k=0, offers=[], dealer=d["id"], name=d.get("name", d["id"]).split()[0])
+                rounds, curve = self._pace(d, ctx.state.get("dealer_stats", {}).get(plan["key"]))
+                plan.update(k=0, offers=[], dealer=d["id"], name=d.get("name", d["id"]).split()[0], rounds=rounds, curve=curve)
                 ctx.state.setdefault("plans", {})[str(th["id"])] = plan
                 self._counts(d["id"])["opened"] += 1
                 ctx.log("haggle", "opened", dealer=d["id"], topic=topic, plan=plan)
@@ -381,7 +395,7 @@ class Haggler:
         buy = plan["side"] == "buy"
         if buy:
             S = self.ctx.S
-            p = math.floor(boulware(lo, hi, k, int(plan.get("rounds") or S["haggle_rounds"]), S["haggle_curve"]))
+            p = math.floor(boulware(lo, hi, k, plan.get("rounds") or int(S["haggle_rounds"]), plan.get("curve") or S["haggle_curve"]))
             if offers:
                 p = max(p, offers[-1] + 1)  # always a new price
             asks = plan.get("asks") or []
@@ -389,7 +403,11 @@ class Haggler:
                 p = min(p, asks[-1])  # never offer more than she asks
             return p if p <= hi and (not offers or p > offers[-1]) else None
         S = self.ctx.S
-        p = math.ceil(hi - (hi - lo) * min(1.0, k / S["haggle_rounds"]) ** S["haggle_curve"])
+        first = next((a for a in (plan.get("asks") or []) if a is not None), None)
+        if plan.get("ladder") and first is not None:
+            lo = max(lo, first + 2)  # a deal at her opening price captures none of her range
+        rounds, curve = plan.get("rounds") or int(S["haggle_rounds"]), plan.get("curve") or S["haggle_curve"]
+        p = math.ceil(hi - (hi - lo) * min(1.0, k / rounds) ** curve)
         if offers:
             p = min(p, offers[-1] - 1)
         asks = plan.get("asks") or []
@@ -441,6 +459,9 @@ class Haggler:
             ctx.open_new_packs()
         else:
             stats["walked"] += 1
+            counters = [a for a in (plan.get("asks") or []) if a is not None]
+            if counters:
+                stats["last_counter"] = counters[-1]
             Learner_reward(ctx, plan, None, (plan.get("asks") or [None])[0])
             reason = th.get("closed_reason")
             if reason in ("persona_quota", "cooloff", "sold_out"):
