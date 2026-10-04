@@ -522,6 +522,7 @@ def render(data: dict) -> str:
 <meta property="og:url" content="{PUBLIC}/board">
 <meta property="og:image" content="{PUBLIC}/board/og.jpg"><meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<link rel="icon" type="image/png" href="/board/icon.png"><link rel="apple-touch-icon" href="/board/icon.png">
 <meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#1b0c22">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
