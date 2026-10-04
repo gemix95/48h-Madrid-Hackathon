@@ -9,7 +9,7 @@ capped at 50 and a loss in full; a dealer purchase scores on the ladder (share o
 best three per level; Pícaros is level 4) and only a loss counts against us. Cash itself never scores. So, for each
 epic we lack, best value first:
   - team: one public bid at min(our value - 50, the team cap in agent/caps.json), when that reaches the price teams
-    resell epics at (epics_team_min). A filled bid banks the full +50 (SAL-11 at 200 is +88 at our values).
+    resell epics at (epics_team_min), on a 0% market of the lowest-ranked team below us (bid_venue). A filled bid banks the full +50 (SAL-11 at 200 is +88 at our values).
     Unfilled after epics_team_ticks, the card moves to Pícaros;
   - Pícaros: haggle up to min(its list price, our value - epics_dealer_margin, free cash): a deal never costs points
     and fills a level-4 ladder slot.
@@ -28,6 +28,7 @@ import math
 from bazaar_sdk import BazaarError
 from eggs import line as egg_line
 from trader import team_caps
+from venues import safe_markets
 
 TEAM_GAIN_CAP = 50     # a team trade's gain counts up to 50 (organisers' slide)
 MAX_ROUNDS = 8         # our offers to the dealer before we walk
@@ -63,6 +64,19 @@ def epic_dealer(dealers: list, unlocked) -> tuple | None:
             if s.get("rarity") == "epic" and s.get("list_price"):
                 return d["id"], int(s["list_price"])
     return None
+
+
+def bid_venue(ctx) -> str:
+    """Where our team bid goes: a 0% market (no per-card fee either) of the team lowest on the leaderboard among those
+    below us, so the market points our trade creates go to a team that is no threat; else venues.safe_markets."""
+    scores = {t.get("team"): t.get("score") or 0 for t in (getattr(ctx, "leaderboard", None) or [])}
+    me = ctx.me.get("id")
+    ours = scores.get(me, (ctx.me.get("score") or {}).get("score") or 0)
+    free = [(scores[v.get("owner")], v["venue"]) for v in (getattr(ctx, "venues", None) or [])
+            if v.get("status", "open") == "open" and v.get("owner") not in (me, None) and v.get("owner") in scores
+            and scores[v["owner"]] < ours and not (v.get("fee_bps") or 0) and not (v.get("fee_per_card") or 0)
+            and v["venue"] != ctx.state.get("venue")]
+    return min(free)[1] if free else safe_markets(ctx)[0]
 
 
 class Epics:
@@ -185,7 +199,7 @@ class Epics:
                 p = team_price(value, caps.get(ref), free)
                 if p >= int(S.get("epics_team_min", 190)):
                     try:
-                        venue = S.get("epics_venue", "rastro")
+                        venue = bid_venue(ctx)
                         got = ctx.api.list_offer({"cash": p}, {"cards": [ref]}, venue=venue,
                                                  expires_in_ticks=int(S.get("epics_team_ticks", 40)) + 5)
                         st["bids"][ref] = {"offer": got.get("id"), "price": p, "tick": tick, "seen": tick}
