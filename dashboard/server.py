@@ -473,11 +473,11 @@ class Handler(BaseHTTPRequestHandler):
     def _public_board(self) -> bool:
         """/board and /board.json are public (no password): public market data only."""
         path = self.path.split("?")[0].rstrip("/")
-        if path in ("/board/cards.json", "/board/cromo.css"):  # the cards' art (from the game's own /cards page)
+        if path in ("/board/cards.json", "/board/cromo.css", "/board/og.jpg"):  # card art (the game's /cards page), link preview
             f = HERE / "cards" / path.rsplit("/", 1)[1]
             body = f.read_bytes() if f.exists() else b"{}"
             self.send_response(200)
-            self.send_header("Content-Type", "application/json" if path.endswith(".json") else "text/css")
+            self.send_header("Content-Type", {"json": "application/json", "css": "text/css", "jpg": "image/jpeg"}[path.rsplit(".", 1)[1]])
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "public, max-age=86400")
             self.end_headers()

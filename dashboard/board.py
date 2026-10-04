@@ -53,7 +53,8 @@ def build() -> dict:
             for n, c in enumerate(st["cards"]):
                 cards[c["id"]] = {"name": c.get("name", c["id"]), "rarity": c.get("rarity"), "set": st.get("name", st["id"]),
                                   "set_id": st["id"], "book": c.get("book"), "hidden": bool(c.get("hidden")),
-                                  "order": (i, n)}
+                                  "order": (i, n), "minted": c.get("minted"), "print_run": c.get("print_run"),
+                                  "released": st.get("released", True)}
     except Exception:
         pass
     rows, swaps = {}, []
@@ -118,6 +119,7 @@ def public(data: dict) -> dict:
                 for side in ("bids", "asks") for x in c[side] if x["ours"]]
         out.append({"ref": c["ref"], "name": c.get("name"), "rarity": c.get("rarity"), "state": c["state"],
                     "set": c.get("set"), "set_id": c.get("set_id"), "book": c.get("book"),
+                    "minted": c.get("minted"), "print_run": c.get("print_run"), "released": c.get("released", True),
                     "hidden": c.get("hidden"), "order": c.get("order"),
                     "buyers": len(c["bids"]), "sellers": len(c["asks"]), "meet": meet,
                     "buy_at": ask["price"] if ask else None,   # the cheapest seller anywhere: what buying costs
@@ -285,6 +287,16 @@ def is_deal(c, sell) -> bool:
     return price >= hi * (1 + DEAL_PCT / 100) if sell else price <= lo * (1 - DEAL_PCT / 100)
 
 
+def _blocked(c, sell):
+    """Why a side cannot trade at all, or None. A set not released yet has no copy of any card; a card nobody has
+    pulled yet (minted 0, from the live catalog) cannot be sold, though a bid for it is fine: it waits for the first."""
+    if not c.get("released", True):
+        return "opens with the set"
+    if sell and c.get("minted") == 0:
+        return "no copy pulled yet"
+    return None
+
+
 def _hist_html(c):
     h = c.get("history")
     return f'<div class="hist small" data-hist="{html.escape(c["ref"])}">{history.spark(h)}<span>{html.escape(history.line(h))}</span></div>'
@@ -303,7 +315,8 @@ def live(data: dict) -> dict:
             sides[key] = {"price": price, "count": count, "label": label, "text": text, "ask": ask}
         sides["hist"] = {"line": history.line(c.get("history")), "spark": history.spark(c.get("history"))}
         out[c["ref"]] = sides
-    return {"at": pub["at"], "tick": pub["tick"], "cards": out}
+    blocked = sum(1 for c in pub["cards"] if not c.get("hidden") for sell in (False, True) if _blocked(c, sell))
+    return {"at": pub["at"], "tick": pub["tick"], "cards": out, "blocked": blocked}
 
 
 def _note(c, vid):
@@ -445,7 +458,8 @@ def render(data: dict) -> str:
                 continue
             seen.add(name)
             n = sum(1 for x in pub["cards"] if x.get("set") == name and not x.get("hidden") and (x["buyers"] or x["sellers"]))
-            links.append(f'<a href="#set-{html.escape(str(sid))}">{html.escape(name)}<span class="n">{n}</span></a>')
+            badge = f'<span class="n">{n}</span>' if c.get("released", True) else '<span class="n soon">soon</span>'
+            links.append(f'<a href="#set-{html.escape(str(sid))}">{html.escape(name)}{badge}</a>')
         return "".join(links)
 
     def deck():
@@ -459,15 +473,26 @@ def render(data: dict) -> str:
         def side(c, sell):
             price, count = _side_top(c, sell)
             none = " none" if price == "–" else ""
+            blocked = _blocked(c, sell)
+            if blocked:  # nothing to trade: no copy of this card exists yet
+                return (f'<td class="side" data-label="{"Sell it" if sell else "For sale"}">'
+                        f'<div class="price none">–</div><div class="dim small">{blocked}</div></td>')
             return (f'<td class="side" data-ref="{html.escape(c["ref"])}" data-side="{"sell" if sell else "buy"}" data-label="{"Sell it" if sell else "For sale"}">'
                     f'<div class="price{none}">{price}</div><div class="dim small count">{count}</div>{_howto(c, vid, deadline, sell)}</td>')
 
         def row(c):
             quiet = "quiet" if c["state"] == "quiet" else ""
             meta = " · ".join(x for x in (str(c.get("rarity") or "").capitalize(), str(c.get("set") or "")) if x)
+            status = ""
+            if not c.get("released", True):
+                status = '<span class="tag soon">not released yet</span>'
+            elif c.get("minted") == 0:
+                status = f'<span class="tag none">not pulled yet · 0 of {c.get("print_run") or "?"}</span>'
+            elif c.get("minted") is not None:
+                status = f'<span class="tag">{c["minted"]} of {c.get("print_run") or "?"} in play</span>'
             return (f'<tr class="{quiet}"><td class="cardcell"><div class="thumb" data-card="{html.escape(c["ref"])}"></div>'
                     f'<div class="cardtxt"><b>{html.escape(c["ref"])}</b><div>{html.escape(str(c.get("name") or ""))}</div>'
-                    f'<div class="dim small">{html.escape(meta)}</div>{_hist_html(c)}</div></td>'
+                    f'<div class="dim small">{html.escape(meta)}</div><div class="small">{status}</div>{_hist_html(c)}</div></td>'
                     f'{side(c, False)}{side(c, True)}</tr>')
 
         out = []
@@ -476,7 +501,12 @@ def render(data: dict) -> str:
             rows = "".join(row(c) for c in cards)
             empty = " empty" if all(c["state"] == "quiet" for c in cards) else ""
             sid = html.escape(str(cards[0].get("set_id") or name)) if cards else html.escape(name)
-            out.append(f'<div class="set{empty}" id="set-{sid}"><h3>{html.escape(name)}</h3><div class="wrap"><table class="deck sets"><thead><tr>'
+            if cards and not cards[0].get("released", True):
+                note = "not released yet: no copy exists until the set opens"
+            else:
+                live_n = sum(1 for c in cards if (c.get("minted") or 0) > 0)
+                note = f"{live_n} of {len(cards)} cards in play" + (f", {len(cards) - live_n} not pulled yet" if live_n < len(cards) else "")
+            out.append(f'<div class="set{empty}" id="set-{sid}"><h3>{html.escape(name)} <span class="dim small setnote">· {note}</span></h3><div class="wrap"><table class="deck sets"><thead><tr>'
                        f'<th>Card</th><th>For sale <span class="dim">· best price to buy</span></th>'
                        f'<th>Sell it <span class="dim">· best price you get</span></th></tr></thead><tbody>{rows}</tbody></table></div></div>')
         return "".join(out)
@@ -484,6 +514,14 @@ def render(data: dict) -> str:
     when = time.strftime("%H:%M", time.localtime(pub["at"]))
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>El Club Board</title>
+<meta name="description" content="Every card in the Bazaar at its best price. Buy or sell in 1 click, 0% fee, live prices, deals and auctions.">
+<meta property="og:type" content="website"><meta property="og:site_name" content="El Club · Team 13">
+<meta property="og:title" content="El Club Board: every card at its best price">
+<meta property="og:description" content="Buy or sell any card in 1 click. 0% fee, live prices, 🔥 deals, auctions.">
+<meta property="og:url" content="http://217.160.143.83/board">
+<meta property="og:image" content="http://217.160.143.83/board/og.jpg"><meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#1b0c22">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/board/cromo.css">
@@ -520,7 +558,9 @@ td.acts{{white-space:nowrap}}td.acts button.trade{{margin:2px 4px 2px 0}}
 table.deck{{table-layout:fixed;width:100%;min-width:720px}}table.deck td{{vertical-align:middle;overflow-wrap:anywhere}}table.deck.sets th:nth-child(1){{width:30%}}table.deck.sets th:nth-child(n+2){{width:35%}}table.deck.lots th:nth-child(1){{width:24%}}table.deck.lots th:nth-child(2){{width:11%}}table.deck.lots th:nth-child(3){{width:23%}}table.deck.lots th:nth-child(4){{width:14%}}table.deck.lots th:nth-child(5){{width:28%}}td.cardcell{{display:flex;gap:12px;align-items:center}}
 .thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
 .cardtxt{{min-width:0;overflow-wrap:anywhere}}.cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
-td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.hint{{width:100%}}.hist{{margin-top:4px;color:var(--dim)}}.sparkwrap{{position:relative;display:block;width:max-content;cursor:zoom-in;outline:none}}.sparkwrap>svg{{display:block;margin-bottom:2px}}.sparkbig{{display:none;position:absolute;left:0;top:24px;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 8px 4px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:276px}}.sparkwrap:hover .sparkbig,.sparkwrap:focus .sparkbig,.sparkwrap:focus-within .sparkbig{{display:block}}@media (max-width:640px){{.hero{{font-size:16px}}table.deck.sets,table.deck.lots{{min-width:0;table-layout:auto}}table.deck.sets thead,table.deck.lots thead{{display:none}}table.deck.sets tr,table.deck.lots tr{{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:12px;border-bottom:1px solid var(--line)}}table.deck.sets td,table.deck.lots td{{display:block;padding:0;border:0;width:auto}}table.deck td.cardcell{{grid-column:1/-1;display:flex}}table.deck.lots td:last-child{{grid-column:1/-1}}td.side::before{{content:attr(data-label);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}}td.side.open{{grid-column:1/-1}}.thumb{{width:60px;height:84px}}.thumb .cromo{{font-size:3.75px}}.sparkbig{{left:-72px}}}}.rules summary,.how summary{{cursor:pointer}}.how{{margin:18px 0}}.how .steps{{margin-top:12px}}.status{{margin:4px 0 10px}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
+td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.hint{{width:100%}}.hist{{margin-top:4px;color:var(--dim)}}.sparkwrap{{position:relative;display:block;width:max-content;cursor:zoom-in;outline:none}}.sparkwrap>svg{{display:block;margin-bottom:2px}}.sparkwrap polyline{{stroke:var(--dim);opacity:.55}}
+.tag{{color:var(--dim)}}.tag.none{{color:var(--amber)}}.tag.soon{{color:var(--gold);font-weight:600}}.setnav .n.soon{{background:var(--gold);color:#fff}}.setnote{{font-weight:400}}.set{{scroll-margin-top:110px}}#auctions,#how{{scroll-margin-top:110px}}
+.sheetx{{display:none}}#backdrop{{display:none}}.sheettitle{{display:none}}.sheet .sheettitle{{display:block;margin:-22px 30px 10px 0;font-size:15px}}.sparkbig{{display:none;position:absolute;left:0;top:24px;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 8px 4px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:276px}}.sparkwrap:hover .sparkbig,.sparkwrap:focus .sparkbig,.sparkwrap:focus-within .sparkbig{{display:block}}@media (max-width:640px){{.hero{{font-size:16px}}table.deck.sets,table.deck.lots{{min-width:0;table-layout:auto}}table.deck.sets thead,table.deck.lots thead{{display:none}}table.deck.sets tr,table.deck.lots tr{{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:12px;border-bottom:1px solid var(--line)}}table.deck.sets td,table.deck.lots td{{display:block;padding:0;border:0;width:auto}}table.deck td.cardcell{{grid-column:1/-1;display:flex}}table.deck.lots td:last-child{{grid-column:1/-1}}td.side::before{{content:attr(data-label);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}}.pricef input{{font-size:16px}}.copied.sheet{{position:fixed;left:8px;right:8px;top:8px;max-height:calc(100dvh - 16px);overflow:auto;z-index:60;margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.35)}}.copied.sheet .sheetx{{display:block;position:sticky;top:0;margin-left:auto;font:inherit;font-size:22px;line-height:1;border:0;background:none;color:var(--ink);padding:0 4px}}#backdrop.on{{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:55}}.thumb{{width:60px;height:84px}}.thumb .cromo{{font-size:3.75px}}.sparkbig{{left:-72px}}}}.rules summary,.how summary{{cursor:pointer}}.how{{margin:18px 0}}.how .steps{{margin-top:12px}}.status{{margin:4px 0 10px}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
 .setnav{{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;margin:6px 0 4px;background:var(--bg)}}
 .setnav a{{text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;font-size:13px}}
 .setnav a:hover{{border-color:var(--gold);color:var(--gold)}}.setnav .n{{color:var(--dim);margin-left:6px;font-size:12px}}
@@ -561,6 +601,26 @@ in. Read it before you run it: there is nothing in it but your own offer.</li>
 </main>
 <script>
 let busyUntil = 0;
+// On a phone the price form and the request open as a sheet at the top of the screen: the keyboard comes up from
+// below and never covers it, and the table under it does not move.
+const backdrop = document.createElement("div"); backdrop.id = "backdrop"; document.body.appendChild(backdrop);
+let sheetBox = null;
+function openSheet(box, b) {{
+  closeSheet(); sheetBox = box; box.classList.add("sheet"); backdrop.classList.add("on");
+  if (!box.querySelector(".sheetx")) {{
+    const x = document.createElement("button"); x.className = "sheetx"; x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Close");
+    x.addEventListener("click", closeSheet); box.prepend(x);
+  }}
+  let t = box.querySelector(".sheettitle");
+  if (!t) {{ t = document.createElement("div"); t.className = "sheettitle"; box.insertBefore(t, box.children[1]); }}
+  const td = b.closest("td"), ref = td && (td.dataset.ref || td.closest("tr")?.querySelector("[data-card]")?.dataset.card);
+  t.innerHTML = "<b>" + (ref || "") + "</b> · " + b.textContent;
+}}
+function closeSheet() {{
+  if (sheetBox) {{ sheetBox.classList.remove("sheet"); sheetBox.hidden = true; }}
+  sheetBox = null; backdrop.classList.remove("on");
+}}
+backdrop.addEventListener("click", closeSheet);
 document.querySelectorAll("a.howlink").forEach(a => a.addEventListener("click", () => {{ document.getElementById("how").open = true; }}));
 const PHONE = matchMedia("(max-width:640px)").matches ? "1" : "0";
 function ping(e, b, auto) {{
@@ -595,8 +655,8 @@ function checkPrice(raw, min) {{
 }}
 document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click", () => {{
   const box = b.nextElementSibling, form = box.querySelector("form.pricef");
-  b.closest("td")?.classList.add("open");
-  ping("click", b);  // on a phone the request takes the row's full width
+  if (PHONE === "1") openSheet(box, b);
+  ping("click", b);
   box.hidden = false; busyUntil = Date.now() + 120000;
   if (!b.dataset.min) {{ copyOut(box, b.dataset.text); return; }}
   const inp = form.querySelector("input");
@@ -605,7 +665,7 @@ document.querySelectorAll("button.trade").forEach(b => b.addEventListener("click
   box.querySelector("pre").hidden = true; box.querySelector(".lbl").hidden = true;
   const d = b.dataset, hint = form.querySelector(".hint");
   hint.textContent = d.lo ? `usual ${{d.lo === d.hi ? d.lo : d.lo + "–" + d.hi}} P · last ${{d.last}} P${{d.basis === "dealer" ? " (with dealers)" : ""}}` : "no trade of this card yet";
-  inp.focus(); inp.select();
+  inp.focus({{preventScroll: true}}); inp.select();
 }}));
 document.querySelectorAll("form.pricef").forEach(f => f.addEventListener("submit", ev => {{
   ev.preventDefault();
@@ -623,6 +683,9 @@ async function refresh() {{
     const r = await fetch("/board/live.json", {{cache: "no-store"}}); if (!r.ok) return;
     const d = await r.json();
     document.getElementById("tick").textContent = d.tick;
+    // a set opened or a card was pulled for the first time: its buttons appear with a fresh page
+    if (d.blocked !== undefined && d.blocked !== document.querySelectorAll("td.side:not([data-ref])").length
+        && Date.now() > busyUntil && !sheetBox) {{ location.reload(); return; }}
     document.getElementById("upd").textContent = new Date(d.at * 1000).toLocaleTimeString([], {{hour: "2-digit", minute: "2-digit", second: "2-digit"}});
     document.querySelectorAll("[data-hist]").forEach(el => {{
       const h = ((d.cards || {{}})[el.dataset.hist] || {{}}).hist;
