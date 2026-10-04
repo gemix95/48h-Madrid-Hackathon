@@ -49,6 +49,8 @@ KNOBS = {
     "epics_start_share": (0.74, 0.5, 1.0, 0.01, "Trading", "Epics: first dealer offer",
                           "Share of the dealer's list price we open at (Pícaros sold epics at 128-167 of 162)."),
     "epics_retry_ticks": (30, 5, 200, 1, "Trading", "Epics: retry a dealer after (ticks)", "After a walk or a failed haggle."),
+    "epics_take_min_gain": (20, 0, 100, 1, "Trading", "Epics: take a team's ask from this gain (P)",
+                            "Accept an ask already on a market when our value minus price and fee is at least this."),
     "announce_board": (0, 0, 1, 1, "Market", "Announce the El Club Board on the big screen",
                        "Off: the board's line is skipped in the announcement rotation, so rival agents are not handed "
                        "the link while we are still building it. Turn it on when we announce the board ourselves."),

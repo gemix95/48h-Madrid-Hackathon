@@ -13,6 +13,8 @@ epic we lack, best value first:
     Unfilled after epics_team_ticks, the card moves to Pícaros;
   - Pícaros: haggle up to min(its list price, our value - epics_dealer_margin, free cash): a deal never costs points
     and fills a level-4 ladder slot.
+Before either: a team's ask already on a market (not ours) whose price plus that market's fee leaves us at least
+epics_take_min_gain is accepted at once (t18 asked 245 for SAL-11 on El Rastro: 259 with the fee, +29 for us).
 One live way per card: a bid is never up while we haggle for the same card, and is cancelled as soon as we hold it
 (two fills would leave a second copy worth a quarter). One haggle at a time, never with a dealer another of our
 agents is talking to. Cash promised to open bids and to the running haggle stays within free cash.
@@ -78,6 +80,23 @@ class Epics:
                 out[refs[0]] = o
         return out
 
+    def _best_ask(self, ref):
+        """(offer, cost with the fee) of the cheapest open ask for one copy of `ref` on a market we may trade on."""
+        ctx, me, best = self.ctx, self.ctx.me.get("id"), None
+        for vid, offers in (getattr(ctx, "boards", None) or {}).items():
+            bps, per_card = ctx.venue_fee(vid) if hasattr(ctx, "venue_fee") else (500, 1)
+            for o in offers:
+                if o.get("to") and o.get("to") != me or o.get("maker") == me:
+                    continue
+                g, w = o.get("give") or {}, o.get("want") or {}
+                cards = [a for a in g.get("assets") or [] if isinstance(a, dict)]
+                if len(cards) != 1 or cards[0].get("ref") != ref or g.get("cash") or w.get("assets") or w.get("types") or not w.get("cash"):
+                    continue
+                cost = w["cash"] + math.ceil(bps * w["cash"] / 10000) + per_card
+                if best is None or cost < best[1]:
+                    best = (o, cost)
+        return best
+
     def _cancel(self, o, why):
         try:
             self.ctx.api.cancel(o["id"])
@@ -128,10 +147,12 @@ class Epics:
             o = bids.get(ref)
             rec = st["bids"].get(ref)
             if o:
-                # unfilled for long enough: the card moves to the dealer (when there is one to talk to). The record
-                # stays FILL_WAIT ticks: a team may have taken the bid in the same tick, and its card arrives next tick
-                if dealer and tick - (rec or {}).get("tick", tick) >= int(S.get("epics_team_ticks", 40)):
-                    self._cancel(o, "unfilled")
+                # unfilled for long enough, or a team's ask now pays: the bid goes. The record stays FILL_WAIT ticks:
+                # a team may have taken the bid in the same tick, and its card arrives next tick
+                ask = self._best_ask(ref)
+                better = ask and value - ask[1] >= float(S.get("epics_take_min_gain", 20))
+                if better or (dealer and tick - (rec or {}).get("tick", tick) >= int(S.get("epics_team_ticks", 40))):
+                    self._cancel(o, "ask_to_take" if better else "unfilled")
                     r = st["bids"].setdefault(ref, {"tick": tick, "price": (o.get("give") or {}).get("cash")})
                     r.update(seen=tick, cancelled=True)
                 continue
@@ -139,6 +160,19 @@ class Epics:
                 continue  # our bid just left the book: it may be settling, the card arrives next tick
             if rec:
                 st["bids"].pop(ref, None)  # expired or cancelled elsewhere
+            # 0) a team already asks a price that pays: take it (the record holds the card's other ways off meanwhile)
+            ask = self._best_ask(ref)
+            if ask and value - ask[1] >= float(S.get("epics_take_min_gain", 20)) and ask[1] <= free and ctx.take_accept():
+                try:
+                    ctx.api.accept(ask[0]["id"])
+                    st["bids"][ref] = {"tick": tick, "seen": tick, "cancelled": True, "taken": ask[0]["id"], "price": ask[1]}
+                    st["team_tried"][ref] = tick
+                    free -= ask[1]
+                    ctx.log("epics", "took_ask", ref=ref, offer=ask[0]["id"], cost=ask[1], value=value,
+                            gain=round(min(TEAM_GAIN_CAP, value - ask[1]), 1))
+                except BazaarError as e:
+                    ctx.log("epics", "take_refused", ref=ref, offer=ask[0]["id"], error=str(e)[:160])
+                continue
             # 1) a team: once per card, when the full +50 is reachable at a price teams resell epics at
             if ref not in st["team_tried"]:
                 p = team_price(value, caps.get(ref), free)
