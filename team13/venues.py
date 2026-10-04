@@ -9,6 +9,9 @@ house: value there scores nobody) is always last, so the list is never empty.
 from __future__ import annotations
 
 
+BID_VENUE = "v10"  # team decision (Sun 10:35): our bids go on t05's 0% market while it is open
+
+
 def _scores(ctx) -> dict:
     return {t.get("team"): t.get("score") or 0 for t in (getattr(ctx, "leaderboard", None) or [])}
 
@@ -28,4 +31,6 @@ def safe_markets(ctx, to: str | None = None) -> list:
         if scores.get(owner, 0) > ours - margin:
             continue  # a close rival: our trade would score for them
         out.append(((v.get("fee_bps") or 0), (v.get("fee_per_card") or 0), scores.get(owner, 0), vid))
-    return [vid for *_, vid in sorted(out)] + ["rastro"]
+    pinned = [v["venue"] for v in getattr(ctx, "venues", None) or [] if v.get("venue") == BID_VENUE
+              and v.get("status", "open") == "open" and v.get("owner") not in (me, to)]
+    return pinned + [vid for *_, vid in sorted(out) if vid not in pinned] + ["rastro"]

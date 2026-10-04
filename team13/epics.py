@@ -28,7 +28,7 @@ import math
 from bazaar_sdk import BazaarError
 from eggs import line as egg_line
 from trader import team_caps
-from venues import safe_markets
+from venues import BID_VENUE, safe_markets
 
 TEAM_GAIN_CAP = 50     # a team trade's gain counts up to 50 (organisers' slide)
 MAX_ROUNDS = 8         # our offers to the dealer before we walk
@@ -69,6 +69,9 @@ def epic_dealer(dealers: list, unlocked) -> tuple | None:
 def bid_venue(ctx) -> str:
     """Where our team bid goes: a 0% market (no per-card fee either) of the team lowest on the leaderboard among those
     below us, so the market points our trade creates go to a team that is no threat; else venues.safe_markets."""
+    pinned = safe_markets(ctx)[0]
+    if pinned == BID_VENUE:
+        return pinned  # the team's pinned market (venues.BID_VENUE)
     scores = {t.get("team"): t.get("score") or 0 for t in (getattr(ctx, "leaderboard", None) or [])}
     me = ctx.me.get("id")
     ours = scores.get(me, (ctx.me.get("score") or {}).get("score") or 0)
