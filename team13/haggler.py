@@ -792,6 +792,17 @@ class Haggler:
         if why:
             ctx.log("haggle", "switch_refused", thread=th["id"], offer=offer.get("id"), dealer=th.get("with"), why=why)
             return
+        if plan.get("side") == "sell":  # never below worth, ladder or not (guard.below_worth)
+            from guard import below_worth
+            g, w = offer.get("give") or {}, offer.get("want") or {}
+            own = {a["id"]: a["ref"] for a in ctx.values.assets} if ctx.values else {}
+            refs = [a.get("ref") if isinstance(a, dict) else own.get(a) for a in w.get("assets") or []]
+            refs = [r for r in refs if r] or ([plan["ref"]] if plan.get("ref") else [])
+            short = below_worth(ctx, refs, g.get("cash") or 0)
+            if short:
+                ctx.log("haggle", "below_worth_refused", thread=th["id"], offer=offer.get("id"), refs=refs,
+                        worth=short[0], price=short[1], reason=reason)
+                return
         try:
             ctx.api.accept(offer["id"])
             price = plan.get("asks", [None])[-1]
