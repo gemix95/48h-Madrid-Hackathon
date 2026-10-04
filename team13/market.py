@@ -101,34 +101,46 @@ def announce_every(tick_seconds, pretest=False) -> int:
     return min(every, ANNOUNCE_PRETEST_EVERY) if pretest else every
 
 
-def stuck_pairs(board: list, me: str | None = None, fee_bps: int = 500, per_card: int = 1) -> list:
+def stuck_pairs(board: list, me: str | None = None, fee_bps: int = 500, per_card: int = 1, makers: dict | None = None) -> list:
     """Asks and bids from different teams where the bid already covers the ask, but this venue's fee blocks the fill.
-    On our 0% market the same prices cross. Returns [(fee_gap, ref, ask, bid, seller, buyer)], closest first.
-    A bid below the ask is left out: our broker only crosses when the bid covers the ask."""
+    On our 0% market the same prices cross. Returns [(fee_gap, ref, ask, bid, seller, buyer, ask_id, bid_id)], closest
+    first. A bid below the ask is left out: our broker only crosses when the bid covers the ask. Boards show makers as
+    pseudonyms; `makers` ({offer id: team}, from the feed's offer.listed events) names the team behind each offer."""
     def fee(price: int) -> int:
         return math.ceil(fee_bps * price / 10000) + per_card
 
     asks, bids = {}, {}
     for o in board or []:
-        if o.get("to") or o.get("maker") == me:
+        maker = (makers or {}).get(o.get("id")) or o.get("maker")
+        if o.get("to") or maker == me:
             continue
         g, w = o.get("give") or {}, o.get("want") or {}
         gives = [a["ref"] for a in g.get("assets") or []] + [t[5:] for t in g.get("types") or [] if t.startswith("card:")]
         wants = [a["ref"] for a in w.get("assets") or []] + [t[5:] for t in w.get("types") or [] if t.startswith("card:")]
         if len(gives) == 1 and not wants and w.get("cash"):
-            asks.setdefault(gives[0], []).append((w["cash"], o.get("maker")))
+            asks.setdefault(gives[0], []).append((w["cash"], maker, o.get("id")))
         elif len(wants) == 1 and not gives and g.get("cash"):
-            bids.setdefault(wants[0], []).append((g["cash"], o.get("maker")))
+            bids.setdefault(wants[0], []).append((g["cash"], maker, o.get("id")))
     out = []
     for ref in set(asks) & set(bids):
-        (ask, seller), (bid, buyer) = min(asks[ref]), max(bids[ref])
+        (ask, seller, ask_id), (bid, buyer, bid_id) = min(asks[ref], key=lambda x: x[0]), max(bids[ref], key=lambda x: x[0])
         if seller != buyer and bid >= ask and ask + fee(ask) > bid:
-            out.append((ask + fee(ask) - bid, ref, ask, bid, seller, buyer))
-    return sorted(out)
+            out.append((ask + fee(ask) - bid, ref, ask, bid, seller, buyer, ask_id, bid_id))
+    return sorted(out, key=lambda x: x[:4])
 
 
-MATCH_PITCH = ("{ref} on {where}: ask {ask}, bid {bid}. The bid covers the ask; their fee blocks the fill. "
-               "Post both on {venue} ({brand}: 0%, 0 P per card) and they cross next tick.")
+# Names both teams, the card, both prices and both offer ids (rivals' brokers do the same, and named lines are the
+# ones agents act on). A side we cannot name (a pseudonym not in the feed) is "a seller" / "a buyer".
+MATCH_PITCH = ("{buyer}: your bid for {ref} at {bid} P (offer {bid_id}, {where}) covers {seller_s} ask at {ask} P "
+               "(offer {ask_id}); only {where}'s fee blocks it. Both post on {venue} (0% fee, 0 P per card): they cross "
+               "next tick.")
+
+
+def match_pitch(where, ref, ask, bid, seller, buyer, ask_id, bid_id, venue) -> str:
+    named = lambda t: bool(t) and bool(TEAM.match(str(t)))
+    return MATCH_PITCH.format(buyer=buyer if named(buyer) else "Buyer", seller_s=f"{seller}'s" if named(seller) else "an",
+                              ref=ref, ask=ask, bid=bid, where=where, venue=venue,
+                              ask_id=ask_id if ask_id is not None else "?", bid_id=bid_id if bid_id is not None else "?")
 # Appended to every invite and nudge: one honest line on how to post on our venue, and where the board is.
 OUTREACH = (" To trade on {venue}: POST /api/offers with \"venue\": \"{venue}\" (0% fee, 0 P per card). "
             "Every card's best price across all markets, live: " + BOARD_URL)
@@ -471,9 +483,8 @@ class Market:
                     f"{l['ref']} on {venue}; every bid is public, the seller accepts the best one, you pay your own bid. "
                     f"Rules and live bids: {BOARD_URL}#auctions")
         elif pairs:
-            where, ref, ask, bid = pairs[0][:4]
-            text = MATCH_PITCH.format(ref=ref, ask=ask, bid=bid, where=where, venue=venue, brand=BRAND)
-            recent[ref] = tick
+            text = match_pitch(*pairs[0], venue=venue)
+            recent[pairs[0][1]] = tick
         elif self.bench_soon():
             text = PRE_TEST.format(fee=ft, venue=venue, brand=BRAND)
         elif cashback:
@@ -725,14 +736,21 @@ class Market:
                 return  # one reward per tick: the offer budget is shared with the trader
 
     def blocked_crosses(self) -> list:
-        """(where, ref, ask, bid, seller, buyer) for pairs a fee is blocking and our 0% book would cross.
-        El Rastro first, then the highest fee, then the tightest gap."""
+        """(where, ref, ask, bid, seller, buyer, ask_id, bid_id) for pairs a fee is blocking and our 0% book would
+        cross; seller and buyer are team ids where the feed names the offer's maker. El Rastro first, then the
+        highest fee, then the tightest gap."""
         ctx = self.ctx
         if int(ctx.S.get("venue_fee_bps") or 0):
             return []
         me, ours = ctx.me.get("id"), ctx.state.get("venue")
         fees = {v.get("venue"): (int(v.get("fee_bps") or 0), int(v.get("fee_per_card") or 0))
                 for v in (ctx.venues or [])}
+        makers = {}  # offer id -> team, from the public feed (the boards only show pseudonyms)
+        for e in (getattr(getattr(ctx, "intel", None), "events", None) or {}).values():
+            if e.get("type") == "offer.listed":
+                o = (e.get("payload") or {}).get("offer") or {}
+                if o.get("id") and o.get("maker"):
+                    makers[o["id"]] = o["maker"]
         ranked = []
         for vid, board in (ctx.boards or {}).items():
             if vid == ours:
@@ -740,10 +758,10 @@ class Market:
             fee_bps, per = fees.get(vid, (500, 1) if vid == "rastro" else (0, 0))
             if not fee_bps and not per:
                 continue
-            for gap, ref, ask, bid, seller, buyer in stuck_pairs(board, me, fee_bps, per):
-                ranked.append((0 if vid == "rastro" else 1, -(fee_bps + 100 * per), gap, vid, ref, ask, bid, seller, buyer))
-        ranked.sort()
-        return [(vid, ref, ask, bid, seller, buyer) for *_, vid, ref, ask, bid, seller, buyer in ranked]
+            for gap, *row in stuck_pairs(board, me, fee_bps, per, makers):
+                ranked.append((0 if vid == "rastro" else 1, -(fee_bps + 100 * per), gap, vid, *row))
+        ranked.sort(key=lambda x: x[:5])
+        return [tuple(r[3:]) for r in ranked]
 
     def _can_outreach(self, tick) -> bool:
         """One unanswered invitation at a time, and two conversation slots left for dealer haggling."""
@@ -783,7 +801,7 @@ class Market:
         day = ctx.clock.get("today", "day")
         nudged = st.setdefault("nudged", {})
         venue = st.get("venue") or "v03"
-        for where, ref, ask, bid, seller, buyer in rows:
+        for where, ref, ask, bid, seller, buyer, *_ in rows:
             sides = (
                 (seller, "ask", ask, buyer, bid,
                  f"POST /api/offers. Set venue to {venue}. give your {ref} card. want cash {ask}."),
