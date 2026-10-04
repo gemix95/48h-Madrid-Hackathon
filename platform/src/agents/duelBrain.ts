@@ -17,6 +17,9 @@ import { duelSurplus } from "../game/scoring.js";
 
 export const RIVAL_WEIGHT_PRIOR = { seller: 2.1, buyer: 3.6 };
 
+const LIVE_STATUSES = new Set(["open", "active", "live", "running", "negotiating"]);
+export const isLiveDuel = (d: Duel) => LIVE_STATUSES.has(d.status ?? "open");
+
 export interface DuelKnobs {
   rounds: number;      // our offers before we reach the floor
   anchor: number;      // opening surplus as a share of the limit

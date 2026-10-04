@@ -1,6 +1,6 @@
 import type { Agent, Ctx } from "./base.js";
 import { decide } from "./base.js";
-import { decideDuel, duelMessage, DEFAULT_DUEL_KNOBS } from "./duelBrain.js";
+import { decideDuel, duelMessage, isLiveDuel, DEFAULT_DUEL_KNOBS } from "./duelBrain.js";
 
 export class DuelAgent implements Agent {
   id = "duel" as const;
@@ -13,7 +13,7 @@ export class DuelAgent implements Agent {
     const w = ctx.world;
     if (!w.open || w.tick === this.lastTick) return;
     this.lastTick = w.tick;
-    const live = w.duels.filter((d) => d.status === "open" || d.status === "live" || d.status === "active");
+    const live = w.duels.filter(isLiveDuel);
     for (const d of live) {
       const a = decideDuel(d, w.tick, this.knobs);
       const head = `${d.role === "seller" ? "Selling" : "Buying"} “${d.item}” vs ${d.rival}`;
@@ -32,7 +32,7 @@ export class DuelAgent implements Agent {
 
   status(ctx: Ctx) {
     const w = ctx.world;
-    const live = w.duels.filter((d) => d.status === "open");
+    const live = w.duels.filter(isLiveDuel);
     return { live: live.length, finished: w.duelsDone.length };
   }
 }

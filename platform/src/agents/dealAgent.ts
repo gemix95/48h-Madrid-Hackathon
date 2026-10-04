@@ -104,7 +104,15 @@ export class DealAgent implements Agent {
   private async haggle(ctx: Ctx, v: Values) {
     const w = ctx.world;
     for (const slot of this.ladder) {
-      if (!this.dealers.has(slot.dealer) || !slot.target || slot.dealsToday >= 3) continue;
+      if (!slot.target || slot.dealsToday >= 3) continue;
+      if (!this.dealers.has(slot.dealer)) {
+        await decide(ctx, "deal", {
+          kind: "haggle_plan", title: `Would haggle with ${slot.dealerName} for ${slot.target.label}`,
+          why: `worth ${slot.target.value.toFixed(0)} P to us, likely ~${slot.target.expected} P, cap ${Math.min(slot.target.cap, w.me!.cash)} P. Not handed to this agent (DEAL_DEALERS), so the Python agents keep this dealer.`,
+          worth: slot.target.gain,
+        }, undefined, 120);
+        continue;
+      }
       const h = this.haggles.get(slot.dealer);
       if (!h) {
         const cap = Math.min(slot.target.cap, w.me!.cash);

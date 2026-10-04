@@ -12,7 +12,7 @@ import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Runner } from "../engine/runner.js";
 import { album, duelStats, moves, rivals, scoreStory, timeline, todayTrades } from "../engine/insights.js";
-import { decideDuel } from "../agents/duelBrain.js";
+import { decideDuel, isLiveDuel } from "../agents/duelBrain.js";
 import { compare } from "../sim/marketSim.js";
 import type { DealAgent } from "../agents/dealAgent.js";
 import type { MarketAgent } from "../agents/marketAgent.js";
@@ -70,7 +70,7 @@ function snapshot() {
     agents: runner.agents.map((a) => ({ id: a.id, name: a.name, role: a.role, mode: runner.modes[a.id], status: a.status(ctx), recent: runner.log.recent(6, a.id) })),
     decisions: runner.log.recent(150),
     duels: {
-      live: w.duels.filter((d) => d.status === "open").map((d) => ({ ...d, suggestion: decideDuel(d, w.tick) })),
+      live: w.duels.filter(isLiveDuel).map((d) => ({ ...d, suggestion: decideDuel(d, w.tick) })),
       stats: duelStats(w),
     },
     deal: { ladder: deal.ladder, opportunities: deal.opportunities.slice(0, 15).map((o) => ({ id: o.offer.id, maker: o.offer.maker, venue: o.offer.venue, score: +o.score.toFixed(1), why: o.why, give: o.offer.give, want: o.offer.want })), minGain: deal.minGain, trades: todayTrades(w).slice(0, 40) },
