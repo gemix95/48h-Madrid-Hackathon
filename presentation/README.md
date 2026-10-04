@@ -13,6 +13,7 @@ Published deck (edit and present there): https://claude.ai/artifact/5ckQkeTEzg6x
 | 6 | The problem isn't the tech | `slides/lesson.html` |
 | 7 | ¡Gracias! rivals, arena builders, Nova, Anthropic Madrid | `slides/thanks.html` |
 | 8 | Spa-Francorchamps 1991: Schumacher's first race. DNF costs you a race; how you drive wins you the championship | `slides/joke.html` |
+| 9 | Links: our GitHub, El Club Board, two more to come | `slides/links.html` |
 
 Speaker notes are the `<aside>` at the end of each slide. Images: `assets/<id>.<ext>` for each `/_blob/<id>` in a slide
 (the phone screenshot of the board, the Schumacher photo).
