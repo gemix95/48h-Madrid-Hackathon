@@ -19,3 +19,4 @@ dashboard/.password
 .venv/
 broker.env
 anthropic.env
+reports/session_parts/
