@@ -38,7 +38,8 @@ class Limiter {
   }
 }
 
-const sharedLimiter = new Limiter(4, 12);
+// the server agents trade on the same key and its 5 requests/s: this process keeps well under a third of that
+const sharedLimiter = new Limiter(Number(process.env.BAZAAR_RPS ?? 1.5), 6);
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

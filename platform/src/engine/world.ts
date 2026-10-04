@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { dirname, join } from "node:path";
 import { Bazaar, BazaarError } from "../sdk/bazaar.js";
 import type { Catalog, Clock, Dealer, Duel, FeedEvent, Leaderboard, Me, Offer, ScheduleItem, Thread, Venue } from "../sdk/types.js";
 import { Values } from "../game/values.js";
@@ -98,23 +99,54 @@ export class World {
     }
   }
 
+  private reservedCfg: Record<string, any> | null = null;
+
+  /** reserved.json as teammates last pushed it to main (they edit it there), else the local file. */
   loadReserved() {
-    if (!this.reservedFile || !existsSync(this.reservedFile)) return;
-    try {
-      const r = JSON.parse(readFileSync(this.reservedFile, "utf8"));
-      const s = new Set<string | number>();
-      for (const k of ["refs", "assets", "asset_ids", "cards"]) for (const x of r[k] ?? []) s.add(x);
-      this.reserved = s;
-    } catch {
-      /* keep the last good list */
+    const repo = this.reservedFile ? dirname(dirname(this.reservedFile)) : null;
+    if (repo && existsSync(join(repo, ".git")) && this.due("reserved_git", 120_000)) {
+      execFile("git", ["-C", repo, "fetch", "-q", "origin", "main"], { timeout: 30_000 }, () => {
+        execFile("git", ["-C", repo, "show", "origin/main:team13/reserved.json"], { timeout: 10_000 }, (err, out) => {
+          if (err) return;
+          try {
+            this.reservedCfg = JSON.parse(out);
+            this.applyReserved();
+          } catch {
+            /* a typo keeps the last good list */
+          }
+        });
+      });
     }
+    if (!this.reservedCfg && this.reservedFile && existsSync(this.reservedFile)) {
+      try {
+        this.reservedCfg = JSON.parse(readFileSync(this.reservedFile, "utf8"));
+      } catch {
+        /* keep the last good list */
+      }
+    }
+    this.applyReserved();
+  }
+
+  /** Same rules as team13/reserved.py: refs, asset ids, and every copy of a common we hold twice. */
+  private applyReserved() {
+    const r = this.reservedCfg;
+    if (!r) return;
+    const s = new Set<string | number>();
+    for (const k of ["refs", "assets", "asset_ids", "cards"]) for (const x of r[k] ?? []) s.add(x);
+    if (r.common_spares && this.me) {
+      const cards = this.me.assets.filter((a) => a.kind === "card" && a.rarity === "common");
+      const n = new Map<string, number>();
+      for (const a of cards) n.set(a.ref!, (n.get(a.ref!) ?? 0) + 1);
+      for (const a of cards) if ((n.get(a.ref!) ?? 0) >= 2) s.add(a.id);
+    }
+    this.reserved = s;
   }
 
   /** The cheap, frequent reads: once per tick while the doors are open, slower when closed. */
   async refresh(hasKey: boolean) {
     const open = this.open;
     const tickMs = (this.clock?.tick_seconds ?? 15) * 1000;
-    const c = await this.guard("clock", () => this.api.clock());
+    const c = this.due("clock", 5000) ? await this.guard("clock", () => this.api.clock()) : null;
     if (c) {
       this.clock = c;
       const r = String(c.round);
@@ -163,6 +195,7 @@ export class World {
       const me = await this.guard("me", () => this.api.me());
       if (me) {
         this.me = me;
+        this.applyReserved();
         if (this.catalog) {
           if (!this.values) this.values = new Values(this.catalog, me.affinity, me.assets);
           else this.values.update(me.affinity, me.assets);

@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { BazaarError, type Bazaar, type Broker } from "../sdk/bazaar.js";
 import type { World } from "../engine/world.js";
 import type { AgentId, Decision, DecisionLog, Mode } from "../engine/log.js";
@@ -18,6 +22,20 @@ export interface Agent {
   role: string;
   step(ctx: Ctx): Promise<void>;
   status(ctx: Ctx): Record<string, unknown>;
+}
+
+const COUNCIL = resolve(dirname(fileURLToPath(import.meta.url)), "../../../team13/council.py");
+
+/** Every live action goes on El Consejo (AGENTS.md), so teammates' agents and humans do not take the same deal. */
+function postCouncil(text: string, topic: string) {
+  if (!existsSync(COUNCIL)) return;
+  try {
+    const p = spawn("python3", [COUNCIL, "post", text.slice(0, 400), "--topic", topic], { stdio: "ignore", detached: true });
+    p.on("error", () => {});
+    p.unref();
+  } catch {
+    /* the board is best effort; the decision log has it */
+  }
 }
 
 type Draft = Pick<Decision, "kind" | "title" | "why"> & Partial<Pick<Decision, "numbers" | "worth">>;
@@ -53,6 +71,7 @@ export async function decide(ctx: Ctx, agent: AgentId, d: Draft, action?: () => 
   try {
     await action();
     ctx.log.add({ ...d, agent, tick, mode, outcome: "done" });
+    postCouncil(`TS ${agent} agent: ${d.title}. ${d.why}`, agent === "deal" ? "deals" : agent);
     return true;
   } catch (e) {
     const err = e instanceof BazaarError ? `${e.code}${e.message ? ": " + e.message : ""}` : String(e);

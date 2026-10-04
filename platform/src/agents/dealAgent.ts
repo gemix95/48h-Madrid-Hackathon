@@ -1,6 +1,7 @@
 import type { Agent, Ctx } from "./base.js";
 import { decide } from "./base.js";
 import { evaluateOffer, haggleBuyStep, type OfferEval, DEFAULT_HAGGLE } from "./dealBrain.js";
+import { isLiveDuel } from "./duelBrain.js";
 import type { Dealer, DealerMenuItem, Thread } from "../sdk/types.js";
 import type { Values } from "../game/values.js";
 
@@ -27,6 +28,10 @@ export class DealAgent implements Agent {
   minGain = Number(process.env.DEAL_MIN_GAIN ?? 3);
   /** Dealers this agent may haggle with live; the Python agents keep the others (one conversation per dealer). */
   dealers = new Set((process.env.DEAL_DEALERS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  /** Off by default: Workshop pulls are reserved, but only the server's state.json knows which cards they are. */
+  sellCards = process.env.DEAL_SELL_CARDS === "1";
+  /** Cash the server hagglers keep for their ladder deals. */
+  cashFloor = Number(process.env.DEAL_CASH_FLOOR ?? 100);
   opportunities: OfferEval[] = [];
   ladder: LadderSlot[] = [];
   private lastTick = -1;
@@ -55,19 +60,24 @@ export class DealAgent implements Agent {
         if (o.to && o.to !== me.id) continue;
         const e = evaluateOffer({ ...o, venue: o.venue ?? venue }, v, me.assets.filter((a) => a.kind === "card"), (x) => w.venueFee(x), w.reserved);
         if (!e) continue;
-        if (e.cashOut > me.cash) continue;
+        if (e.cashOut > me.cash - this.cashFloor) continue;
+        if (e.giveAssets.length && !this.sellCards) continue;
         evals.push(e);
       }
     }
     for (const o of w.myOffers.filter((x) => x.to === me.id && x.maker !== me.id)) {
       const e = evaluateOffer(o, v, me.assets.filter((a) => a.kind === "card"), (x) => w.venueFee(x), w.reserved);
-      if (e && e.cashOut <= me.cash) evals.push(e);
+      if (e && e.cashOut <= me.cash - this.cashFloor && (!e.giveAssets.length || this.sellCards)) evals.push(e);
     }
     evals.sort((a, b) => b.score - a.score);
     this.opportunities = evals.slice(0, 30);
     const best = evals.find((e) => e.score >= this.minGain);
     if (!best) return;
     const title = `Take offer #${best.offer.id} from ${best.offer.maker} on ${best.offer.venue}: +${best.score.toFixed(1)}`;
+    if (ctx.mode("deal") === "live" && w.duels.some(isLiveDuel)) {
+      await decide(ctx, "deal", { kind: "trade_wait", title, why: "a duel is live: the team's one accept per tick goes to the duel agents first", worth: best.score });
+      return;
+    }
     if (ctx.mode("deal") === "live" && !ctx.takeAccept()) {
       await decide(ctx, "deal", { kind: "trade_wait", title, why: "the team's one accept this tick is taken; trying next tick", worth: best.score });
       return;
@@ -150,7 +160,7 @@ export class DealAgent implements Agent {
         await decide(ctx, "deal", { kind: "haggle_trick", title: `${slot.dealerName} offered a different card`, why: `we asked for ${wantRef}; the structured offer gives something else. Never accept it.` }, undefined, 4);
       }
       if (step.kind === "accept") {
-        if (!ctx.takeAccept()) continue;
+        if (w.duels.some(isLiveDuel) || !ctx.takeAccept()) continue;
         await decide(ctx, "deal", { kind: "haggle_accept", title: `${slot.dealerName}: take ${h.label} at ${step.price} P`, why: step.why }, () => ctx.api.accept(step.offerId), 1);
       } else if (step.kind === "offer") {
         await decide(ctx, "deal", { kind: "haggle_offer", title: `${slot.dealerName}: offer ${step.price} P for ${h.label}`, why: step.why },
