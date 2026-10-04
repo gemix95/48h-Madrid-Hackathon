@@ -545,6 +545,10 @@ class Haggler:
                 self._opens(d["id"]).append(ctx.clock.get("t_hours") or 0)
                 ctx.log("haggle", "opened", dealer=d["id"], topic=topic, plan=plan)
                 th = ctx.api.thread(th["id"])
+                # this tick's thread list is read once: without this the next dealer's choose_topic sees the card as
+                # free and offers it too (CHA-09 went on sale to Chato and Pilar at once)
+                ctx.threads.append({**th, "status": th.get("status") or "open", "topic": th.get("topic") or topic,
+                                    "with": th.get("with") or d["id"], "kind": th.get("kind") or "persona"})
             self.negotiate(th, d)
         for th in ctx.threads:  # bookkeeping for conversations that ended
             plan = ctx.state.get("plans", {}).get(str(th["id"]))
