@@ -25,6 +25,7 @@ from __future__ import annotations
 import math
 
 from bazaar_sdk import BazaarError
+from eggs import line as egg_line
 from trader import team_caps
 
 TEAM_GAIN_CAP = 50     # a team trade's gain counts up to 50 (organisers' slide)
@@ -209,8 +210,10 @@ class Epics:
             st["dealer_tried"][ref] = tick
             st["haggle"] = {"ref": ref, "dealer": did, "thread": th["id"], "price": start, "cap": cap, "list": list_price,
                             "value": value, "rounds": 0, "last_tick": tick, "phase": "haggle", "held_before": v.held[ref]}
+            extra = egg_line(ctx.state, did)  # one line of Madrid lore, once ever (eggs.py)
             try:
-                ctx.api.say(th["id"], f"Buenas. I'm after {ref}. {start} primas, cash in hand.", price=start)
+                ctx.api.say(th["id"], f"Buenas. I'm after {ref}. {start} primas, cash in hand." + (f" {extra}" if extra else ""),
+                            price=start)
             except BazaarError:
                 pass
             ctx.log("epics", "haggle_start", ref=ref, dealer=did, price=start, cap=cap, value=value, thread=th["id"])

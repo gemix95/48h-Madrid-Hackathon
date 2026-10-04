@@ -25,6 +25,7 @@ import os
 import random
 
 from bazaar_sdk import BazaarError
+from eggs import line as egg_line
 
 
 def allowed_dealer_levels(S: dict) -> set[int] | None:
@@ -674,6 +675,11 @@ class Haggler:
         if dealer.get("id") == "banco" and not looks_spanish(text):
             text = texts[(plan["k"] + 1) % len(texts)].format(name="Don Ernesto", p=nxt)
             source = "rules-es"
+        if plan["k"] == 0:  # the first message of a conversation may carry one line of Madrid lore (eggs.py), once ever
+            extra = egg_line(ctx.state, dealer.get("id"))
+            if extra:
+                text = f"{text} {extra}"
+                ctx.log("haggle", "egg_line", dealer=dealer.get("id"), text=extra)
         try:
             ctx.api.say(th["id"], text, price=nxt)
             plan["offers"].append(nxt)
