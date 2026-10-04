@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-BLOB = "/_blob/1a635214ac7e8086231bfb20407f7da8"  # the phone screenshot in the published deck -> board-phone.jpg
+ASSETS = HERE / "assets"  # each /_blob/<id> of the published deck, saved as assets/<id>.<ext>
 
 
 def main():
@@ -17,7 +17,9 @@ def main():
     fonts = "".join(f'<link rel="stylesheet" href="{f["href"]}">' for f in deck["faces"].values() if f.get("href"))
     slides, notes = [], []
     for sid in deck["order"]:
-        src = (HERE / "slides" / f"{sid}.html").read_text().replace(BLOB, "board-phone.jpg")
+        src = (HERE / "slides" / f"{sid}.html").read_text()
+        for a in ASSETS.glob("*"):
+            src = src.replace(f"/_blob/{a.stem}", f"assets/{a.name}")
         m = re.search(r"<aside>(.*?)</aside>", src, re.S)
         notes.append(m.group(1).strip() if m else "")
         src = re.sub(r"<aside>.*?</aside>", "", src, flags=re.S)
