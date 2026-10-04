@@ -6,6 +6,7 @@ Published deck (edit and present there): https://claude.ai/artifact/5ckQkeTEzg6x
 |---|---|---|
 | 1 | Day 1: 1st place. Today: 16th. What's wrong with you guys? | `slides/intro.html` |
 | 1b | What worked on day 1: know who wants what, buy cheap and never sell a page, our dashboard (image `friday-album.png`) | `slides/friday.html` |
+| 1b | What worked on Day 1: 30 of 30 in negotiation (Sergio) | `slides/day1.html` |
 | 2 | We actually offered a whole fintech ecosystem: cashback, flipper, loan desk, reverse Tinder | `slides/tried.html` |
 | 3 | One idea that worked*: arbitrage (*but came too late) | `slides/arbitrage.html` |
 | 4 | Our desperate attempt to add value to our market: El Club Board | `slides/clubboard.html` |
