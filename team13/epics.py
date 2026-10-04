@@ -13,8 +13,9 @@ epic we lack, best value first:
     Unfilled after epics_team_ticks, the card moves to Pícaros;
   - Pícaros: haggle up to min(its list price, our value - epics_dealer_margin, free cash): a deal never costs points
     and fills a level-4 ladder slot.
-Before either: a team's ask already on a market (not ours) whose price plus that market's fee leaves us at least
-epics_take_min_gain is accepted at once (t18 asked 245 for SAL-11 on El Rastro: 259 with the fee, +29 for us).
+A team's ask already on a market (not ours) is accepted when its price plus that market's fee banks the full +50,
+or, once our own bid for that card had its chance (or no bid would go up), when it still leaves epics_take_min_gain
+(t18 asked 245 for SAL-11 on El Rastro: 259 with the fee, +29; our bid at 238 would bank +50 first).
 One live way per card: a bid is never up while we haggle for the same card, and is cancelled as soon as we hold it
 (two fills would leave a second copy worth a quarter). One haggle at a time, never with a dealer another of our
 agents is talking to. Cash promised to open bids and to the running haggle stays within free cash.
@@ -151,7 +152,7 @@ class Epics:
                 # unfilled for long enough, or a team's ask now pays: the bid goes. The record stays FILL_WAIT ticks:
                 # a team may have taken the bid in the same tick, and its card arrives next tick
                 ask = self._best_ask(ref)
-                better = ask and value - ask[1] >= float(S.get("epics_take_min_gain", 20))
+                better = ask and value - ask[1] >= TEAM_GAIN_CAP  # an ask that banks the full +50 beats waiting
                 if better or (dealer and tick - (rec or {}).get("tick", tick) >= int(S.get("epics_team_ticks", 40))):
                     self._cancel(o, "ask_to_take" if better else "unfilled")
                     r = st["bids"].setdefault(ref, {"tick": tick, "price": (o.get("give") or {}).get("cash")})
@@ -161,9 +162,14 @@ class Epics:
                 continue  # our bid just left the book: it may be settling, the card arrives next tick
             if rec:
                 st["bids"].pop(ref, None)  # expired or cancelled elsewhere
-            # 0) a team already asks a price that pays: take it (the record holds the card's other ways off meanwhile)
+            # 0) a team already asks a price that pays: take it (the record holds the card's other ways off meanwhile).
+            # The full +50 at once; less only after our own bid had its chance, or when no bid of ours would go up
             ask = self._best_ask(ref)
-            if ask and value - ask[1] >= float(S.get("epics_take_min_gain", 20)) and ask[1] <= free and ctx.take_accept():
+            gain = (value - ask[1]) if ask else None
+            no_bid = team_price(value, caps.get(ref), free) < int(S.get("epics_team_min", 190))
+            takeable = ask and ask[1] <= free and (gain >= TEAM_GAIN_CAP or (
+                gain >= float(S.get("epics_take_min_gain", 20)) and (ref in st["team_tried"] or no_bid)))
+            if takeable and ctx.take_accept():
                 try:
                     ctx.api.accept(ask[0]["id"])
                     st["bids"][ref] = {"tick": tick, "seen": tick, "cancelled": True, "taken": ask[0]["id"], "price": ask[1]}

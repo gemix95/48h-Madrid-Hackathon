@@ -174,14 +174,25 @@ c.threads = [{"kind": "persona", "with": "picaros", "status": "open"}]
 epics.Epics(c).step()
 r.append(check("busy dealer: wait", c.state["epics"]["haggle"] is None))
 
-# a team's ask that pays is taken at once: SAL-11 at 245 on El Rastro costs 259 with the fee (+29 for us)
+# a team's ask that banks the full +50 is taken at once: SAL-11 at 180 on a 0% market
+c = Ctx()
+c.boards = {"v07": [{"id": 31, "give": {"assets": [{"id": 1063, "ref": "SAL-11"}]}, "want": {"cash": 180}}]}
+c.venue_fee = lambda vid: (0, 0)
+epics.Epics(c).step()
+r.append(check("ask at 180 (+50) taken at once", 31 in c.api.accepted and not any(o["want"]["types"] == ["card:SAL-11"] for o in c.api.offers)))
+# SAL-11 at 245 on El Rastro costs 259 with the fee (+29): our 200 bid goes first; unfilled, the ask is taken
 c = Ctx()
 c.boards = {"rastro": [{"id": 20117, "give": {"assets": [{"id": 1063, "ref": "SAL-11"}]}, "want": {"cash": 245}}]}
 c.venue_fee = lambda vid: (500, 1)
 m = epics.Epics(c)
 m.step()
-r.append(check("ask at 245 (+29 with the fee) taken, no bid for SAL-11", 20117 in c.api.accepted
-               and not any(o["want"]["types"] == ["card:SAL-11"] for o in c.api.offers), (c.api.accepted, c.api.offers)))
+r.append(check("ask at 245 (+29) waits: our bid goes up first", 20117 not in c.api.accepted
+               and any(o["want"]["types"] == ["card:SAL-11"] for o in c.api.offers)))
+c.clock["tick"] += c.S["epics_team_ticks"]
+m.step()
+c.clock["tick"] += epics.FILL_WAIT + 1
+m.step()
+r.append(check("bid unfilled: the +29 ask is taken", 20117 in c.api.accepted, c.api.accepted))
 c.clock["tick"] += 1
 m.step()
 r.append(check("no dealer haggle for SAL-11 while the taken ask settles", (c.state["epics"]["haggle"] or {}).get("ref") != "SAL-11"))
@@ -195,12 +206,12 @@ c.boards = {"rastro": [{"id": 1, "give": {"assets": [{"id": 9, "ref": "SAL-11"}]
 c.venue_fee = lambda vid: (500, 1)
 epics.Epics(c).step()
 r.append(check("ask at 260 (274 with fee, +14) not taken", 1 not in c.api.accepted))
-# our bid is up and a paying ask appears: the bid goes first, the ask is taken after the wait
+# our bid is up and an ask that banks +50 appears: the bid goes first, the ask is taken after the wait
 c = Ctx()
 m = epics.Epics(c)
 m.step()
 bid_id = next(o["id"] for o in c.api.offers if o["want"]["types"] == ["card:SAL-11"])
-c.boards = {"v07": [{"id": 77, "give": {"assets": [{"id": 5, "ref": "SAL-11"}]}, "want": {"cash": 230}}]}
+c.boards = {"v07": [{"id": 77, "give": {"assets": [{"id": 5, "ref": "SAL-11"}]}, "want": {"cash": 190}}]}
 c.venue_fee = lambda vid: (0, 0)
 c.clock["tick"] += 1
 m.step()
