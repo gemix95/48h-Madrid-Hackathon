@@ -470,7 +470,7 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
       <a href="#overview">Overview</a><a href="#strategy">Strategy</a><a href="#deals">Deals</a><a href="#ledger">Ledger</a>
       <a href="#duels">Duels<span class="pulse" id="duels-pulse" style="display:none">0</span></a>
       <a href="#album">Album</a><a href="#workshop">Workshop</a>
-      <a href="#market">Market</a><a href="#arbitrage">Arbitrage</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a><a href="#council">Council</a>
+      <a href="#market">Market</a><a href="#arbitrage">Arbitrage</a><a href="#intel">Intel</a><a href="#rivals">Rivals</a><a href="#agent">Agent</a><a href="#mine" id="mine-link">Sergio's agent</a><a href="#council">Council</a>
     </nav>
   </header>
 
@@ -685,6 +685,16 @@ nav a.on { background: var(--surface-2); color: var(--text-primary); font-weight
       <section class="card s7"><h2>The story <span class="hint">newest first · in plain words</span></h2><div class="chips" id="brain-filter"></div><div id="brain" class="story"></div></section>
     </div>
     <div id="brain-stats" style="display:none"></div>
+  </main>
+
+  <main class="tab" id="tab-mine">
+    <section class="card hero" id="mine-now"></section>
+    <div class="grid" style="margin-top:16px">
+      <section class="card s12"><h2>Talking now <span class="hint">its dealer and team conversations, our offers vs their asks</span></h2><div id="mine-convos"></div></section>
+      <section class="card s12"><h2>Offers it has out <span class="hint">what it listed or bid on a market, live from our open offers</span></h2><div id="mine-offers"></div></section>
+      <section class="card s6"><h2>Deals and walk-aways <span class="hint">newest first</span></h2><div id="mine-outcomes" class="story"></div></section>
+      <section class="card s6"><h2>Everything it did <span class="hint">newest first · in plain words</span></h2><div id="mine-story" class="story"></div><div id="mine-quiet" class="muted" style="font-size:12px;margin-top:8px"></div></section>
+    </div>
   </main>
 
   <main class="tab" id="tab-ledger">
@@ -2878,6 +2888,75 @@ function ledgerTab(d) {
   if (sc) sc.scrollTop = kept;
 }
 
+// ---------- Sergio's agent: one teammate's agent on its own (dashboard/agentview.py) ----------
+function mineLine(r) {  // [sentence, why]: story() plus the arbitrage and walk-away lines it does not know
+  const k = `${r.module}.${r.action}`;
+  if (k === "haggle.moved_on") return [`Walked away from the dealer`, esc(r.why || r.reason || "")];
+  if (k === "arb.start") return [`Arbitrage: asked ${esc(r.dealer)} for <b>${esc(r.ref)}</b> at ${r.price} P`, `a team bids ${r.bid_price} P; our cap ${r.cap} P`];
+  if (k === "arb.bought") return [`✓ Arbitrage: <b>bought ${esc(r.ref)} for ${r.price} P</b>`, `cap ${r.cap} P`];
+  if (k === "arb.sold" || k === "arb.resold") return [`✓ Arbitrage: <b>sold ${esc(r.ref)} for ${r.price} P</b>`, r.score != null ? `score ${r.score}` : ""];
+  if (k.startsWith("arb.")) return [`Arbitrage: ${esc((r.action || "").replace(/_/g, " "))}${r.ref ? ` ${esc(r.ref)}` : ""}`, ""];
+  if (k === "trade.haggle_ended") return [`A negotiation with another team ended`, esc(r.status || "")];
+  return story(r);
+}
+function mineTab(d) {
+  const a = d.my_agent;
+  if (!a || !$("mine-now")) return;
+  const who = (a.name || "sergio").replace(/^./, c => c.toUpperCase());
+  $("mine-link").textContent = `${who}'s agent`;
+  const recs = a.decisions || [], me = d.me?.id, threads = d.threads?.threads || [];
+  const byId = new Map(threads.map(t => [String(t.id), t]));
+  const live = new Map(((d.offers?.offers) || []).map(o => [String(o.id), o]));
+  const names = Object.fromEntries((d.leaderboard?.teams || []).map(t => [t.team, t.name]));
+  const dealerName = id => ((d.dealers?.personas || []).find(p => p.id === id)?.name || id || "dealer");
+  const last = recs[recs.length - 1], age = a.state_age;
+  const up = age != null && age < 120;
+  const color = up ? "var(--good)" : "var(--critical)";
+  const over = a.overrides || {};
+  const deals = (a.outcomes || []).filter(r => /deal|accept|bought|sold/.test(r.action || "")).length;
+  $("mine-now").innerHTML = `<div><div class="pulse" style="background:${color};color:${color}"></div></div>
+    <div><div class="headline">${who}'s agent ${up ? "is running" : age == null ? "has no state file here" : `last saved ${Math.round(age / 60)} min ago`}</div>
+    <div class="sub">${last ? `${hm(new Date(last.ts * 1000))} · ${mineLine(last)[0].replace(/<[^>]+>/g, "")}` : "no decisions yet"}</div>
+    <div class="sub">role ${esc(over.AGENT_ROLE || "from the server env")} · ${deals} deal${deals === 1 ? "" : "s"} in this log window${d.my_agent_error ? ` · ⚠ ${esc(d.my_agent_error)}` : ""}</div></div>
+    <div class="side"><b>${Object.keys(a.plans || {}).length + Object.keys(a.team_haggles || {}).length}</b>talking · <b>${Object.keys(a.listings || {}).length}</b>offers</div>`;
+
+  // talking now: its dealer plans and team haggles, with the last messages of each thread
+  const conv = [
+    ...Object.entries(a.plans || {}).map(([tid, p]) => ({ t: byId.get(tid), tid, p, kind: "dealer" })),
+    ...Object.entries(a.team_haggles || {}).map(([tid, H]) => ({ t: byId.get(tid), tid, p: H, kind: "team" })),
+  ];
+  $("mine-convos").innerHTML = conv.length ? conv.map(({ t, tid, p, kind }) => {
+    const title = kind === "dealer" ? dealerName(p.dealer || t?.with) : (names[p.maker] || p.maker || t?.with);
+    const item = kind === "dealer" ? (p.ref || p.pack || Object.values(Object.values(t?.topic || {})[0] || {}).join(" ")) : p.ref;
+    const side = kind === "dealer" ? p.side : p.side;
+    const limits = kind === "dealer"
+      ? `${side === "buy" ? `opens ${p.lo} P, never above <b>${p.hi} P</b>` : `asks from ${p.hi} P, never below <b>${p.lo} P</b>`}${p.worth != null ? ` · worth ${p.worth} P to us` : p.cost != null ? ` · costs us ${p.cost} P` : ""}`
+      : `they post ${p.posted} P · our limit <b>${p.limit} P</b> · on ${esc(p.venue || "–")}`;
+    const ours = (p.offers || []).join(" → ") || (p.last ?? p.price ?? "–"), theirs = (p.asks || []).filter(x => x != null).join(" → ") || "–";
+    const msgs = (t?.messages || []).slice(-3).map(m => { const u = m.sender === me;
+      return `<div class="bubble ${u ? "us" : ""}"><div class="who">${u ? "Team 13" : esc(title)} · ${msgPrice(m) ?? "–"} P${m.offer?.final ? " · FINAL" : ""}</div>${esc(m.text || "")}</div>`; }).join("");
+    return `<div style="border-top:1px solid var(--grid);padding:10px 0">
+      <div><b>${esc(title)}</b> · ${esc(side || "")} <b>${esc(item || "")}</b> <span class="muted">thread #${tid}${t ? ` · ${t.status}` : ""}</span></div>
+      <div class="muted" style="font-size:12px;margin:4px 0">${limits}</div>
+      <div style="font-size:13px"><span style="color:var(--series-1)">●</span> us ${esc(String(ours))} &nbsp; <span style="color:var(--series-2)">●</span> them ${esc(String(theirs))}</div>${msgs}</div>`;
+  }).join("") : `<div class="empty">Not talking to anyone right now.</div>`;
+
+  // offers it has out: its listings, checked against our open offers
+  const L = Object.entries(a.listings || {}).sort((x, y) => (y[1].tick || 0) - (x[1].tick || 0));
+  $("mine-offers").innerHTML = L.length ? `<div style="overflow-x:auto"><table><thead><tr><th>Offer</th><th>What</th><th>Card</th><th>Price</th><th>Limit</th><th>Market</th><th>Since</th><th>Status</th></tr></thead><tbody>
+    ${L.map(([oid, x]) => `<tr><td class="num">#${esc(oid)}</td><td>${x.kind === "bid" ? "buy" : "sell"}</td><td><b>${esc(x.ref)}</b></td>
+      <td class="num">${P(x.price)}</td><td class="num">${x.floor != null ? `${x.kind === "bid" ? "≤" : "≥"} ${P(x.floor)}` : "–"}</td><td>${esc(x.venue || "rastro")}</td>
+      <td class="num">tick ${x.born ?? x.tick ?? "–"}</td><td>${live.has(oid) ? "live" : '<span class="muted">gone</span>'}</td></tr>`).join("")}
+    </tbody></table></div>` : `<div class="empty">No offers out.</div>`;
+
+  const line = r => { const [s, why] = mineLine(r);
+    return `<div><span class="t">${hm(new Date(r.ts * 1000))}</span> ${s}${why ? `<div class="muted" style="font-size:12px">${why}</div>` : ""}</div>`; };
+  $("mine-outcomes").innerHTML = (a.outcomes || []).slice().reverse().slice(0, 60).map(line).join("") || `<div class="empty">No deal and no walk-away yet.</div>`;
+  $("mine-story").innerHTML = recs.slice().reverse().slice(0, 80).map(line).join("") || `<div class="empty">Nothing yet.</div>`;
+  const q = Object.entries(a.quiet || {}).sort((x, y) => y[1] - x[1]);
+  $("mine-quiet").textContent = q.length ? `Not shown (counted): ${q.map(([k, n]) => `${k.replace(/_/g, " ")} ×${n}`).join(", ")}` : "";
+}
+
 // ---------- main loop ----------
 function showTab() {
   const id = (location.hash || "#overview").slice(1);
@@ -2911,12 +2990,14 @@ async function refresh() {
       d.leaderboard, d.levels, d.dealers, d.intel?.events, d.boards, d.venues, d.learner?.n, d.agent_state, d.api_spend?.calls, d.api_spend?.credit_set, d.proposal?.at, d.proposal?.status, (d.decisions || []).length, (d.broker_log || []).length, d.agent_running, d.history?.length, d.council?.notes?.length, d.council?.state,
       d.ledger?.rows?.length, d.ledger?.rows?.slice(-1)[0]?.id,
       d.swaps?.auto, (d.swaps?.opportunities || []).map(r => r.auto ? r.auto.at ?? r.auto.why : 0), d.swaps?.deals?.waiting, d.announcements?.[0]?.id,
-      d.workshop?.status, d.workshop?.plan, d.workshop?.fuel_total, (d.workshop?.log || [])[0]?.tick]);
+      d.workshop?.status, d.workshop?.plan, d.workshop?.fuel_total, (d.workshop?.log || [])[0]?.tick,
+      (d.my_agent?.decisions || []).slice(-1)[0]?.ts, Object.keys(d.my_agent?.listings || {}).join(), JSON.stringify(d.my_agent?.plans || {}).length,
+      JSON.stringify(d.my_agent?.team_haggles || {}).length, d.my_agent?.state_age != null && d.my_agent.state_age < 120]);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;
     D = d; const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
-      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => workshopTab(d), () => arbTab(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d), () => ledgerTab(d)];
+      () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => workshopTab(d), () => arbTab(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d), () => ledgerTab(d), () => mineTab(d)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }
   } catch (e) { $("err").textContent = "⚠ dashboard server unreachable — open http://localhost:8765"; }
 }

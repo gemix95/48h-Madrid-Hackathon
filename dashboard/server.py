@@ -40,6 +40,8 @@ BROKER_LOG = HERE.parent / "team13" / "logs" / "broker.jsonl"
 import council  # noqa: E402  (team13/council.py: El Consejo, the board where our agents post what they learnt)
 from logindex import LogIndex, message_origins  # noqa: E402  (who sent each of our messages, what the guard cancelled and why)
 import arbview  # noqa: E402  (dashboard/arbview.py: data for the Arbitrage tab)
+import agentview  # noqa: E402  (dashboard/agentview.py: data for the "Sergio's agent" tab)
+AGENT_NAME = os.environ.get("DASHBOARD_AGENT", "sergio")  # the teammate's agent that tab follows (AGENT_NAME)
 import visits  # noqa: E402  (our own visit counter for the public board)
 import auctions  # noqa: E402  (team13/auctions.py: lots on our market, seller accepts the best open bid)
 import board  # noqa: E402  (dashboard/board.py: the public El Club board at /board)
@@ -89,6 +91,12 @@ def mirror_remote():
                 remote_logs.update(json.load(resp), at=time.time(), error=None)
         except Exception as e:  # keep the last good copy; /data says how old it is
             remote_logs["error"] = str(e)[:160]
+        try:  # the "Sergio's agent" tab: that agent's own lines and state, from the server
+            req = urllib.request.Request(f"{REMOTE}/agent?name={AGENT_NAME}", headers={"Authorization": auth})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                remote_logs["my_agent"] = json.load(resp)
+        except Exception as e:
+            remote_logs["my_agent_error"] = str(e)[:160]
         time.sleep(15)
 
 
@@ -611,8 +619,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, "application/json", json.dumps(visits.summary(), indent=1).encode())
         elif self.path.startswith("/logs"):
             self._send(200, "application/json", json.dumps(logs_view()).encode())
+        elif self.path.split("?")[0].rstrip("/") == "/agent":  # one teammate's agent: /agent?name=sergio
+            q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+            self._send(200, "application/json", json.dumps(agentview.view(q.get("name") or AGENT_NAME), default=str).encode())
         elif self.path.startswith("/data"):
             logs = logs_view()
+            my_agent = (remote_logs.get("my_agent") if REMOTE else None) or agentview.view(AGENT_NAME)
             if REMOTE and remote_logs.get("at"):  # a laptop: the agents' logs, and the arbitrage module, are on the server
                 logs = {**{k: remote_logs.get(k) for k in ("origins", "decisions", "guard", "log_sources", "arbitrage")},
                         "logs_from": REMOTE, "logs_age": round(time.time() - remote_logs["at"]), "logs_error": remote_logs.get("error")}
@@ -645,7 +657,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "history": history, "served_at": time.time(), "broker_log": tail(BROKER_LOG, 60),
                                    **logs, "swaps": swaps_payload(),
                                    "announcements": announcements(), "duel_learn": duel_learn, "duels_board": duels_board,
-                                   "workshop": workshop_view()}, default=str).encode()
+                                   "workshop": workshop_view(), "my_agent": my_agent}, default=str).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):
             self._send(200, "application/json", json.dumps(strategy.describe()).encode())
