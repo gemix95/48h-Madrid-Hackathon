@@ -26,8 +26,8 @@ def main():
     page = f"""<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(deck['title'])}</title>{fonts}
 <style>
 body{{margin:0;background:#111;overflow:hidden}}
-.slide{{position:absolute;left:0;top:0;width:1920px;height:1080px;box-sizing:border-box;transform-origin:0 0;display:none}}
-.slide.on{{display:flex}} .slide *{{margin:0}} .slide ul{{padding-left:40px}}
+.slide{{position:absolute;left:0;top:0;width:1920px;height:1080px;box-sizing:border-box;transform-origin:0 0}}
+.slide:not(.on){{display:none !important}} .slide *{{margin:0}} .slide ul{{padding-left:40px}}
 #notes{{position:fixed;left:0;right:0;bottom:0;background:#000c;color:#eee;font:20px/1.4 sans-serif;padding:16px 24px;display:none}}
 </style></head><body>
 {''.join(slides)}
