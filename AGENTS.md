@@ -7,9 +7,10 @@
 Do not start `agent.py` on a laptop. Both agents run on the server as `bazaar-agent@<name>` and share the team key.
 A local process would trade as the same team. `pkill -f agent.py` then `pgrep -fl agent.py` must print nothing.
 
-- **Sergio** (`server/agents/sergio.env`): L1 Abuela + L3 Pilar, no 2-hour cap (`team13/agents.json`), buys cards and
-  packs and sells spares with Boulware, accepts on odd ticks (`AGENT_SLOT=1`). Also the trader: sells to and buys from
-  teams at most 85% of our value, never below it, never on El Rastro, only on markets of teams well behind us.
+- **Sergio** (`server/agents/sergio.env`): L1 Abuela only (no Pilar; `AGENT_DEALERS=abuela` in `team13/agents.json`),
+ no 2-hour cap, buys cards and packs and sells spares with Boulware, accepts on odd ticks (`AGENT_SLOT=1`). Also the
+ trader: sells to and buys from teams at most 85% of our value, never below it, never on El Rastro, only on markets of
+ teams well behind us.
 - No agent sells a copy of a card another agent's arbitrage is passing on (`Context.peer_busy_assets`, from the other
   `state-*.json`), and the arbitrage never sells a copy a teammate has in a dealer sale.
 - **Emmanuele** (`server/agents/emmanuele.env`): L2 Chato + L4 Pícaros, 30 P per 2 game hours, accepts on even ticks (`AGENT_SLOT=0`).
