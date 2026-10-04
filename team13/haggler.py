@@ -269,13 +269,13 @@ class Haggler:
                 # opening (negotiate() keeps lo >= opening + 2) fills a slot; after that, beat the third-best
                 floor = (done[2] + 1) if len(done) >= 3 else 1
                 floor = max(floor, self._sell_floor(a["ref"]))  # hard limit: never below what the card is worth to us
-                if floor >= hi_ask:
+                if floor >= hi_ask:  # the sale would go below our value: skip it, a purchase (3) may still pay
                     ctx.log("haggle", "sale_skipped_below_value", dealer=dealer["id"], ref=a["ref"], floor=floor, ask=hi_ask)
-                    return None
-                return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": floor,
-                                                       "hi": hi_ask, "list": book, "asset": a["id"], "ref": a["ref"],
-                                                       "ladder": True, "cost": round(ctx.values.loss_of_removing([a["ref"]]), 1),
-                                                       "rounds": self._rounds(dealer["id"])}
+                else:
+                    return {"sell": {"assets": [a["id"]]}}, {"side": "sell", "key": key, "lo": floor,
+                                                           "hi": hi_ask, "list": book, "asset": a["id"], "ref": a["ref"],
+                                                           "ladder": True, "cost": round(ctx.values.loss_of_removing([a["ref"]]), 1),
+                                                           "rounds": self._rounds(dealer["id"])}
         # 3) one card: the copy worth most to us that we can actually close.
         # Saturday: 8 closes out of 81 uncommon threads. Almost all of those were El Retiro / La Latina,
         # worth 12–17 P to us, while every team closes uncommons at 20–26. We walked, the hourly quota

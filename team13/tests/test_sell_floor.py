@@ -84,5 +84,20 @@ results.append(check("old plan raised to the floor", plan["lo"] == floor, floor)
 results.append(check("no price below the floor ever", p is None or p >= floor, p))
 results.append(check("her 24 P ask does not reach our floor", 24 < plan["lo"]))
 
+# 4) the ladder sale is below our value, but she also sells commons we need: the purchase still opens (tick 1711 on:
+#    LAV-07 skipped ~79 times an hour and no dealer thread opened at all)
+LAV = [{"id": f"LAV-{i:02d}", "rarity": "common", "book": 10, "page": True} for i in range(1, 7)]
+CATALOG2 = {"sets": [CATALOG["sets"][0], {"id": "LAV", "released": True, "cards": LAV}], "packs": []}
+PILAR2 = {**PILAR, "menu": {**PILAR["menu"], "sells": [{"rarity": "common", "sets": "released", "list_price": 10}]}}
+ctx = Ctx(me(), haggle_buy_cards=1)
+ctx.values, ctx.catalog = Values(CATALOG2, ctx.me), CATALOG2
+choice = Haggler(ctx).choose_topic(PILAR2)
+results.append(check("ladder sale below floor -> buy path still returns a topic",
+                     choice is not None and choice[1]["side"] == "buy" and choice[1]["ref"].startswith("LAV"),
+                     choice and choice[1]))
+results.append(check("the skipped sale is still logged", any(a == ("haggle", "sale_skipped_below_value") for a, _ in ctx.logs)))
+results.append(check("and the purchase stays under 85% of our value",
+                     choice is not None and choice[1]["hi"] <= math.floor(choice[1]["worth"] * 0.85), choice and choice[1]))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)
