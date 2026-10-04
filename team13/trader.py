@@ -114,6 +114,15 @@ class Trader:
             return True
         return False
 
+    def market_floor(self, refs: list) -> float:
+        """Least cash for selling `refs` to a team: the sum of their medians in team-to-team trades (4+ trades each),
+        0 when off or unknown. Selling at our value + 1 left 72 P on the table by Sunday noon."""
+        intel = getattr(self.ctx, "intel", None)
+        if not self.ctx.S.get("sell_at_median", 1) or intel is None or not hasattr(intel, "team_median"):
+            return 0.0
+        meds = [intel.team_median(r) for r in refs]
+        return float(sum(m for m in meds if m))
+
     def sale_min_gain(self, refs_we_give: list) -> float:
         """Minimum private-value gain for a pure sale. Dump neighbourhoods / extras clear at 1 P (or dump_min_gain)."""
         S, v = self.ctx.S, self.ctx.values
@@ -154,6 +163,8 @@ class Trader:
             loss = v.loss_of_removing(they_want)
             if cash_in < loss:
                 return {"gain": None, "why": "below our worth (sale)"}
+        if they_want and not they_give and cash_in < self.market_floor(they_want):
+            return {"gain": None, "why": "below the team-trade median (sale)"}
         if ctx.S.get("buy_max_worth", 1) and they_give and not they_want:
             worth = v.gain_of_adding(they_give)
             if cash_out > worth:
@@ -376,7 +387,7 @@ class Trader:
                 bps, per = ctx.venue_fee(venue)
                 min_g = self.sale_min_gain([ref])
                 floor_w = math.ceil(loss + min_g)  # worth plus the margin
-                p_min = math.ceil(floor_w + per + bps * bid / 10000)
+                p_min = max(math.ceil(floor_w + per + bps * bid / 10000), math.ceil(self.market_floor([ref])))
                 # Dump sales: chase thin WTB bids further (up to 3×) so Retiro/Latina/extras clear.
                 stretch = 3.0 if v.dump_tier(ref) in ("hard", "extra") else 2.0
                 if bid < p_min <= stretch * bid:
@@ -497,7 +508,7 @@ class Trader:
             return None
         if ev["want"] and not ev["give"]:  # they want our cards for cash: name our price
             loss = v.loss_of_removing(ev["want"])
-            price = math.ceil(loss + MIN_GAIN + 2 + fee(loss, len(ev["want"])))
+            price = max(math.ceil(loss + MIN_GAIN + 2 + fee(loss, len(ev["want"]))), math.ceil(self.market_floor(ev["want"])))
             assets = self.assets_for(ev["want"])
             if not assets:
                 return None
@@ -634,6 +645,8 @@ class Trader:
                     floor = max(floor, math.ceil(loss + self.fee_at(venue, book, 1)))
                 start = max(floor, math.ceil(max(loss, book) * S["trade_ask_start"]))
                 reprice_every, steps = REPRICE, 10
+            floor = max(floor, math.ceil(self.market_floor([a["ref"]])))  # never under what teams pay each other
+            start = max(start, floor)
             rival = self.cheapest_rival_ask(a["ref"]) if S.get("use_intel", 1) else None
             if rival is not None:
                 under = 2 if tier == "hard" else 1

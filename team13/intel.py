@@ -51,6 +51,28 @@ class Intel:
         if rarity != self.rarity:
             self.rarity, self._summary = rarity, None
 
+    def team_median(self, ref: str, min_n: int = 4):
+        """Median price of `ref` in single-card cash trades between two teams (El Rastro and team markets), or None
+        under `min_n` trades. Our sales ran 72 P under it by Sunday noon (MAL-10 at 30, median 65)."""
+        n = len(self.events)
+        if getattr(self, "_med_at", -1) != n:
+            prices = {}
+            for e in self.events.values():
+                if e.get("type") != "settlement":
+                    continue
+                p = e.get("payload") or {}
+                cards = [i for i in p.get("items") or [] if i.get("kind") == "card"]
+                parties = p.get("parties") or []
+                if len(cards) == 1 and p.get("price") and len(parties) == 2 and all(
+                        str(x)[:1] == "t" and str(x)[1:].isdigit() for x in parties):
+                    prices.setdefault(cards[0].get("ref"), []).append(float(p["price"]))
+            self._med, self._med_at = prices, n
+        xs = sorted(self._med.get(ref) or [])
+        if len(xs) < min_n:
+            return None
+        k = len(xs) // 2
+        return xs[k] if len(xs) % 2 else (xs[k - 1] + xs[k]) / 2
+
     # ------------------------------------------------------------------ collect
     def refresh(self) -> int:
         """Fetch the latest public events and append the new ones to our store. Returns how many were new."""
