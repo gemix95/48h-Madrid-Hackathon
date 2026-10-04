@@ -36,6 +36,19 @@ KNOBS = {
                          "P off the least score when the dealer's best three still has an empty slot. The ladder keeps "
                          "the best three deals per level and counts a missing one as zero, so a deal there is free "
                          "points and can never cost us; 0 keeps arbitrage on the trade value alone."),
+    "enable_epics": (1, 0, 1, 1, "Modules", "Epics",
+                     "Buy the epics worth most to us (SAL-11 288, MAL-11 234, LAV-11 198 P): one public team bid that "
+                     "banks the full +50, else Pícaros up to its list (a ladder slot, never a loss). Round 3 on."),
+    "epics_round": (3, 1, 9, 1, "Trading", "Epics: first round", "Nothing before this round starts (Sunday is round 3)."),
+    "epics_min_value": (150, 50, 400, 5, "Trading", "Epics: least value to us (P)", "Epics worth less to us are skipped."),
+    "epics_team_min": (190, 100, 300, 5, "Trading", "Epics: least team bid (P)",
+                       "A team bid goes up only if value - 50 (and the team cap) reaches this: teams resell epics at 179-216."),
+    "epics_team_ticks": (40, 8, 200, 1, "Trading", "Epics: team bid life (ticks)",
+                         "Unfilled after this many ticks, the card moves to Pícaros."),
+    "epics_dealer_margin": (5, 0, 60, 1, "Trading", "Epics: dealer margin (P)", "Pay a dealer at most our value minus this."),
+    "epics_start_share": (0.74, 0.5, 1.0, 0.01, "Trading", "Epics: first dealer offer",
+                          "Share of the dealer's list price we open at (Pícaros sold epics at 128-167 of 162)."),
+    "epics_retry_ticks": (30, 5, 200, 1, "Trading", "Epics: retry a dealer after (ticks)", "After a walk or a failed haggle."),
     "announce_board": (0, 0, 1, 1, "Market", "Announce the El Club Board on the big screen",
                        "Off: the board's line is skipped in the announcement rotation, so rival agents are not handed "
                        "the link while we are still building it. Turn it on when we announce the board ourselves."),

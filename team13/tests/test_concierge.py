@@ -15,9 +15,23 @@ leans = {"t12": {"LAT": -29}, "t07": {"LAT": -5, "RET": 100}, "t09": {"LAT": 4},
 book = [{"id": 900, "give": {"cash": 14}, "want": {"types": ["card:LAT-07"]}},
         {"id": 901, "give": {"assets": [{"id": 5, "ref": "RET-09"}]}, "want": {"cash": 75}}]
 boards = {"rastro": [{"id": 50, "give": {"cash": 60}, "want": {"types": ["card:RET-09"]}}]}
-p = {(side, ref): teams for oid, side, ref, price, teams in concierge.plan(book, events, boards, "t13", "v24", hold, leans)}
+p = {(side, ref): teams for oid, side, ref, price, teams, cross in concierge.plan(book, events, boards, "t13", "v24", hold, leans)}
 assert p[("bid", "LAT-07")] == ["t12", "t07", "t09"], p   # spare first, then a dumped set; never the maker t06
 assert p[("ask", "RET-09")][0] == "t18" and "t16" in p[("ask", "RET-09")] and "t02" not in p[("ask", "RET-09")], p
+# a team whose own offer elsewhere crosses ours comes first: t15 sells LAT-07 at 12 (our bid pays 14), t05 bids 80 for
+# RET-09 (our ask is 75); t11 asks 20 for LAT-07, above our bid: not a crossing
+ev2 = events + [{"id": 4, "tick": 1, "type": "offer.listed", "payload": {"offer": {"id": 51, "maker": "t15"}}},
+                {"id": 5, "tick": 1, "type": "offer.listed", "payload": {"offer": {"id": 52, "maker": "t05"}}},
+                {"id": 6, "tick": 1, "type": "offer.listed", "payload": {"offer": {"id": 53, "maker": "t11"}}}]
+b2 = {"rastro": boards["rastro"] + [{"id": 51, "give": {"assets": [{"id": 9, "ref": "LAT-07"}]}, "want": {"cash": 12}},
+                                    {"id": 52, "give": {"cash": 80}, "want": {"types": ["card:RET-09"]}},
+                                    {"id": 53, "give": {"assets": [{"id": 8, "ref": "LAT-07"}]}, "want": {"cash": 20}}]}
+q = {(side, ref): (teams, cross) for oid, side, ref, price, teams, cross in concierge.plan(book, ev2, b2, "t13", "v24", hold, leans)}
+assert q[("bid", "LAT-07")][0][0] == "t15" and q[("bid", "LAT-07")][1] == {"t15": ("rastro", 12, 51)}, q
+assert "t11" not in q[("bid", "LAT-07")][0], q
+assert q[("ask", "RET-09")][0][0] == "t05" and q[("ask", "RET-09")][1] == {"t05": ("rastro", 80, 52)}, q
+# a card on an open auction lot is left to its auction
+assert ("bid", "LAT-07") not in {(side, ref) for _, side, ref, *_ in concierge.plan(book, ev2, b2, "t13", "v24", hold, leans, skip={"LAT-07"})}
 
 concierge.FEED_STORE = os.path.join(tempfile.mkdtemp(), "feed.jsonl")
 open(concierge.FEED_STORE, "w").write("\n".join(json.dumps(e) for e in events))
@@ -54,4 +68,4 @@ for t in range(108, 140):
     c.clock["tick"] = t; k.step()
 sent = c.state["concierge"]["sent"]
 assert len(sent) == len(c.api.opened) == len(set(sent)), (sent, c.api.opened)  # each team once per offer
-print("concierge ok:", len(c.api.opened), "teams asked, makers never named, each once")
+print("concierge ok:", len(c.api.opened), "teams asked, crossing makers first, makers never named, each once")

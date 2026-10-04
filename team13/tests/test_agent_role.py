@@ -7,7 +7,7 @@ import guard
 
 
 def test_roles():
-    assert agent.parse_role("dealers") == {"duels", "haggler", "arbitrage", "concierge"}
+    assert agent.parse_role("dealers") == {"duels", "haggler", "arbitrage", "concierge", "epics"}
     assert agent.parse_role("market") == {"venue", "trader", "wtb", "tapas", "loans", "workshop"}
     assert agent.parse_role("") == agent.ROLES["all"]
     assert agent.parse_role(" Haggler , trader ") == {"haggler", "trader"}
