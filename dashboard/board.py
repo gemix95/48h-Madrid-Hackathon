@@ -514,16 +514,24 @@ def render(data: dict) -> str:
 
     when = time.strftime("%H:%M", time.localtime(pub["at"]))
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>El Club Board</title>
-<meta name="description" content="Every card in the Bazaar at its best price. Buy or sell in 1 click, 0% fee, live prices, deals and auctions.">
-<meta property="og:type" content="website"><meta property="og:site_name" content="El Club · Team 13">
+<title>El Club Board · every card at its best price</title>
+<meta name="description" content="Every card in the Bazaar at its best price. Buy or sell in 1 click, 0% fee, live prices, price history, deals and auctions.">
+<link rel="canonical" href="{PUBLIC}/board">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#14161b" media="(prefers-color-scheme: dark)">
+<meta name="application-name" content="El Club"><meta name="apple-mobile-web-app-title" content="El Club">
+<link rel="icon" type="image/png" sizes="32x32" href="/board/icon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/board/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/board/icon-180.png"><link rel="manifest" href="/board/manifest.webmanifest">
+<meta property="og:type" content="website"><meta property="og:site_name" content="El Club · Team 13"><meta property="og:locale" content="en_US">
 <meta property="og:title" content="El Club Board: every card at its best price">
 <meta property="og:description" content="Buy or sell any card in 1 click. 0% fee, live prices, 🔥 deals, auctions.">
 <meta property="og:url" content="{PUBLIC}/board">
-<meta property="og:image" content="{PUBLIC}/board/og.jpg"><meta property="og:image:type" content="image/jpeg">
-<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
-<link rel="icon" type="image/png" href="/board/icon.png"><link rel="apple-touch-icon" href="/board/icon.png">
-<meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#1b0c22">
+<meta property="og:image" content="{PUBLIC}/board/og.jpg"><meta property="og:image:secure_url" content="{PUBLIC}/board/og.jpg">
+<meta property="og:image:type" content="image/jpeg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="El Club Board: a fan of Bazaar cards next to the words Every card in the Bazaar at its best price">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="El Club Board: every card at its best price">
+<meta name="twitter:description" content="Buy or sell any card in 1 click. 0% fee, live prices, 🔥 deals, auctions.">
+<meta name="twitter:image" content="{PUBLIC}/board/og.jpg"><meta name="twitter:image:alt" content="A fan of Bazaar cards next to the El Club Board title">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/board/cromo.css">

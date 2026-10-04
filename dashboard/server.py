@@ -481,11 +481,13 @@ class Handler(BaseHTTPRequestHandler):
     def _public_board(self) -> bool:
         """/board and /board.json are public (no password): public market data only."""
         path = self.path.split("?")[0].rstrip("/")
-        if path in ("/favicon.ico", "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/board/icon.png"):
-            # browsers ask for these by themselves: behind the password they made the public page show a login box
-            body = (HERE / "cards" / "icon.png").read_bytes()
+        icons = {"/favicon.ico": "icon-32.png", "/apple-touch-icon.png": "icon-180.png", "/apple-touch-icon-precomposed.png": "icon-180.png",
+                 **{f"/board/icon-{n}.png": f"icon-{n}.png" for n in (32, 180, 192, 512)},
+                 "/board/manifest.webmanifest": "manifest.webmanifest"}
+        if path in icons:  # browsers ask for these by themselves: behind the password they showed a login box
+            body = (HERE / "cards" / icons[path]).read_bytes()
             self.send_response(200)
-            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Type", "application/manifest+json" if path.endswith(".webmanifest") else "image/png")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "public, max-age=86400")
             self.end_headers()
@@ -642,6 +644,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "text/plain", b"not found")
 
     def do_POST(self):
+        if self.path.split("?")[0].rstrip("/") == "/board/ping":  # navigator.sendBeacon posts: public, like the GET
+            n = int(self.headers.get("Content-Length") or 0)
+            if n:
+                self.rfile.read(min(n, 4096))
+            return self._public_board()
         if not self._authorized():
             return
         if self.path.startswith("/strategy/recheck"):

@@ -1,0 +1,14 @@
+{
+ "name": "El Club Board",
+ "short_name": "El Club",
+ "description": "Every card in the Bazaar at its best price. Buy or sell in 1 click.",
+ "start_url": "/board",
+ "scope": "/board",
+ "display": "standalone",
+ "background_color": "#1b0c22",
+ "theme_color": "#1b0c22",
+ "icons": [
+  {"src": "/board/icon-192.png", "sizes": "192x192", "type": "image/png"},
+  {"src": "/board/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+ ]
+}
