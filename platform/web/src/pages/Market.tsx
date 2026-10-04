@@ -9,13 +9,14 @@ const STRATS: { id: string; label: string; how: string }[] = [
 
 export function MarketPage({ s }: { s: Snap }) {
   const m = s.market;
-  const ours = m.venues.find((v: Snap) => v.id === s.me?.venue) ?? null;
+  const ourId = s.me?.venue?.venue ?? null;
+  const ours = m.venues.find((v: Snap) => v.id === ourId) ?? null;
   const tests = s.timeline.filter((t: Snap) => t.action === "bench" && !t.leftover);
-  const checks = [
+  const checks: { ok: boolean; soft?: string; label: string; why: string }[] = [
     { ok: !!ours && ours.status === "open", label: "Our venue is open", why: ours ? `${ours.name} (${ours.id}) is ${ours.status}.` : "We have no venue. The Market Test scores 0 without one." },
     { ok: !!ours && !ours.fee_bps && !ours.fee_per_card, label: "Fee is 0%", why: "The Market Test measures surplus left to traders. Every fee point is surplus we take away from them." },
     { ok: !!ours && ours.mechanism === "board", label: "Board mechanism", why: "With a board, our broker picks the matches. With an auto venue, the server's stall rule matches for us." },
-    { ok: !!m.broker, label: "Broker key loaded", why: m.broker ? "The market agent can match bench offers itself." : "Without BROKER_KEY the market agent only watches. The Python bazaar-broker service matches instead." },
+    { ok: !!m.broker, soft: "python", label: "Who matches", why: m.broker ? "This market agent matches bench offers itself (BROKER_KEY loaded). Stop the Python bazaar-broker so only one broker runs." : "The Python bazaar-broker service on the server matches. This market agent only watches until BROKER_KEY is set." },
     { ok: !!ours && ours.status === "open", label: "Never close it during a test", why: "Saturday's bench score fell to 0.451 (stall gives 0.5) because the venue was closed and reopened mid-session (v03 → v22 → v24)." },
   ];
   const sim = m.sim;
@@ -37,7 +38,7 @@ export function MarketPage({ s }: { s: Snap }) {
           <div className="list">
             {checks.map((c) => (
               <div className="item" key={c.label}>
-                <span className={`chip ${c.ok ? "good" : "critical"}`}>{c.ok ? "ok" : "fix"}</span>
+                <span className={`chip ${c.ok ? "good" : c.soft ? "normal" : "critical"}`}>{c.ok ? "ok" : c.soft ?? "fix"}</span>
                 <div>
                   <b>{c.label}</b>
                   <div className="why">{c.why}</div>
@@ -94,7 +95,7 @@ export function MarketPage({ s }: { s: Snap }) {
           <thead><tr><th>Venue</th><th>Owner</th><th>Status</th><th>Mechanism</th><th className="r">Fee</th><th className="r">Trades</th><th className="r">Volume</th><th className="r">Value created</th></tr></thead>
           <tbody>
             {[...m.venues].sort((a: Snap, b: Snap) => b.trades - a.trades).map((v: Snap) => (
-              <tr key={v.id} style={v.id === s.me?.venue ? { background: "rgba(76,141,255,0.10)" } : undefined}>
+              <tr key={v.id} style={v.id === ourId ? { background: "rgba(76,141,255,0.10)" } : undefined}>
                 <td><b>{v.name}</b> <span className="faint mono">{v.id}</span>{v.starter && <span className="faint"> · starter</span>}{v.house && <span className="faint"> · house</span>}</td>
                 <td className="mono">{v.owner ?? "–"}</td>
                 <td><span className={`chip ${v.status === "open" ? "good" : "normal"}`}>{v.status}</span></td>
