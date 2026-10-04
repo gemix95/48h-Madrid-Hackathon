@@ -1,0 +1,30 @@
+{
+  "name": "team13-war-room",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Team 13 war room for The Bazaar: what is happening, why, and three agents (deal, duel, market) that play it.",
+  "type": "module",
+  "scripts": {
+    "dev:server": "tsx watch src/server/main.ts",
+    "dev:web": "vite",
+    "build": "vite build && tsc -p tsconfig.json --noEmit",
+    "start": "tsx src/server/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "sim:market": "tsx src/sim/marketSim.ts"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/react": "^18.3.27",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.9"
+  }
+}
