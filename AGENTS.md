@@ -7,9 +7,11 @@
 Do not start `agent.py` on a laptop. Both agents run on the server as `bazaar-agent@<name>` and share the team key.
 A local process would trade as the same team. `pkill -f agent.py` then `pgrep -fl agent.py` must print nothing.
 
-- **Sergio** (`server/agents/sergio.env`): L1 Abuela + L3 Pilar, 30 P per 2 game hours, accepts on odd ticks (`AGENT_SLOT=1`).
+- **Sergio** (`server/agents/sergio.env`): L1 Abuela + L3 Pilar, no 2-hour cap (`team13/agents.json`), buys cards and
+  packs and sells spares with Boulware, accepts on odd ticks (`AGENT_SLOT=1`).
 - **Emmanuele** (`server/agents/emmanuele.env`): L2 Chato + L4 Pícaros, 30 P per 2 game hours, accepts on even ticks (`AGENT_SLOT=0`).
-- Scope and budget live in `/home/bazaar/agents/<name>.env` on the server (root). Changing them is a server edit, not a laptop restart.
+- Scope and budget live in `/home/bazaar/agents/<name>.env` on the server (root). `team13/agents.json` overrides any
+  `AGENT_*` of a named agent from the repo: edit it and push, and auto-deploy restarts the agents.
 - Code changes go to `main`. Auto-deploy restarts both agents.
 - A laptop dashboard has no live agent log. Add `DASHBOARD_REMOTE=http://217.160.143.83` and
   `DASHBOARD_REMOTE_PASSWORD=<dashboard password>` to your `bazaar.env`. Each message of ours then shows who sent it:

@@ -1,0 +1,7 @@
+{
+ "note": "Each named agent's AGENT_* env, set from the repo over the server's /home/bazaar/agents/<name>.env (agent.py apply_overrides). Push and auto-deploy restarts the agents within a minute. An empty value removes the variable.",
+ "sergio": {
+  "AGENT_BUDGET_2H": "",
+  "AGENT_KNOBS": "enable_haggler=1,haggle_buy_cards=1,haggle_buy_packs=1,haggle_sell_spares=1,workshop_accumulate=0,workshop_spares=0,day_budget=400"
+ }
+}

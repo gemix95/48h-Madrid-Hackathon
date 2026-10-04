@@ -88,6 +88,30 @@ def load_strategy() -> dict:
     return {**strategy.load(), **agent_knobs()}
 
 
+OVERRIDES = HERE / "agents.json"
+
+
+def apply_overrides() -> dict:
+    """team13/agents.json: a named agent's env (AGENT_KNOBS, AGENT_BUDGET_2H, ...) set from the repo, over the
+    server's /home/bazaar/agents/<name>.env, so its owner changes it with a push (auto-deploy restarts the agents).
+    An empty value removes that variable (AGENT_BUDGET_2H "" = no 2-hour cap)."""
+    name = os.environ.get("AGENT_NAME", "").strip().lower()
+    try:
+        over = json.loads(OVERRIDES.read_text()).get(name) if name else None
+    except (OSError, ValueError, AttributeError):
+        return {}
+    applied = {}
+    for k, v in (over.items() if isinstance(over, dict) else ()):
+        if not k.startswith("AGENT_") or k == "AGENT_NAME":
+            continue
+        if v in ("", None):
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = str(v)
+        applied[k] = v
+    return applied
+
+
 def role_label(role_str: str) -> str:
     name = os.environ.get("AGENT_NAME", "").strip().lower()
     if name:  # one agent per person: its own state file and lock
@@ -560,6 +584,7 @@ def main():
             f"local agent stopped ({stop.name}); server runs bazaar-agent@emmanuele (chato, picaros) "
             "and bazaar-agent@sergio (abuela, pilar)"
         )
+    overrides = apply_overrides()  # before anything reads AGENT_*
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-trade", action="store_true", help="skip team trading")
@@ -604,7 +629,7 @@ def main():
     ctx.agent_id = agent_id
     ctx.log("agent", "start", dry=args.dry_run, role=sorted(role), agent_budget=args.budget, agent_id=agent_id,
             name=ctx.name, dealers=sorted(ctx.dealer_scope) if ctx.dealer_scope else "all", budget_2h=ctx.budget_2h,
-            knobs=agent_knobs(),
+            knobs=agent_knobs(), overrides=overrides,
             accept_slot=list(ctx.slot),
             state_file=spath.name, lock=f"agent-{label}.lock")
     if agent_id:
