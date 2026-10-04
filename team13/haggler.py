@@ -609,6 +609,14 @@ class Haggler:
                 plan["lo"] = floor
                 plan["hi"] = max(plan["hi"], math.ceil(floor * 1.3))
                 ctx.log("haggle", "sell_floor_raised", thread=th["id"], ref=plan["ref"], floor=floor)
+        if buy and plan.get("worth") and not plan.get("beginner"):
+            # Boulware: open at buy_open_margin under our value (40%), not at a learned 1 P, and reach our cap within
+            # this dealer's usual rounds (CHA-09 at Pícaros, worth 63: we offered 1, 2, 3, 4 while she came down to 57)
+            open_at = self._value_band(plan["worth"])[0]
+            if plan["lo"] < open_at <= plan["hi"]:
+                plan["lo"] = open_at
+            if not plan.get("rounds"):
+                plan["rounds"] = self._rounds(dealer["id"])
         nxt = self._next_price(plan)
 
         def good(p):  # inside our limits, and (buying) within today's budget and never with the cash we keep
