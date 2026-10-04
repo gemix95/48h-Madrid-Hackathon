@@ -691,7 +691,7 @@ class Haggler:
         if not choices:
             choices, used = [i for i in range(len(texts)) if i != used[-1]], []
         text_i = random.choice(choices)
-        item = th.get("item") or ("este sobre" if plan.get("pack") else "esta carta")
+        item = th.get("item") or (f"la carta {plan['ref']}" if plan.get("ref") else f"el sobre {plan['pack']}" if plan.get("pack") else "esta carta")
         text = texts[text_i].format(name=plan.get("name", "Carmen"), item=item, p=nxt)
         if plan["k"] == 0: text = f"Buenas tardes. {text}"
         # the safe band around the rule price: always a new price, never past our cap or her ask
