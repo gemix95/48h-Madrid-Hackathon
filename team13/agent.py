@@ -343,8 +343,32 @@ class Context:
             topic = (th.get("topic") or {}).get("sell") or {}
             if th["status"] == "open":
                 ids.update(topic.get("assets") or ([topic["asset"]] if topic.get("asset") else []))
+        ids |= self.peer_busy_assets()
         if reserved:
             ids |= reserved_ids((self.values.assets if self.values else None) or self.me.get("assets", []), self.state)
+        return ids
+
+    def peer_busy_assets(self) -> set:
+        """Every copy of a card another of our agents is passing on right now (its arbitrage bought it from a dealer to
+        sell into a team's bid): read from the other agents' state files next to ours, once a tick. A file not saved
+        for 5 minutes belongs to a stopped agent and counts for nothing."""
+        tick = self.clock.get("tick")
+        cached = getattr(self, "_peer_busy", None)
+        if cached and tick is not None and cached[0] == tick:
+            return cached[1]
+        refs, own = set(), Path(self._state_path).resolve()
+        for p in Path(self._state_path).parent.glob("state*.json"):
+            try:
+                if p.resolve() == own or time.time() - p.stat().st_mtime > 300:
+                    continue
+                active = (json.loads(p.read_text()).get("arb") or {}).get("active") or {}
+            except (OSError, ValueError, AttributeError):
+                continue
+            if active.get("ref"):
+                refs.add(active["ref"])
+        assets = (self.values.assets if self.values else None) or self.me.get("assets", [])
+        ids = {a["id"] for a in assets if a.get("ref") in refs}
+        self._peer_busy = (tick, ids)
         return ids
 
     def speak(self, situation, band, fallback, effort="low"):

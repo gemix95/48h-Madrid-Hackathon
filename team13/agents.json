@@ -1,7 +1,8 @@
 {
  "note": "Each named agent's AGENT_* env, set from the repo over the server's /home/bazaar/agents/<name>.env (agent.py apply_overrides). Push and auto-deploy restarts the agents within a minute. An empty value removes the variable.",
  "sergio": {
+  "AGENT_ROLE": "haggler,venue,trader",
   "AGENT_BUDGET_2H": "",
-  "AGENT_KNOBS": "enable_haggler=1,haggle_buy_cards=1,haggle_buy_packs=1,haggle_sell_spares=1,workshop_accumulate=0,workshop_spares=0,day_budget=400"
+  "AGENT_KNOBS": "enable_haggler=1,haggle_buy_cards=1,haggle_buy_packs=1,haggle_sell_spares=1,buy_open_margin=0.6,buy_value_margin=0.15,workshop_accumulate=0,workshop_spares=0,day_budget=400,enable_trader=1,trade_all_markets=1,trade_no_rastro=1,trade_safe_only=1,trade_buy_margin=0.15,trade_haggles=1"
  }
 }

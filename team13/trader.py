@@ -66,6 +66,18 @@ class Trader:
         bps, per = self.ctx.venue_fee(venue or "rastro") if hasattr(self.ctx, "venue_fee") else (RASTRO_BPS, RASTRO_PER_CARD)
         return fee(price, n_cards, bps, per)
 
+    def venue_ok(self, venue) -> bool:
+        """Where we may trade: never El Rastro with trade_no_rastro, only markets of teams well behind us with
+        trade_safe_only (a trade on a team's market scores for its owner)."""
+        S, venue = self.ctx.S, venue or "rastro"
+        if S.get("trade_no_rastro", 0) and venue == "rastro":
+            return False
+        return not S.get("trade_safe_only", 0) or venue in safe_markets(self.ctx)
+
+    def buy_cap(self, worth: float) -> float:
+        """Most a card from another team may cost us, fee included: (1 - trade_buy_margin) of its value."""
+        return worth * (1 - float(self.ctx.S.get("trade_buy_margin", 0) or 0))
+
     def all_offers(self):
         """Other teams' open offers on every market (just El Rastro if 'trade on every market' is off)."""
         boards = getattr(self.ctx, "boards", None) or {"rastro": self.ctx.board}
@@ -146,6 +158,8 @@ class Trader:
             worth = v.gain_of_adding(they_give)
             if cash_out > worth:
                 return {"gain": None, "why": "above our worth (buy)"}
+            if cash_out + f > self.buy_cap(worth):
+                return {"gain": None, "why": "above our buy margin (buy)"}
         return {"gain": gain, "give": they_give, "want": they_want, "cash_in": cash_in, "cash_out": cash_out, "fee": f,
                 "min_gain": min_g}
 
@@ -213,7 +227,7 @@ class Trader:
             return
         best = None
         for venue, o in self.all_offers():
-            if self._cannot_pay(o):
+            if not self.venue_ok(venue) or self._cannot_pay(o):
                 continue
             ev = self.evaluate(o)
             if set(ev.get("give") or []) & values_mod.NO_REBUY:
@@ -340,12 +354,14 @@ class Trader:
                 maker = ctx.intel.summary().get("offer_maker", {}).get(o.get("id"), maker)
             if not maker or not (maker[0] == "t" and maker[1:].isdigit()) or maker == ctx.me["id"] or venue == ctx.state.get("venue"):
                 continue
+            if not self.venue_ok(venue):
+                continue
             g_refs, w_refs = refs_of(give, ctx), refs_of(want, ctx)
             if len(g_refs) == 1 and want.get("cash") and not w_refs and g_refs[0] in v.cards:   # they sell one card
                 ref, ask = g_refs[0], want["cash"]
                 value = v.gain_of_adding([ref])
                 bps, per = ctx.venue_fee(venue)
-                cap = value - S["trade_min_gain"]  # worth minus the margin: a zero-gain buy only feeds the seller
+                cap = min(value - S["trade_min_gain"], self.buy_cap(value))  # worth minus the margin: a zero-gain buy only feeds the seller
                 p_max = math.floor((cap - per) / (1 + bps / 10000))
                 free = ctx.me["cash"] - ctx.reserve() - sum(L["price"] for L in ctx.state.get("listings", {}).values() if L["kind"] == "bid")
                 p_max = min(p_max, math.floor(free / (1 + bps / 10000)) - per)  # never promise cash we keep back
@@ -370,7 +386,7 @@ class Trader:
         if S.get("trade_seek_needed", 1):
             cands += self.seek_candidates(busy, tried, tick)  # ranked with everything else: big page completers win
         for score, side, venue, maker, ref, posted, limit, o in sorted(cands, key=lambda c: -c[0]):
-            if (maker, ref) in busy or tried.get(f"{maker}:{ref}", -99) > tick - 30:
+            if (maker, ref) in busy or tried.get(f"{maker}:{ref}", -99) > tick - 30 or not self.venue_ok(venue):
                 continue
             assets = self.assets_for([ref]) if side == "sell" else []
             if side == "sell" and not assets:
@@ -489,7 +505,7 @@ class Trader:
                     "offer": {"give": {"assets": assets}, "want": {"cash": price}}}
         if ev["give"] and not ev["want"]:  # they sell cards for cash: name what we pay
             gain = v.gain_of_adding(ev["give"])
-            price = math.floor(gain - MIN_GAIN - 2 - fee(gain, len(ev["give"])))
+            price = math.floor(min(gain - MIN_GAIN - 2, self.buy_cap(gain)) - fee(gain, len(ev["give"])))
             if price < 1:
                 return None
             return {"text": f"We would love those. {price} primas for {', '.join(ev['give'])}?",
@@ -585,6 +601,8 @@ class Trader:
                         reserve=reserve, accumulate=accum, tier=acc_rar, have=acc_have)
             except BazaarError as e:
                 ctx.log("trade", "cancel_refused", offer=oid, error=str(e))
+        if not markets:  # trade_no_rastro and no other market admits us: list nothing this tick
+            return
         asks = [L for L in listed.values() if L["kind"] == "ask"]
         bids = [L for L in listed.values() if L["kind"] == "bid"]
         # asks: dump Retiro/Latina + extras first (above the workshop reserve), priced to clear under rivals / into WTB
@@ -651,7 +669,7 @@ class Trader:
                 continue
             book = v.book(ref)
             venue = markets[len(bids) % min(2, len(markets))]
-            worth_cap = math.floor(gain - MIN_GAIN)
+            worth_cap = math.floor(min(gain - MIN_GAIN, self.buy_cap(gain)))
             ceiling = min(worth_cap - self.fee_at(venue, book, 1), team_caps().get(ref, 10 ** 9))
             start = min(ceiling, math.floor(book * S["trade_bid_start"]))
             base = book * v.m(ref)
@@ -683,9 +701,10 @@ class Trader:
         """Markets to list on, best first: busy (trades, traders, open offers) and cheap (fee), never our own,
         and only those whose rules admit us (min level)."""
         ctx = self.ctx
+        rastro = [] if ctx.S.get("trade_no_rastro", 0) else ["rastro"]
         if not ctx.S.get("trade_all_markets", 1) or not getattr(ctx, "venues", None):
-            return ["rastro"]
-        scored, allowed = [], set(safe_markets(ctx))
+            return rastro
+        scored, allowed = [], set(safe_markets(ctx)) - ({"rastro"} if not rastro else set())
         for v in ctx.venues:
             if v["venue"] == ctx.state.get("venue") or v.get("status") != "open":
                 continue
@@ -699,7 +718,7 @@ class Trader:
             net = 1 - (v.get("fee_bps") or 0) / 10000
             board = 1.35 if (v.get("rules") or {}).get("mechanism") == "board" else 1.0
             scored.append((activity * net * board, v["venue"]))
-        return [vid for _, vid in sorted(scored, reverse=True)] or ["rastro"]
+        return [vid for _, vid in sorted(scored, reverse=True)] or rastro
 
     @staticmethod
     def _price(L, tick, every=REPRICE_TICKS):

@@ -29,5 +29,6 @@ assert abs(v_nine.loss_of_removing(["MAL-07"]) - v_eight.gain_of_adding(["MAL-07
 # the trader's margins are back: no line lowers the required gain to the actual one
 src = open(os.path.join(os.path.dirname(__file__), "..", "trader.py")).read()
 assert "min_g = max(0.0, min(min_g, gain))" not in src
-assert 'cap = value - S["trade_min_gain"]' in src and "worth_cap = math.floor(gain - MIN_GAIN)" in src
+assert 'cap = min(value - S["trade_min_gain"], self.buy_cap(value))' in src
+assert "worth_cap = math.floor(min(gain - MIN_GAIN, self.buy_cap(gain)))" in src
 print(f"no pump: MAL-06 out of a full page costs {sell:.1f}, buying it back is worth {buy_back:.1f}; margins kept")

@@ -8,7 +8,10 @@ Do not start `agent.py` on a laptop. Both agents run on the server as `bazaar-ag
 A local process would trade as the same team. `pkill -f agent.py` then `pgrep -fl agent.py` must print nothing.
 
 - **Sergio** (`server/agents/sergio.env`): L1 Abuela + L3 Pilar, no 2-hour cap (`team13/agents.json`), buys cards and
-  packs and sells spares with Boulware, accepts on odd ticks (`AGENT_SLOT=1`).
+  packs and sells spares with Boulware, accepts on odd ticks (`AGENT_SLOT=1`). Also the trader: sells to and buys from
+  teams at most 85% of our value, never below it, never on El Rastro, only on markets of teams well behind us.
+- No agent sells a copy of a card another agent's arbitrage is passing on (`Context.peer_busy_assets`, from the other
+  `state-*.json`), and the arbitrage never sells a copy a teammate has in a dealer sale.
 - **Emmanuele** (`server/agents/emmanuele.env`): L2 Chato + L4 Pícaros, 30 P per 2 game hours, accepts on even ticks (`AGENT_SLOT=0`).
 - Scope and budget live in `/home/bazaar/agents/<name>.env` on the server (root). `team13/agents.json` overrides any
   `AGENT_*` of a named agent from the repo: edit it and push, and auto-deploy restarts the agents.

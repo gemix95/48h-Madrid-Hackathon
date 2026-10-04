@@ -49,7 +49,7 @@ import agent  # noqa: E402
 
 setcfg(common_spares=True)
 fake = type("Ctx", (), {"my_offers": [{"give": {"assets": [{"id": 3}]}}], "threads": [], "values": None,
-                        "me": {"assets": ASSETS}, "state": {}})()
+                        "me": {"assets": ASSETS}, "state": {}, "peer_busy_assets": lambda self: set()})()
 r.append(check("locked = promised + reserved", agent.Context.locked_assets(fake) == {1, 2, 3}, agent.Context.locked_assets(fake)))
 r.append(check("reserved=False: only what is promised", agent.Context.locked_assets(fake, reserved=False) == {3}))
 

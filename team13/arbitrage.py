@@ -222,9 +222,16 @@ class Arbitrage:
             if tick == a.get("sell_tick"):
                 return
             a["sell_tick"] = tick
+            asset = max(x["id"] for x in copies)  # the copy we just bought
+            promised = ctx.locked_assets(reserved=False) if hasattr(ctx, "locked_assets") else set()
+            if asset in promised:  # a teammate's agent is selling it to a dealer or a team
+                a["sell_tries"] = a.get("sell_tries", 0) + 1
+                ctx.log("arb", "copy_promised", ref=a["ref"], asset=asset, tries=a["sell_tries"])
+                if a["sell_tries"] >= SELL_TRIES:
+                    st["active"] = None
+                return
             if not ctx.take_accept():
                 return
-            asset = max(x["id"] for x in copies)
             try:
                 ctx.api.accept(a["bid"], assets=[asset])
                 ctx.log("arb", "sold", ref=a["ref"], bid=a["bid"], price=a["bid_price"], paid=a.get("paid"),

@@ -162,7 +162,14 @@ KNOBS = {
     "trade_all_markets": (1, 0, 1, 1, "Trading", "Trade on every market",
                           "Scan every market (El Rastro, starter stalls, team venues), value offers after each market's fee, "
                           "and spread our listings over the busiest, cheapest ones."),
-    "trade_seek_needed": (1, 0, 1, 1, "Trading", "Ask for cards we need",
+    "trade_no_rastro": (0, 0, 1, 1, "Trading", "Never trade on El Rastro",
+                        "Take, list, bid and haggle only on other markets (no 5% + 1 P fee)."),
+    "trade_safe_only": (0, 0, 1, 1, "Trading", "Take offers only on safe markets",
+                        "Accept and haggle only on markets of teams well behind us (rival_margin): a trade there scores "
+                        "for the owner, so it must not help a close rival."),
+    "trade_buy_margin": (0.0, 0.0, 0.5, 0.05, "Trading", "Team buys: safety margin under our value",
+                         "A card from another team costs at most (1 - this) of its value to us, fee included (0.15 = 85%)."),
+    "trade_seek_needed":(1, 0, 1, 1, "Trading", "Ask for cards we need",
                           "When a card that completes a page (or is worth 60+ P to us) is not listed anywhere, ask the team that "
                           "has it (seen in the public feed) with a structured offer that still leaves us most of its value."),
     "seek_keep_cash": (100, 0, 300, 10, "Trading", "Cash we always keep when asking for a page completer (P)",
