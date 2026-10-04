@@ -569,8 +569,10 @@ def main():
                     help="most this agent spends per day, on top of day_budget (env AGENT_BUDGET)")
     args = ap.parse_args()
     role = parse_role(args.role)
+    if "arbitrage" in role:
+        role.add("epics")  # both buy only where the deal scores; enable_epics = 0 (AGENT_KNOBS) leaves the epics out
     if args.no_trade:
-        role -= {"trader", "wtb", "loans"}
+        role -= {"trader", "wtb", "loans", "epics"}
     label = role_label(args.role)
     spath = state_path_for(args.role)
     if not args.dry_run:
