@@ -531,7 +531,9 @@ class Trader:
             if L["kind"] != "bid":
                 continue
             gain = v.gain_of_adding([L["ref"]])
-            if gain - L["price"] - fee(L["price"], 1) < MIN_GAIN:
+            # the same fee the bid was priced with (its own market's, 0 on v10): El Rastro's here dropped every
+            # 0% bid the tick after listing it (CHA-03 at 6 P on v10, worth 9: 620 list/drop pairs in an hour)
+            if gain - L["price"] - self.fee_at(L.get("venue"), L["price"], 1) < MIN_GAIN:
                 try:
                     ctx.api.cancel(int(oid))
                     listed.pop(oid)
