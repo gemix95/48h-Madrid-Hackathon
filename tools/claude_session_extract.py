@@ -25,6 +25,7 @@ SECRET_PATTERNS = [
     (re.compile(r"(?i)(ANTHROPIC_API_KEY=)[^\s'\"]+"), r"\1[REDACTED]"),
     (re.compile(r"(?i)(BAZAAR[_A-Z]*KEY=)[^\s'\"]+"), r"\1[REDACTED]"),
     (re.compile(r"(?i)(DASHBOARD_REMOTE_PASSWORD=)[^\s'\"]+"), r"\1[REDACTED]"),
+    (re.compile(r"\b(tk-|bk_|bk-|sk-ant-)[A-Za-z0-9_-]{6,}"), r"\1[REDACTED]"),  # bare game/broker/Anthropic keys
 ]
 
 
