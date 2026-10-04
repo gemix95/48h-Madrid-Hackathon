@@ -29,6 +29,7 @@ def _team(x) -> bool:
 class History:
     def __init__(self, path: Path = FEED):
         self.path, self.pos, self.trades, self.seen = Path(path), 0, {}, set()   # ref -> [(tick, price, "team" | "dealer")]
+        self.makers = {}  # offer id -> maker, from offer.listed (venue books do not say who made an offer)
 
     def refresh(self) -> None:
         try:
@@ -36,13 +37,21 @@ class History:
         except OSError:
             return
         if size < self.pos:  # the file was replaced: read it again
-            self.pos, self.trades, self.seen = 0, {}, set()
+            self.pos, self.trades, self.seen, self.makers = 0, {}, set(), {}
         with open(self.path, "rb") as f:
             f.seek(self.pos)
             for raw in f:
                 if not raw.endswith(b"\n"):
                     break  # a line still being written: next time
                 self.pos += len(raw)
+                if b'"offer.listed"' in raw:
+                    try:
+                        o = (json.loads(raw).get("payload") or {}).get("offer") or {}
+                        if o.get("id") is not None:
+                            self.makers[o["id"]] = o.get("maker")
+                    except ValueError:
+                        pass
+                    continue
                 if b'"settlement"' not in raw:
                     continue
                 try:

@@ -58,6 +58,7 @@ def build() -> dict:
                                   "released": st.get("released", True)}
     except Exception:
         pass
+    HIST.refresh()  # also the makers of listed offers: our own bids elsewhere get a direct accept
     rows, swaps = {}, []
     def fetch(v):
         try:
@@ -78,9 +79,11 @@ def build() -> dict:
             gave = [a["ref"] for a in g.get("assets") or [] if isinstance(a, dict)]
             wanted = [x[5:] for x in w.get("types") or [] if x.startswith("card:")] + [a["ref"] for a in w.get("assets") or [] if isinstance(a, dict)]
             if len(gave) == 1 and not wanted and w.get("cash"):
-                rows.setdefault(gave[0], {"asks": [], "bids": []})["asks"].append({"price": w["cash"], **where, "id": o.get("id"), "expires": o.get("expires_tick")})
+                rows.setdefault(gave[0], {"asks": [], "bids": []})["asks"].append({"price": w["cash"], **where, "id": o.get("id"), "expires": o.get("expires_tick"),
+                                                                                "us": HIST.makers.get(o.get("id")) == ME})
             elif len(wanted) == 1 and not gave and g.get("cash"):
-                rows.setdefault(wanted[0], {"asks": [], "bids": []})["bids"].append({"price": g["cash"], **where, "id": o.get("id"), "expires": o.get("expires_tick")})
+                rows.setdefault(wanted[0], {"asks": [], "bids": []})["bids"].append({"price": g["cash"], **where, "id": o.get("id"), "expires": o.get("expires_tick"),
+                                                                                "us": HIST.makers.get(o.get("id")) == ME})
             elif gave and wanted and not g.get("cash") and not w.get("cash"):
                 swaps.append({"give": gave, "want": wanted, **where})
     HIST.refresh()
@@ -128,6 +131,11 @@ def public(data: dict) -> dict:
                     "buy_hi": c["asks"][-1]["price"] if c["asks"] else None,   # the dearest seller ("from 10 P, up to 15")
                     "sell_lo": c["bids"][-1]["price"] if c["bids"] else None,  # the lowest buyer
                     "history": c.get("history"),
+                    # El Club's own offer elsewhere when it is the best price (our epic bids): taken directly there
+                    "ours_bid": next(({"id": x["id"], "price": x["price"], "venue": x["venue"], "venue_name": x["name"]}
+                                      for x in c["bids"][:1] if x.get("us")), None),
+                    "ours_ask": next(({"id": x["id"], "price": x["price"], "venue": x["venue"], "venue_name": x["name"]}
+                                      for x in c["asks"][:1] if x.get("us")), None),
                     "saves": _fee(meet, *RASTRO_FEE) if meet else None,  # what El Rastro takes from the accepting side
                     "sides_here": sorted({x["side"] for x in here}), "on_ours": here})
     for c in out:
@@ -233,11 +241,29 @@ def _button(text, label, ask=None):
             f'<pre{" hidden" if ask else ""}>{text}</pre></div>')
 
 
+def _ours_text(c, o, sell):
+    """The best price for this card is El Club's own offer on another market (we cannot trade on our own): one call
+    takes it there."""
+    ref, name = c["ref"], c.get("name") or c["ref"]
+    where = "El Rastro" if o["venue"] == "rastro" else o.get("venue_name") or o["venue"]
+    extra = ' -H "Content-Type: application/json" -d \'{"assets":[YOUR_ASSET_ID]}\'' if sell else ""
+    return (f"{ref} ({name}) \u00b7 El Club (Team 13) {'buys' if sell else 'sells'} it for {o['price']} P on {where} \u00b7 "
+            f"offer {o['id']}\n\nWe cannot trade on our own market, so this one is on {where}. One call settles it on the next tick:\n\n"
+            f'curl -X POST {URL}/api/offers/{o["id"]}/accept -H "X-Team-Key: $BAZAAR_KEY"{extra}'
+            + (f"\n\nYOUR_ASSET_ID: the id of your {ref} in GET /api/me." if sell else "") +
+            (f"\n\n{where} charges its fee to the accepting side." if o["venue"] == "rastro" else ""))
+
+
 def _choice(c, vid, deadline, sell):
     """(text, label) of the best call this card can offer, in this order: take an offer resting on our market (one call,
     settles next tick), buy or sell at the best price in the Bazaar on our market, or post your own side."""
     want = "buy" if sell else "sell"   # selling means taking a resting bid; buying means taking a resting ask
     resting = next((o for o in c["on_ours"] if o["side"] == want), None)
+    ours = c.get("ours_bid") if sell else c.get("ours_ask")
+    best = c.get("sell_at") if sell else c.get("buy_at")
+    if ours and (not resting or (ours["price"] >= resting["price"] if sell else ours["price"] <= resting["price"])) \
+            and ours["price"] == best:
+        return _ours_text(c, ours, sell), ("Sell in 1 click" if sell else "Buy in 1 click"), None
     if resting:  # the price is the resting offer's: nothing to ask
         return _accept_text(c, resting, vid), ("Sell in 1 click" if sell else "Buy in 1 click"), None
     price = c.get("sell_at") if sell else c.get("buy_at")
@@ -296,6 +322,52 @@ def _blocked(c, sell):
     if sell and c.get("minted") == 0:
         return "no copy pulled yet"
     return None
+
+
+def quote(pub: dict, ref: str) -> dict:
+    """What an agent needs about one card: the best price to buy and to sell anywhere, how many offers, the card's
+    trade history and status, and the exact body to post on our market (or the offer to take)."""
+    c = next((x for x in pub.get("cards") or [] if x["ref"] == ref), None)
+    if not c:
+        return {"error": f"unknown card {ref!r}", "cards": "GET /board.json lists them"}
+    vid = (pub.get("our_venue") or {}).get("venue", "v24")
+    h = c.get("history") or {}
+    out = {"card": ref, "name": c.get("name"), "rarity": c.get("rarity"), "set": c.get("set"), "tick": pub.get("tick"),
+           "released": c.get("released", True), "in_play": c.get("minted"), "print_run": c.get("print_run"),
+           "buy": {"best": c.get("buy_at"), "offers": c["sellers"], "dearest": c.get("buy_hi"), "deal": is_deal(c, False)},
+           "sell": {"best": c.get("sell_at"), "buyers": c["buyers"], "lowest": c.get("sell_lo"), "deal": is_deal(c, True)},
+           "history": {k: h.get(k) for k in ("last", "last_tick", "usual", "median", "trades", "basis", "trend")} if h else None,
+           "market": vid, "fee": 0}
+    for sell, key in ((False, "buy"), (True, "sell")):
+        blocked = _blocked(c, sell)
+        if blocked:
+            out[key]["how"] = {"blocked": blocked}
+            continue
+        resting = next((o for o in c["on_ours"] if o["side"] == ("buy" if sell else "sell")), None)
+        ours = c.get("ours_bid") if sell else c.get("ours_ask")
+        if ours and ours["price"] == (c.get("sell_at") if sell else c.get("buy_at")):
+            out[key]["how"] = {"accept": ours["id"], "venue": ours["venue"], "price": ours["price"],
+                               "call": f"POST /api/offers/{ours['id']}/accept" + (' {"assets":[YOUR_ASSET_ID]}' if sell else "")}
+        elif resting:
+            out[key]["how"] = {"accept": resting["id"], "venue": vid, "price": resting["price"],
+                               "call": f"POST /api/offers/{resting['id']}/accept" + (' {"assets":[YOUR_ASSET_ID]}' if sell else "")}
+        else:
+            body = ({"venue": vid, "give": {"assets": ["YOUR_ASSET_ID"]}, "want": {"cash": "YOUR_PRICE"}} if sell
+                    else {"venue": vid, "give": {"cash": "YOUR_PRICE"}, "want": {"cards": [ref]}})
+            out[key]["how"] = {"post": body, "call": "POST /api/offers", "suggested_price": c.get("sell_at") if sell else c.get("buy_at")}
+    return out
+
+
+def _tape_html(n=12):
+    """The latest trades between teams in the Bazaar, newest first (dealer trades only when teams are quiet)."""
+    every = sorted(((t[0], ref, t[1], t[2]) for ref, ts in HIST.trades.items() for t in ts[-4:]), reverse=True)
+    rows = [r for r in every if r[3] == "team"][:n]
+    if len(rows) < 3:  # a quiet market: dealer trades too
+        rows = every[:n]
+    if not rows:
+        return ""
+    items = "".join(f'<span><b>{html.escape(ref)}</b> {p} P{" · dealer" if who == "dealer" else ""}</span>' for _, ref, p, who in rows)
+    return f'<div class="tape" aria-label="Latest trades"><span>Just traded:</span>{items}</div>'
 
 
 def _hist_html(c):
@@ -491,8 +563,13 @@ def render(data: dict) -> str:
                 status = f'<span class="tag none">not pulled yet · 0 of {c.get("print_run") or "?"}</span>'
             elif c.get("minted") is not None:
                 status = f'<span class="tag">{c["minted"]} of {c.get("print_run") or "?"} in play</span>'
-            return (f'<tr class="{quiet}"><td class="cardcell"><div class="thumb" data-card="{html.escape(c["ref"])}"></div>'
-                    f'<div class="cardtxt"><b>{html.escape(c["ref"])}</b><div>{html.escape(str(c.get("name") or ""))}</div>'
+            priced = 1 if (c.get("buy_at") or c.get("sell_at")) else 0
+            fire = 1 if (is_deal(c, False) or is_deal(c, True)) else 0
+            find = html.escape(f'{c["ref"]} {c.get("name") or ""} {c.get("set") or ""}'.lower(), quote=True)
+            return (f'<tr class="{quiet}" data-row="{html.escape(c["ref"])}" data-find="{find}" data-priced="{priced}" data-fire="{fire}">'
+                    f'<td class="cardcell"><div class="thumb" data-card="{html.escape(c["ref"])}"></div>'
+                    f'<div class="cardtxt"><b>{html.escape(c["ref"])}</b> <button class="star" type="button" title="Add to my list" '
+                    f'aria-label="Add {html.escape(c["ref"])} to my list">☆</button><div>{html.escape(str(c.get("name") or ""))}</div>'
                     f'<div class="dim small">{html.escape(meta)}</div><div class="small">{status}</div>{_hist_html(c)}</div></td>'
                     f'{side(c, False)}{side(c, True)}</tr>')
 
@@ -569,9 +646,14 @@ table.deck{{table-layout:fixed;width:100%;min-width:720px}}table.deck td{{vertic
 .thumb{{width:80px;height:112px;flex:none}}.thumb .cromo{{font-size:5px}}.thumb:empty{{background:var(--line);border-radius:6px}}
 .cardtxt{{min-width:0;overflow-wrap:anywhere}}.cardtxt b{{font-size:15px}}td.side{{min-width:170px}}.price{{font-size:20px;font-weight:700}}.price.none{{color:var(--dim)}}
 td.side button.trade{{margin-top:6px}}.pricef{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.pricef input{{width:90px;font:inherit;padding:4px 6px}}.pricef button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:#fff;cursor:pointer}}.err{{color:#d9534f;width:100%}}.hint{{width:100%}}.hist{{margin-top:4px;color:var(--dim)}}.sparkwrap{{position:relative;display:block;width:max-content;cursor:zoom-in;outline:none}}.sparkwrap>svg{{display:block;margin-bottom:2px}}.sparkwrap polyline{{stroke:var(--dim);opacity:.55}}
-.tag{{color:var(--dim)}}.tag.none{{color:var(--amber)}}.tag.soon{{color:var(--gold);font-weight:600}}.setnav .n.soon{{background:var(--gold);color:#fff}}.setnote{{font-weight:400}}.set{{scroll-margin-top:110px}}#auctions,#how{{scroll-margin-top:110px}}
-.sheetx{{display:none}}#backdrop{{display:none}}.sheettitle{{display:none}}.sheet .sheettitle{{display:block;margin:-22px 30px 10px 0;font-size:15px}}.sparkbig{{display:none;position:absolute;left:0;top:24px;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 8px 4px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:276px}}.sparkwrap:hover .sparkbig,.sparkwrap:focus .sparkbig,.sparkwrap:focus-within .sparkbig{{display:block}}@media (max-width:640px){{.hero{{font-size:16px}}table.deck.sets,table.deck.lots{{min-width:0;table-layout:auto}}table.deck.sets thead,table.deck.lots thead{{display:none}}table.deck.sets tr,table.deck.lots tr{{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:12px;border-bottom:1px solid var(--line)}}table.deck.sets td,table.deck.lots td{{display:block;padding:0;border:0;width:auto}}table.deck td.cardcell{{grid-column:1/-1;display:flex}}table.deck.lots td:last-child{{grid-column:1/-1}}td.side::before{{content:attr(data-label);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}}.pricef input{{font-size:16px}}.copied.sheet{{position:fixed;left:8px;right:8px;top:8px;max-height:calc(100dvh - 16px);overflow:auto;z-index:60;margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.35)}}.copied.sheet .sheetx{{display:block;position:sticky;top:0;margin-left:auto;font:inherit;font-size:22px;line-height:1;border:0;background:none;color:var(--ink);padding:0 4px}}#backdrop.on{{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:55}}.thumb{{width:60px;height:84px}}.thumb .cromo{{font-size:3.75px}}.sparkbig{{left:-72px}}}}.rules summary,.how summary{{cursor:pointer}}.how{{margin:18px 0}}.how .steps{{margin-top:12px}}.status{{margin:4px 0 10px}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
-.setnav{{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;margin:6px 0 4px;background:var(--bg)}}
+.tag{{color:var(--dim)}}.tag.none{{color:var(--amber)}}.tag.soon{{color:var(--gold);font-weight:600}}.setnav .n.soon{{background:var(--gold);color:#fff}}.setnote{{font-weight:400}}.set{{scroll-margin-top:150px}}#auctions,#how{{scroll-margin-top:150px}}
+.sheetx{{display:none}}#backdrop{{display:none}}.sheettitle{{display:none}}.sheet .sheettitle{{display:block;margin:-22px 30px 10px 0;font-size:15px}}.sparkbig{{display:none;position:absolute;left:0;top:24px;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 8px 4px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:276px}}.sparkwrap:hover .sparkbig,.sparkwrap:focus .sparkbig,.sparkwrap:focus-within .sparkbig{{display:block}}@media (max-width:640px){{.hero{{font-size:16px}}.setnav .sets,.setnav .filters{{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none}}.setnav .sets a,.setnav .chip{{flex:none}}.filters input{{flex:0 0 150px!important}}table.deck.sets,table.deck.lots{{min-width:0;table-layout:auto}}table.deck.sets thead,table.deck.lots thead{{display:none}}table.deck.sets tr,table.deck.lots tr{{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:12px;border-bottom:1px solid var(--line)}}table.deck.sets td,table.deck.lots td{{display:block;padding:0;border:0;width:auto}}table.deck td.cardcell{{grid-column:1/-1;display:flex}}table.deck.lots td:last-child{{grid-column:1/-1}}td.side::before{{content:attr(data-label);display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:2px}}.pricef input{{font-size:16px}}.copied.sheet{{position:fixed;left:8px;right:8px;top:8px;max-height:calc(100dvh - 16px);overflow:auto;z-index:60;margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.35)}}.copied.sheet .sheetx{{display:block;position:sticky;top:0;margin-left:auto;font:inherit;font-size:22px;line-height:1;border:0;background:none;color:var(--ink);padding:0 4px}}#backdrop.on{{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:55}}.thumb{{width:60px;height:84px}}.thumb .cromo{{font-size:3.75px}}.sparkbig{{left:-72px}}}}.rules summary,.how summary{{cursor:pointer}}.how{{margin:18px 0}}.how .steps{{margin-top:12px}}.status{{margin:4px 0 10px}}.rules ol{{margin:6px 0 0 18px;padding:0}}.rules li{{margin:3px 0}}
+.setnav{{position:sticky;top:0;z-index:5;padding:8px 0;margin:6px 0 4px;background:var(--bg)}}.setnav .sets{{display:flex;flex-wrap:wrap;gap:6px}}
+.filters{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}}.filters input{{flex:1 1 180px;min-width:0;font:inherit;font-size:16px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink)}}
+.chip{{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:4px 12px;cursor:pointer}}.chip.on{{border-color:var(--gold);color:var(--gold);font-weight:600}}
+.star{{font:inherit;border:0;background:none;color:var(--dim);cursor:pointer;font-size:16px;line-height:1;padding:0 2px}}.star.on{{color:var(--gold)}}
+.tape{{display:flex;gap:14px;overflow-x:auto;white-space:nowrap;font-size:13px;color:var(--dim);padding:2px 0 8px;scrollbar-width:none}}.tape b{{color:var(--ink)}}
+.filtered{{display:none!important}}
 .setnav a{{text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 12px;font-size:13px}}
 .setnav a:hover{{border-color:var(--gold);color:var(--gold)}}.setnav .n{{color:var(--dim);margin-left:6px;font-size:12px}}
 .set{{scroll-margin-top:56px}}.price.flash{{background:color-mix(in srgb,var(--gold) 25%,transparent);border-radius:6px;transition:background 1s}}
@@ -582,7 +664,10 @@ button.trade:hover{{background:var(--gold);color:#fff}}.copied{{margin-top:8px}}
 <h1>El Club Board</h1>
 <div class="hero">Every card in the Bazaar at its <b>best price</b>. Buy or sell in 1 click. 🔥 = well under the usual price.</div>
 <div class="dim small status">All {pub["markets"]} markets · tick <span id="tick">{pub["tick"]}</span> · updated <span id="upd">{when}</span> · live{lots_link} · <a href="#how" class="howlink">How it works</a></div>
-<nav class="setnav">{setnav()}</nav>
+<nav class="setnav"><div class="filters"><input id="q" type="search" placeholder="Find a card: LAV-10, Chulapa…" autocomplete="off" aria-label="Find a card">
+<button class="chip on" data-f="all" type="button">All</button><button class="chip" data-f="priced" type="button">With a price</button><button class="chip" data-f="fire" type="button">🔥 Deals</button><button class="chip" data-f="star" type="button">★ My list</button></div>
+<div class="sets">{setnav()}</div></nav>
+{_tape_html()}
 <div id="deck">{deck()}</div>
 
 {_auctions_html(data, vid)}
@@ -611,6 +696,35 @@ in. Read it before you run it: there is nothing in it but your own offer.</li>
 </main>
 <script>
 let busyUntil = 0;
+// Search, filters and "my list" (kept in this browser only; the page works without it)
+let stars = new Set();
+try {{ stars = new Set(JSON.parse(localStorage.getItem("elclub.stars") || "[]")); }} catch (e) {{}}
+let mode = "all";
+function applyFilters() {{
+  const q = (document.getElementById("q").value || "").trim().toLowerCase();
+  document.querySelectorAll("tr[data-row]").forEach(tr => {{
+    const ok = (!q || tr.dataset.find.includes(q))
+      && (mode === "all" || (mode === "priced" && tr.dataset.priced === "1") || (mode === "fire" && tr.dataset.fire === "1")
+          || (mode === "star" && stars.has(tr.dataset.row)));
+    tr.classList.toggle("filtered", !ok);
+  }});
+  document.querySelectorAll(".set").forEach(s => s.classList.toggle("filtered", !s.querySelector("tr[data-row]:not(.filtered)")));
+}}
+document.querySelectorAll("tr[data-row]").forEach(tr => {{
+  const b = tr.querySelector("button.star");
+  if (stars.has(tr.dataset.row)) {{ b.classList.add("on"); b.textContent = "★"; }}
+  b.addEventListener("click", () => {{
+    const r = tr.dataset.row, on = !stars.has(r);
+    on ? stars.add(r) : stars.delete(r);
+    b.classList.toggle("on", on); b.textContent = on ? "★" : "☆";
+    try {{ localStorage.setItem("elclub.stars", JSON.stringify([...stars])); }} catch (e) {{}}
+    if (mode === "star") applyFilters();
+  }});
+}});
+document.getElementById("q").addEventListener("input", applyFilters);
+document.querySelectorAll(".chip[data-f]").forEach(c => c.addEventListener("click", () => {{
+  mode = c.dataset.f; document.querySelectorAll(".chip[data-f]").forEach(x => x.classList.toggle("on", x === c)); applyFilters();
+}}));
 // On a phone the price form and the request open as a sheet at the top of the screen: the keyboard comes up from
 // below and never covers it, and the table under it does not move.
 const backdrop = document.createElement("div"); backdrop.id = "backdrop"; document.body.appendChild(backdrop);
@@ -704,6 +818,9 @@ async function refresh() {{
     document.querySelectorAll("td.side[data-ref]").forEach(td => {{
       const v = ((d.cards || {{}})[td.dataset.ref] || {{}})[td.dataset.side]; if (!v) return;
       const pr = td.querySelector(".price"), ct = td.querySelector(".count"), b = td.querySelector("button.trade"), pre = td.querySelector(".copied pre");
+      const tr = td.closest("tr");
+      if (tr && td.dataset.side) {{ tr.dataset["fire" + td.dataset.side] = v.price.includes("🔥") ? "1" : "0";
+        tr.dataset.fire = (tr.dataset.firebuy === "1" || tr.dataset.firesell === "1") ? "1" : "0"; }}
       if (pr.textContent !== v.price) {{ pr.textContent = v.price; pr.classList.toggle("none", v.price === "–"); pr.classList.add("flash"); setTimeout(() => pr.classList.remove("flash"), 1200); }}
       ct.textContent = v.count; b.textContent = v.label; b.dataset.text = v.text;
       for (const k of ["lo", "hi", "last", "basis"]) {{ if (v.ask && v.ask[k] != null) b.dataset[k] = v.ask[k]; }}

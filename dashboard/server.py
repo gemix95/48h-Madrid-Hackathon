@@ -464,6 +464,7 @@ def board_loop():
             BOARD["live"] = json.dumps(board.live(data)).encode()  # the light feed the page polls every 15 s
             BOARD["refs"] = {c["ref"] for c in data["cards"]}  # cards a lot may be opened for
             BOARD["history"] = json.dumps({"tick": data.get("tick"), "cards": board.HIST.all()}).encode()  # trade prices per card
+            BOARD["pub"] = board.public(data)  # for /board/quote
         except Exception as e:
             print("board:", repr(e)[:200], flush=True)
         time.sleep(15)  # a Sunday tick is 15 s
@@ -529,6 +530,19 @@ class Handler(BaseHTTPRequestHandler):
                     res = {"error": repr(e)[:160]}
             body = json.dumps(res, indent=1).encode()
             self.send_response(400 if "error" in res else 200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+        if path == "/board/quote":  # one card for an agent: best prices, history, status and the call to post on our market
+            from urllib.parse import urlparse, parse_qs
+            ref = (parse_qs(urlparse(self.path).query).get("card") or [""])[0].upper()
+            res = board.quote(BOARD.get("pub") or {}, ref)
+            body = json.dumps(res, indent=1).encode()
+            self.send_response(404 if "error" in res else 200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
