@@ -4,17 +4,17 @@ Published deck (edit and present there): https://claude.ai/artifact/5ckQkeTEzg6x
 
 | # | Slide | File |
 |---|---|---|
-| 1 | Day 1: 1st place. Today: 16th. What's wrong with you guys? | `slides/intro.html` |
-| 1b | What worked on day 1: know who wants what, buy cheap and never sell a page, our dashboard (image `friday-album.png`) | `slides/friday.html` |
-| 1b | What worked on Day 1: 30 of 30 in negotiation (Sergio) | `slides/day1.html` |
-| 2 | We actually offered a whole fintech ecosystem: cashback, flipper, loan desk, reverse Tinder | `slides/tried.html` |
-| 3 | One idea that worked*: arbitrage (*but came too late) | `slides/arbitrage.html` |
-| 4 | Our desperate attempt to add value to our market: El Club Board | `slides/clubboard.html` |
-| 5 | WHAT A SURPRISE! (divider) | `slides/surprise.html` |
-| 6 | The problem isn't the tech | `slides/lesson.html` |
-| 7 | ¡Gracias! rivals, arena builders, Nova, Anthropic Madrid | `slides/thanks.html` |
-| 8 | Spa-Francorchamps 1991: Schumacher's first race. DNF costs you a race; how you drive wins you the championship | `slides/joke.html` |
-| 9 | Links: our GitHub, El Club Board, two more to come | `slides/links.html` |
+| 1 | Day 1: 1st place. Today: 16th. | `slides/intro.html` |
+| 2 | 30 of 30 in negotiation | `slides/day1.html` |
+| 3 | And then … | `slides/andthen.html` |
+| 4 | We actually offered a whole fintech ecosystem | `slides/tried.html` |
+| 5 | Arbitrage | `slides/arbitrage.html` |
+| 6 | El Club Board | `slides/clubboard.html` |
+| 7 | WHAT A SURPRISE! | `slides/surprise.html` |
+| 8 | The problem isn't the tech. | `slides/lesson.html` |
+| 9 | ¡Agradecidos por todo! | `slides/thanks.html` |
+| 10 | Michael Schumacher's first Formula 1 race | `slides/joke.html` |
+| 11 | Links | `slides/links.html` |
 
 Speaker notes are the `<aside>` at the end of each slide. Images: `assets/<id>.<ext>` for each `/_blob/<id>` in a slide
 (the phone screenshot of the board, the Schumacher photo).
