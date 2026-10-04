@@ -78,7 +78,7 @@ def logs_view() -> dict:
     with lock:
         threads, me_id = cache.get("threads"), (cache.get("me") or {}).get("id")
     return {"origins": message_origins(INDEX, threads, me_id), "decisions": tail(DECISIONS), "guard": INDEX.recent_guard(),
-            "log_sources": INDEX.status(), "logs_from": "here", "arbitrage": ARB["data"]}
+            "log_sources": INDEX.status(), "logs_from": "here", "arbitrage": ARB["data"], "value_seen": VALUE_SEEN}
 
 
 def mirror_remote():
@@ -387,6 +387,28 @@ def agent_running():
         return None
 
 
+VALUE_SEEN_FILE = HERE.parent / "team13" / "logs" / "value_seen.json"
+try:
+    VALUE_SEEN = json.loads(VALUE_SEEN_FILE.read_text())
+except (OSError, ValueError):
+    VALUE_SEEN = {}
+
+
+def remember_values(me: dict) -> None:
+    """The game's value of every copy we hold (asset id -> your_value), kept after the copy leaves: a sale in the
+    Negotiations tab then shows the exact value it gave up, not an estimate."""
+    changed = False
+    for a in me.get("assets") or []:
+        if a.get("your_value") is not None and VALUE_SEEN.get(str(a["id"])) != a["your_value"]:
+            VALUE_SEEN[str(a["id"])] = a["your_value"]
+            changed = True
+    if changed:
+        try:
+            VALUE_SEEN_FILE.write_text(json.dumps(VALUE_SEEN))
+        except OSError:
+            pass
+
+
 def poll():
     intel_due = boards_due = 0.0
     while True:
@@ -431,6 +453,8 @@ def poll():
                     cache.pop(name + "_error", None)
                 if name == "me" and "_error" not in data and isinstance(cache.get("clock"), dict):
                     record(data, cache["clock"])
+                if name == "me" and "_error" not in data:
+                    remember_values(data)
             due[name] = now + every
             time.sleep(0.25 if keyed else 0.05)  # ~1 req/s on the team key, leaving room for our agents
         with lock:
@@ -657,7 +681,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "history": history, "served_at": time.time(), "broker_log": tail(BROKER_LOG, 60),
                                    **logs, "swaps": swaps_payload(),
                                    "announcements": announcements(), "duel_learn": duel_learn, "duels_board": duels_board,
-                                   "workshop": workshop_view(), "my_agent": my_agent}, default=str).encode()
+                                   "workshop": workshop_view(), "my_agent": my_agent, "value_seen": {**(remote_logs.get("value_seen") or {}), **VALUE_SEEN}}, default=str).encode()
             self._send(200, "application/json", body)
         elif self.path.startswith("/strategy"):
             self._send(200, "application/json", json.dumps(strategy.describe()).encode())

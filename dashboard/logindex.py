@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 
 # log records that are a message we sent (not a price we merely saw)
-SENT = {"agent": {"offer", "haggle_offer", "counter_team", "invited"}, "manual": {"say"},
+SENT = {"agent": {"offer", "haggle_offer", "counter_team", "invited"}, "manual": {"say", "offer"},  # offer: a hand script's haggle step
         "script": {"thread_offer", "thread_note", "sent"}}
 STALE = 1800  # seconds: an agent log with no line for this long belongs to no running agent (an old laptop log)
 

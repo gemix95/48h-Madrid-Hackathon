@@ -1309,6 +1309,14 @@ function tickTime(tick, d) {
   return new Date(Date.now() - ((c.tick ?? tick) - tick) * ts);
 }
 const THR = { sel: null, view: null };   // selected conversation tab, and which group (open | deal | nodeal)
+// the game's value of each copy we held (asset id -> your_value): a sale keeps showing the exact value it gave up
+const VALUE_SEEN = (() => { try { return JSON.parse(localStorage.getItem("valueSeen") || "{}"); } catch (e) { return {}; } })();
+function rememberValues(d) {
+  let changed = false;
+  for (const a of d.me?.assets || []) if (a.your_value != null && VALUE_SEEN[a.id] !== a.your_value) { VALUE_SEEN[a.id] = a.your_value; changed = true; }
+  for (const [id, val] of Object.entries(d.value_seen || {})) if (VALUE_SEEN[id] == null) { VALUE_SEEN[id] = val; changed = true; }  // the server's memory
+  if (changed) try { localStorage.setItem("valueSeen", JSON.stringify(VALUE_SEEN)); } catch (e) { /* private window: memory only */ }
+}
 // what a conversation trades, at what agreed price, and what that is worth to us
 function dealInfo(th, d, M) {
   const t = th.topic || {}, side = t.sell ? "sell" : "buy", w = t.sell || t.buy || {};
@@ -1329,8 +1337,13 @@ function dealInfo(th, d, M) {
     why = `<b>Estimate: ${fmt(worth, 1)} P</b><br>Nobody knows what a pack holds, so this is its expected value: the average card each slot can give, at our values today (our neighbourhood multipliers; a card we already hold counts 25%, a third copy 10%).<br>${slots}<br><span class="muted">Page bonus not included. It drops as we collect more duplicates. The game reports no pack value before you own one; what comes out is luck and does not score.</span>`;
   } else if (c && side === "buy" && th.status === "deal" && held.length) {
     worth = Math.min(...held.map(a => a.your_value));   // the game's own value of the copy this deal added
+  } else if (c && side === "sell" && VALUE_SEEN[w.asset ?? w.assets?.[0]] != null) {
+    worth = VALUE_SEEN[w.asset ?? w.assets?.[0]];  // the game's value of the very copy we sell, seen while we held it
   } else if (c) {
-    const n = (M.held[c.id] || []).length, k = side === "buy" && th.status === "deal" ? Math.max(0, n - 1) : n;
+    // the copy that changes hands: buying adds copy n+1 (n-1 once the deal landed); selling gives up copy n while we
+    // still hold it, copy n+1 once it is gone (counting it as an extra copy priced the La Chulapa sale at 3, then 13)
+    const n = (M.held[c.id] || []).length, k = side === "buy" ? (th.status === "deal" ? Math.max(0, n - 1) : n)
+      : (th.status === "deal" ? n : Math.max(0, n - 1));
     worth = c.book * (M.aff[c.set] ?? 1) * M.marg[Math.min(k, M.marg.length - 1)]; est = true;
     why = `<b>Estimate: ${fmt(worth, 1)} P</b><br>The game only reports the value of cards we hold. This one: book ${c.book} P × our ${esc(c.setName)} multiplier ×${M.aff[c.set] ?? 1} × copy factor ${M.marg[Math.min(k, M.marg.length - 1)]} (${k ? "a copy we already had" : "first copy"}).<br><span class="muted">Page bonus not included.</span>`;
   }
@@ -2897,6 +2910,16 @@ function mineLine(r) {  // [sentence, why]: story() plus the arbitrage and walk-
   if (k === "arb.sold" || k === "arb.resold") return [`✓ Arbitrage: <b>sold ${esc(r.ref)} for ${r.price} P</b>`, r.score != null ? `score ${r.score}` : ""];
   if (k.startsWith("arb.")) return [`Arbitrage: ${esc((r.action || "").replace(/_/g, " "))}${r.ref ? ` ${esc(r.ref)}` : ""}`, ""];
   if (k === "trade.haggle_ended") return [`A negotiation with another team ended`, esc(r.status || "")];
+  if (r.module === "manual") {  // a play done by hand on the server for this agent's owner (logs/hand.jsonl)
+    const M_ = { accept: () => [`✋ Bought <b>${esc(r.ref || "")}</b> (offer #${r.offer})`, "by hand"],
+      workshop: () => [`✋ Workshop: ${esc((r.refs || []).join(" + "))} → <b>${esc(r.r?.card?.ref || "")} ${esc(r.r?.card?.name || "")}</b>`, `${esc(r.r?.card?.rarity || "")}, luck ${r.r?.luck ?? "–"}`],
+      opened: () => [`✋ Opened a sale of <b>${esc(r.ref || "")}</b>`, `asks from ${r.hi} P, never below ${r.floor} P`],
+      offer: () => [`✋ Asked <b>${r.price} P</b>`, `offer ${(r.k ?? 0) + 1}`],
+      her_offer: () => [`✋ The dealer offered ${r.cash} P${r.final ? " (final)" : ""}`, ""],
+      accepted: () => [`✓ ✋ <b>Sold for ${r.price} P</b>`, "by hand"],
+      walk: () => [`✋ Walked away`, esc(r.why || "")] };
+    return (M_[r.action] || (() => [`✋ ${esc(String(r.action || "").replace(/_/g, " "))}`, ""]))();
+  }
   return story(r);
 }
 function mineTab(d) {
@@ -2995,7 +3018,7 @@ async function refresh() {
       JSON.stringify(d.my_agent?.team_haggles || {}).length, d.my_agent?.state_age != null && d.my_agent.state_age < 120]);
     if (sig === lastSig) return;  // nothing changed: keep the page still (hover, scroll)
     lastSig = sig;
-    D = d; const M = model(d);
+    D = d; rememberValues(d); const M = model(d);
     const sections = [() => header(d), () => { const ev = timeline(d); nextMoves(d, M, ev); }, () => scorePanel(d), () => album(d, M), () => packs(d, M),
       () => threads(d, M), () => negSwitch(d), () => swaps(d, M), () => dealers(d), () => duels(d), () => workshopTab(d), () => arbTab(d), () => market(d, M), () => marketing(d), () => leaderboard(d), () => feed(d), () => brain(d), () => activity(d), () => strategyPlan(d, M), () => intelTab(d, M), () => councilTab(d), () => ledgerTab(d), () => mineTab(d)];
     for (const s of sections) try { s(); } catch (e) { console.error(e); }

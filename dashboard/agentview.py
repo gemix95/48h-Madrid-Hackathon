@@ -4,7 +4,8 @@ From the server's files, read-only:
   - its decisions: the decisions.jsonl lines with "agent": <name>, read incrementally (about the last 12 MB at start);
     the noisy ones (a skipped sale, a bid re-listed) are only counted;
   - what it is doing now: its state-<name>.json (open dealer plans, team haggles, the offers it listed);
-  - its settings from the repo: team13/agents.json.
+  - its settings from the repo: team13/agents.json;
+  - the plays done by hand on its behalf: logs/hand.jsonl lines whose "by" starts with "<name>-" (a server script).
 """
 from __future__ import annotations
 
@@ -22,7 +23,25 @@ QUIET = {"sale_skipped_below_value", "bid_dropped", "stale_bid_dropped", "skip_f
 # what ended: a deal, a walk-away, a conversation closed
 OUTCOMES = {"haggle.deal", "haggle.accept", "haggle.ended", "haggle.moved_on", "haggle.final_declined",
             "trade.accept", "trade.accept_team", "trade.haggle_closed", "trade.haggle_ended",
-            "arb.bought", "arb.sold", "arb.resold", "arb.gave_up", "arb.dealer_walked", "arb.stuck_with_card"}
+            "arb.bought", "arb.sold", "arb.resold", "arb.gave_up", "arb.dealer_walked", "arb.stuck_with_card",
+            "manual.accept", "manual.accepted", "manual.workshop", "manual.walk", "manual.ended"}
+HAND = TEAM13.parent / "logs" / "hand.jsonl"
+
+
+def _hand(name: str) -> list:
+    """Plays done by hand for this agent's owner (a server script logging "by": "<name>-..."), as decision records."""
+    out = []
+    try:
+        for line in HAND.read_text().splitlines()[-3000:]:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if str(r.get("by") or "").startswith(f"{name}-"):
+                out.append({**r, "module": "manual", "action": r.get("ev"), "agent": name})
+    except OSError:
+        pass
+    return out
 
 _lock = threading.Lock()
 _m = {"name": None, "pos": None, "recs": collections.deque(maxlen=300), "outcomes": collections.deque(maxlen=200),
@@ -75,6 +94,10 @@ def view(name: str) -> dict:
         except OSError:
             pass
         recs, outcomes, quiet = list(_m["recs"]), list(_m["outcomes"]), dict(_m["quiet"])
+    hand = _hand(name)
+    by_ts = lambda r: r.get("ts") or 0
+    recs = sorted(recs + hand, key=by_ts)[-300:]
+    outcomes = sorted(outcomes + [r for r in hand if f"manual.{r['action']}" in OUTCOMES], key=by_ts)[-200:]
     path = TEAM13 / f"state-{name}.json"
     try:
         st, age = json.loads(path.read_text()), round(time.time() - path.stat().st_mtime)
