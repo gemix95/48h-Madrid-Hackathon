@@ -20,7 +20,7 @@ We deduplicated **35,655 public events**, including **7,904 dealer replies**, th
 
 These are conditional next-quote improvements, **not closing rates, causal language effects or unconditional forecasts**. Accepted/rejected conversations without another offer are omitted; card values, concession size and market time are not fully matched. Several observations come from one thread.
 
-For Pícaros purchases, replies mentioning urgency (taxi, quick, leaving, etc.) preceded another reduction in **72/73 transitions across 60 threads**, median **5 P**, mean **5.75 P**. Without those words: **100/103 across 82 threads**, median **5 P**, mean **5.99 P**. Urgency adds little predictive information in this continuing-negotiation sample. We should not accelerate our concessions just because the character announces a taxi.
+For Pícaros purchases, replies with conservative urgency markers (whole words quick/rápido/rápida/taxi, or phrases one minute/un minuto/nos vamos/engine running/motor running, or vanish/vanishes) preceded another reduction in **52/53 transitions across 44 threads**, median **5 P**, mean **5.62 P**. Without those markers: **120/123 across 93 threads**, median **5 P**, mean **6.01 P**. Urgency adds little predictive information in this continuing-negotiation sample. We should not accelerate our concessions just because the character announces a taxi. Word boundaries prevent Spanish carta/cartas from being mistaken for English cart.
 
 Verifiable examples in the public feed:
 
