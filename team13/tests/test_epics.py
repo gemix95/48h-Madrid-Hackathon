@@ -11,6 +11,7 @@ import epics, strategy  # noqa: E402
 from values import Values  # noqa: E402
 from bazaar_sdk import BazaarError  # noqa: E402
 
+epics.team_caps = lambda: {"SAL-11": 200}  # the tests fix the team cap; agent/caps.json may change
 RAR = ["common"] * 5 + ["uncommon"] * 3 + ["rare"] * 2 + ["epic", "legendary"]
 BOOK = {"common": 10, "uncommon": 25, "rare": 70, "epic": 180, "legendary": 450}
 
@@ -135,6 +136,13 @@ c.clock["tick"] += 1
 m.step()
 r.append(check("filled bid: no new SAL-11 bid", not any(o["want"]["types"] == ["card:SAL-11"] for o in c.api.offers)
                and "SAL-11" not in c.state["epics"]["bids"]))
+
+# without a team cap the bid is value - 50: the most that still banks the full +50
+epics.team_caps = lambda: {}
+c = Ctx()
+epics.Epics(c).step()
+r.append(check("no cap: SAL-11 bid at 288 - 50 = 238", c.api.offers and c.api.offers[0]["give"] == {"cash": 238}, c.api.offers))
+epics.team_caps = lambda: {"SAL-11": 200}
 
 # an unfilled bid: cancelled after epics_team_ticks, then FILL_WAIT ticks before the dealer may start on it
 c = Ctx()
