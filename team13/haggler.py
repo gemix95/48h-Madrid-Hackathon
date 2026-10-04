@@ -38,31 +38,14 @@ def allowed_dealer_levels(S: dict) -> set[int] | None:
     return {int(x.strip()) for x in str(raw).split(",") if x.strip()}
 
 KIND_BUY = [
-    "¡Hola, {name}! Qué alegría verle. ¿Le parecería bien {p} primas? Muchas gracias, de verdad.",
-    "Gracias por su paciencia, {name}. ¿Podríamos quedar en {p} primas? Me haría muy feliz.",
-    "{name}, usted es muy amable. Mi presupuesto llega a {p} primas, ¿le iría bien?",
-    "Me encanta su puesto, {name}. ¿Y si lo dejamos en {p}? Gracias de corazón.",
-    "Se lo agradezco mucho, {name}. {p} primas, y hablaré bien de su puesto a todo el mundo.",
-    "Usted es un encanto, {name}. ¿Podría ser por {p} primas?",
-    "¡Gracias, {name}! Subo un poquito con cariño: {p} primas, ¿le parece?",
-    "Gracias por todo, {name}. {p} primas, ¿vale? Con mucho respeto.",
-    "Ay, {name}, es para mi nieta, que colecciona estas cartas. ¿Me la dejaría en {p} primas?",
-    "{name}, he contado el monedero dos veces: hoy tengo {p} primas. ¿Sería tan amable?",
-    "En el Rastro me la dejaban más barata, pero prefiero comprársela a usted, {name}. ¿{p} primas?",
-    "Es mi último día en Madrid, {name}. ¿{p} primas y me llevo un recuerdo precioso de su puesto?",
-    "Mi abuela tenía un puesto como el suyo, {name}. ¿Me haría el favor de {p} primas?",
-    "Qué gusto tratar con alguien tan serio, {name}. ¿Le cuadrarían {p} primas?",
-    "Con su permiso, {name}, me acerco a {p} primas. Mil gracias por escucharme.",
+    "Gracias por su atención, {name}; ¿podría comprar {item} por {p} primas?",
+    "Me haría ilusión comprar {item}, {name}, y le ofrezco {p} primas.",
+    "Con mucho respeto, {name}, quisiera comprar {item} y pagarle {p} primas.",
 ]
 KIND_SELL = [
-    "¡Hola, {name}! Qué alegría saludarle. Traigo una carta preciosa; ¿{p} primas le parecen justas?",
-    "Gracias, {name}. Está en muy buen estado. ¿Le irían bien {p} primas?",
-    "{name}, por usted bajo un poquito con cariño: {p} primas. Muchas gracias.",
-    "Gracias, {name}. ¿Lo dejamos en {p}? Me haría ilusión cerrar con usted.",
-    "Usted es muy amable, {name}. {p} primas y es suya con mucho gusto.",
-    "Confío en su criterio, {name}. ¿Podríamos quedar en {p} primas?",
-    "Para su álbum, {name}, le propongo {p} primas. Gracias de corazón.",
-    "Es un placer negociar con usted, {name}. ¿{p} primas le cuadrarían?",
+    "Gracias, {name}; le vendo {item} por {p} primas y quedaría en buenas manos.",
+    "Para su puesto, {name}, le ofrezco {item} por {p} primas.",
+    "Sería un gusto, {name}, venderle {item} por {p} primas.",
 ]
 
 
@@ -115,16 +98,39 @@ BANCO_DECLINE = [
     "Don Ernesto, gracias de corazón por su tiempo. Hoy no me alcanza, y no quiero hacerle perder el suyo.",
 ]
 BANCO_BUY = [
-    "Don Ernesto, con el debido respeto, ¿le parecerían bien {p} primas?",
-    "Don Ernesto, le agradezco su paciencia. Puedo ofrecerle {p} primas.",
-    "Don Ernesto, si le parece razonable, lo dejaríamos en {p} primas.",
-    "Don Ernesto, subo con respeto hasta {p} primas. Gracias por considerarlo.",
+    "Don Ernesto, con el debido respeto, quisiera comprar {item} por {p} primas.",
+    "Don Ernesto, le propongo pagarle {p} primas por comprar {item}.",
+    "Don Ernesto, si usted lo considera, ofrezco {p} primas para adquirir {item}.",
 ]
 BANCO_SELL = [
-    "Don Ernesto, le traigo una carta que quizá merezca su reserva. ¿{p} primas le parecen justas?",
-    "Don Ernesto, con mucho respeto, pido {p} primas por esta pieza.",
-    "Don Ernesto, es una carta seria. ¿La dejaríamos en {p} primas?",
+    "Don Ernesto, le ofrezco {item} para su reserva por {p} primas.",
+    "Don Ernesto, con mucho respeto, le vendo {item} por {p} primas.",
+    "Don Ernesto, le propongo adquirir usted {item} por {p} primas.",
 ]
+
+
+# 0) Spoken profiles keep the transaction clear; prices still come from the rules below.
+DEALER_TEXTS = {
+    "abuela": (KIND_BUY, KIND_SELL), "banco": (BANCO_BUY, BANCO_SELL),
+    "chato": (["{name}, quiero comprar {item} y le ofrezco {p} primas.",
+               "Le propongo pagarle {p} primas por {item}, {name}.",
+               "Para comprarle {item}, {name}, mi oferta es {p} primas."],
+              ["{name}, le vendo {item} por {p} primas.",
+               "Le ofrezco {item} para su puesto, {name}, por {p} primas.",
+               "Para venderle {item}, {name}, le propongo {p} primas."]),
+    "pilar": (["Con su permiso, {name}, quisiera comprar {item} por {p} primas.",
+               "{name}, le ofrezco {p} primas para adquirir {item}.",
+               "Para comprarle {item}, {name}, propongo pagarle {p} primas."],
+              ["{name}, le ofrezco {item} para su colección por {p} primas.",
+               "Con respeto a su criterio, {name}, le vendo {item} por {p} primas.",
+               "Para su álbum, {name}, le propongo adquirir {item} por {p} primas."]),
+    "picaros": (["{name}, quiero comprar {item}, la pieza acordada, por {p} primas.",
+                 "Para comprarles {item}, {name}, les ofrezco {p} primas.",
+                 "{name}, mi propuesta es pagarles {p} primas por {item}, sin cambiar la pieza."],
+                ["{name}, les vendo {item}, la pieza acordada, por {p} primas.",
+                 "Les ofrezco {item}, {name}, por {p} primas.",
+                 "Para venderles {item}, {name}, les propongo {p} primas, sin cambiar la pieza."]),
+}
 
 
 def S_use_intel(ctx) -> bool:
@@ -678,8 +684,16 @@ class Haggler:
                 if plan["stuck"] >= 2:  # she stays above what it is worth to us: don't buy, move on
                     self._move_on(th, plan, f"her price {ask} P stays above our limit {plan['hi']} P")
             return
-        texts = BANCO_BUY if dealer.get("id") == "banco" and buy else BANCO_SELL if dealer.get("id") == "banco" else KIND_BUY if buy else KIND_SELL
-        text = texts[(plan["k"] + random.randrange(len(texts))) % len(texts)].format(name=plan.get("name", "Carmen"), p=nxt)
+        # 1) Choose an unused phrasing before cycling; never repeat the previous template when alternatives exist.
+        texts = DEALER_TEXTS.get(dealer.get("id"), (KIND_BUY, KIND_SELL))[0 if buy else 1]
+        used = plan.get("text_templates", [])
+        choices = [i for i in range(len(texts)) if i not in used]
+        if not choices:
+            choices, used = [i for i in range(len(texts)) if i != used[-1]], []
+        text_i = random.choice(choices)
+        item = th.get("item") or ("este sobre" if plan.get("pack") else "esta carta")
+        text = texts[text_i].format(name=plan.get("name", "Carmen"), item=item, p=nxt)
+        if plan["k"] == 0: text = f"Buenas tardes. {text}"
         # the safe band around the rule price: always a new price, never past our cap or her ask
         last_ours = plan["offers"][-1] if plan["offers"] else None
         if buy:
@@ -689,6 +703,7 @@ class Haggler:
             lo_b = max(nxt - 2, plan["lo"], (ask + 1) if ask is not None else plan["lo"])
             hi_b = min(nxt + 2, (last_ours - 1) if last_ours is not None else nxt + 2)
         situation = {
+            "dealer_id": dealer.get("id"), "item_name": item,
             "counterparty": f"{dealer.get('name')} (dealer): {dealer.get('title', '')}", "traits": dealer.get("traits"),
             "bio": (dealer.get("bio") or "")[:400], "we_are": "buying" if buy else "selling",
             "item": th.get("topic"), "list_price": plan.get("list"), "her_latest_ask": ask,
@@ -701,7 +716,8 @@ class Haggler:
         }
         text, nxt, source = ctx.speak(situation, (lo_b, hi_b), (text, nxt)) if lo_b <= hi_b else (text, nxt, "rules")
         if dealer.get("id") == "banco" and not looks_spanish(text):
-            text = texts[(plan["k"] + 1) % len(texts)].format(name="Don Ernesto", p=nxt)
+            text = texts[text_i].format(name="Don Ernesto", item=item, p=nxt)
+            if plan["k"] == 0: text = f"Buenas tardes. {text}"
             source = "rules-es"
         if plan["k"] == 0:  # the first message of a conversation may carry one line of Madrid lore (eggs.py), once ever
             extra = egg_line(ctx.state, dealer.get("id"))
@@ -710,6 +726,7 @@ class Haggler:
                 ctx.log("haggle", "egg_line", dealer=dealer.get("id"), text=extra)
         try:
             ctx.api.say(th["id"], text, price=nxt)
+            if source.startswith("rules"): plan["text_templates"] = used + [text_i]
             plan["offers"].append(nxt)
             plan["k"] += 1
             ctx.log("haggle", "offer", thread=th["id"], price=nxt, ask=ask, k=plan["k"], by=source, text=text[:200])
