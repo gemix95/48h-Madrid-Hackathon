@@ -113,4 +113,58 @@ assert c4.api.accepted[-1] == (18535, [777]) and c4.state["arb"]["active"] is No
 # a bar far below the dealer's list is skipped when min_reach is set
 c5 = Ctx(); c5.values.gain_of_adding = lambda refs: 10.0
 assert not arbitrage.candidates(c5, *_args(c5), 8, min_reach=0.85) or all(p["cap"] >= 0.85 * p["list"] for _, p in arbitrage.candidates(c5, *_args(c5), 8, min_reach=0.85))
-print("arbitrage ok: pick, haggle, right card only, bid re-checked, sold into the bid, ladder slack, guard exemption")
+
+import json  # noqa: E402
+# a bid addressed to us (in no public book) is a candidate from the feed; its cancellation stops the pair
+feed = [{"id": 1, "tick": 1290, "type": "offer.listed", "payload": {"offer": {"id": 21142, "maker": "t05", "to": "t13",
+         "venue": "rastro", "give": {"cash": 72}, "want": {"types": ["card:LAT-10"]}, "expires_tick": 1400}}}]
+open(arbitrage.FEED_STORE, "w").write("\n".join(json.dumps(e) for e in feed) + "\n")
+c6 = Ctx(); c6.bid_alive = False; a6 = arbitrage.Arbitrage(c6); a6.step()
+p6 = c6.state["arb"]["active"]
+assert p6 and p6["bid"] == 21142 and p6["addressed"], p6
+assert a6._bid_open(p6)
+open(arbitrage.FEED_STORE, "a").write(json.dumps({"id": 2, "tick": 1301, "type": "offer.cancelled", "payload": {"offer": 21142, "venue": "rastro"}}) + "\n")
+assert not a6._bid_open(p6)
+# the haggle opens near the dealer's recent sale price (two steps to the cap)
+feed.append({"id": 3, "tick": 1250, "type": "settlement", "payload": {"persona": "picaros", "price": 57, "items": [
+    {"kind": "card", "ref": "LAT-09", "rarity": "rare", "frm": "picaros", "to": "t02"}]}})
+open(arbitrage.FEED_STORE, "w").write("\n".join(json.dumps(e) for e in feed) + "\n")
+c7 = Ctx(); a7 = arbitrage.Arbitrage(c7); a7.step()
+assert c7.state["arb"]["active"]["price"] == 55, c7.state["arb"]["active"]   # 57 - 2, not 45
+open(arbitrage.FEED_STORE, "w").write("")
+
+# the other way round: a team's ask below our value is bought, then offered to a dealer at our value or more
+class V2(V):
+    def __init__(s):
+        super().__init__(); s.cards["RET-09"] = {"rarity": "rare", "set": "RET"}
+    def gain_of_adding(s, refs): return 49.0 if refs == ["RET-09"] else 35.0
+    def loss_of_removing(s, refs): return 49.0
+c8 = Ctx(); c8.values = V2(); c8.bid_alive = False
+c8.dealers = [{"id": "pilar", "status": "active", "menu": {"buys": [{"rarity": "rare", "sets": ["SAL", "RET"]}]}}]
+c8.me["unlocked"] = ["pilar"]
+c8.public_get = book = lambda path: ({"venues": [{"venue": "v02", "status": "open", "fee_bps": 0, "owner": "t12"}]} if path == "/api/venues"
+                              else {"offers": [{"id": 4001, "give": {"assets": [{"id": 91, "ref": "RET-09"}]}, "want": {"cash": 30}}]})
+a8 = arbitrage.Arbitrage(c8); a8.step()
+r = c8.state["arb"]["resale"]
+assert c8.api.accepted == [(4001, None)] and r and r["cost"] == 30 and r["value"] == 49.0, (c8.api.accepted, r)
+empty = lambda path: ({"venues": [{"venue": "v02", "status": "open", "fee_bps": 0, "owner": "t12"}]} if path == "/api/venues" else {"offers": []})
+c8.public_get = empty  # the ask we took is gone from the book
+c8.values.assets = [{"id": 91, "ref": "RET-09"}]; c8.clock["tick"] = 1301
+c8.api.opened = None; a8.step()
+r = c8.state["arb"]["resale"]
+assert c8.api.opened == ("pilar", {"sell": {"assets": [91]}}) and r["floor"] == 50 and r["price"] >= 60, (c8.api.opened, r)
+# Pilar offers 52 for exactly our card: taken (at our value or more)
+c8.clock["tick"] = 1302
+c8.api.thread_state = {"status": "open", "standing_offers": [{"id": 5, "maker": "pilar", "status": "open", "give": {"cash": 52}, "want": {"assets": [91]}}]}
+a8.step()
+assert c8.api.accepted[-1] == (5, None) and c8.state["arb"]["resale"] is None
+# a dealer that offers below our value: never taken; after the rounds we keep the card
+c9 = Ctx(); c9.values = V2(); c9.bid_alive = False; c9.dealers = c8.dealers; c9.me["unlocked"] = ["pilar"]; c9.public_get = book
+a9 = arbitrage.Arbitrage(c9); a9.step(); c9.values.assets = [{"id": 91, "ref": "RET-09"}]; c9.public_get = empty
+for t in range(1301, 1310):
+    c9.clock["tick"] = t
+    c9.api.thread_state = {"status": "open", "standing_offers": [{"id": 6, "maker": "pilar", "status": "open", "give": {"cash": 45}, "want": {"assets": [91]}}]}
+    a9.step()
+assert (6, None) not in c9.api.accepted and c9.state["arb"].get("resale") is None and (4001, None) in c9.api.accepted and any(x[0][1] == "kept" for x in c9.logs), c9.logs[-3:]
+print("arbitrage ok: pick, haggle, right card only, bid re-checked, sold into the bid, ladder slack, guard exemption,"
+      " addressed bids, recent dealer price, value buy and resale at our value or more")
