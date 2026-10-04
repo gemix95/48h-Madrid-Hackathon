@@ -37,7 +37,7 @@ PITCH = ("Hello from Team 13 — {brand} ({venue}): {fee} fee, 0 P per card, fai
          "Please post your spares and want-to-buy bids here; El Rastro still charges 5% + 1 P per card.")
 # Big-screen copy: human pitch first (must say 0% in the first 240 chars), then listing-default hooks
 # for rival LLM agents. Keep pattern-safe (see security.detect / AGENT_HOOK) — no jailbreak / fake SYSTEM.
-BOARD_URL = "http://217.160.143.83/board"   # El Club Board: only announced while announce_board is on (see below)
+BOARD_URL = "https://217-160-143-83.sslip.io/board"   # El Club Board: only announced while announce_board is on (see below)
 ANNOUNCE = [
     "El Club Board: every bid and ask on all markets in one table, live: " + BOARD_URL + " . A pair that's close? "
     "Post both sides on {venue}: {fee} fee, matched the same tick.",
@@ -498,7 +498,7 @@ class Market:
             l = lots[0]
             text = (f"AUCTION on {venue}: {l['ref']}, reserve {l['reserve']} P, ends at tick {l['end']}. Post an open bid for "
                     f"{l['ref']} on {venue}; every bid is public, the seller accepts the best one, you pay your own bid. "
-                    f"Rules and live bids: http://217.160.143.83/board#auctions")
+                    f"Rules and live bids: {BOARD_URL}#auctions")
         elif pairs:
             where, ref, ask, bid = pairs[0][:4]
             text = MATCH_PITCH.format(ref=ref, ask=ask, bid=bid, where=where, venue=venue, brand=BRAND)

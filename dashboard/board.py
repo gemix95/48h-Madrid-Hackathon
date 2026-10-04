@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 import history
 
 API = "https://bazaar.causaprima.ai"
+PUBLIC = "https://217-160-143-83.sslip.io"  # this page's public address (https: link previews, the auction call)
 HIST = history.History()  # trade prices per card, from the public feed
 URL = "$BAZAAR_URL"  # in the copied calls: the kit's variable, next to $BAZAAR_KEY, keeps them short
 ME = "t13"
@@ -413,7 +414,7 @@ def _auctions_html(data, vid):
              else '<div class="box dim">No open lot right now. Be the first: auction a card below.</div>')
     results = (f'<h3>Results</h3><div class="wrap"><table class="deck lots">{head}<tbody>{"".join(done)}</tbody></table></div>' if done else "")
     how = (f"Auction a card on {vid}: one call, no ask, the card stays with you until you accept a bid.\n\n"
-           f'curl "http://217.160.143.83/board/auction?card=CARD_ID&reserve=RESERVE&ticks=30&seller=YOUR_TEAM_ID"\n\n'
+           f'curl "{PUBLIC}/board/auction?card=CARD_ID&reserve=RESERVE&ticks=30&seller=YOUR_TEAM_ID"\n\n'
            f"CARD_ID like LAT-10; RESERVE = the least you accept; ticks 8 to 60 (30 ticks = 7.5 minutes); "
            f"YOUR_TEAM_ID like t07.\n\nWhen it closes, accept the best bid still on the book within {grace} ticks:\n\n"
            f'curl -X POST $BAZAAR_URL/api/offers/OFFER_ID/accept -H "X-Team-Key: $BAZAAR_KEY" '
@@ -518,8 +519,8 @@ def render(data: dict) -> str:
 <meta property="og:type" content="website"><meta property="og:site_name" content="El Club · Team 13">
 <meta property="og:title" content="El Club Board: every card at its best price">
 <meta property="og:description" content="Buy or sell any card in 1 click. 0% fee, live prices, 🔥 deals, auctions.">
-<meta property="og:url" content="http://217.160.143.83/board">
-<meta property="og:image" content="http://217.160.143.83/board/og.jpg"><meta property="og:image:type" content="image/jpeg">
+<meta property="og:url" content="{PUBLIC}/board">
+<meta property="og:image" content="{PUBLIC}/board/og.jpg"><meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#1b0c22">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

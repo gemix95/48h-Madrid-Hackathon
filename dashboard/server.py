@@ -469,6 +469,14 @@ def board_loop():
         time.sleep(15)  # a Sunday tick is 15 s
 
 
+class _Sink:
+    def write(self, b):
+        return len(b)
+
+    def flush(self):
+        pass
+
+
 class Handler(BaseHTTPRequestHandler):
     def _public_board(self) -> bool:
         """/board and /board.json are public (no password): public market data only."""
@@ -557,6 +565,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
         return False
+
+    def do_HEAD(self):
+        """Link-preview crawlers (WhatsApp, Slack, ...) may ask HEAD first: answer as GET, headers only."""
+        self._head_only = True
+        self.do_GET()
+
+    def end_headers(self):
+        super().end_headers()
+        if getattr(self, "_head_only", False):
+            self.wfile = _Sink()  # the body of a HEAD reply is dropped
 
     def do_GET(self):
         if self._public_board():
