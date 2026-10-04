@@ -96,6 +96,9 @@ KNOBS = {
                         "Boulware-style up to the cap, reaching it at the round this dealer usually names its final (every team's conversations)."),
     "flag_bluffs_picaros": (1, 0, 1, 1, "Dealers", "Flag Los Pícaros' false finals",
                             "They are announced as bad faith: a price called final and beaten later in the same thread is flagged."),
+    "ladder_mode": (0, 0, 1, 1, "Dealers", "Price dealer deals for the ladder, not our values",
+                    "RULES: a dealer deal scores the share of the dealer's price range captured; our values count only in "
+                    "team trades. On: dealer items are valued at list price (open 40%, cap 85% of list) and sales have no value floor."),
     "ladder_max_deals": (6, 3, 12, 1, "Dealers", "Ladder sales per dealer (level 3+)",
                          "The ladder keeps the best three deals per level: more sales only help if they are priced better."),
     "abuela_visits": (1, 0, 1, 1, "Dealers", "Abuela gift visits",

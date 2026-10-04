@@ -99,5 +99,17 @@ results.append(check("the skipped sale is still logged", any(a == ("haggle", "sa
 results.append(check("and the purchase stays under 85% of our value",
                      choice is not None and choice[1]["hi"] <= math.floor(choice[1]["worth"] * 0.85), choice and choice[1]))
 
+# 5) ladder mode: a dealer deal scores her range, not our value (RULES): the page card may go to Pilar, and a purchase
+#    is valued at list price (cap 85% of list), never at our own value
+ctx = Ctx(me(), ladder_mode=1)
+choice = Haggler(ctx).choose_topic(PILAR)
+results.append(check("ladder mode: a ladder sale opens without our value floor", choice is not None and choice[1]["side"] == "sell"
+                     and choice[1]["lo"] < cost, choice and choice[1]))
+ctx = Ctx(me(), ladder_mode=1, haggle_buy_cards=1)
+ctx.values, ctx.catalog = Values(CATALOG2, ctx.me), CATALOG2
+plan = Haggler(ctx).choose_topic({**PILAR2, "menu": {**PILAR2["menu"], "buys": []}})[1]
+results.append(check("ladder mode: a purchase is capped at 85% of list", plan["side"] == "buy" and plan["hi"] <= math.floor(10 * 0.85)
+                     and plan["worth"] == 10, plan))
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

@@ -169,9 +169,19 @@ class Haggler:
         allowed = [x.strip().upper() for x in os.environ.get("AGENT_SELL", "").split(",") if x.strip()]
         return not allowed or any(ref.upper() == x or ref.upper().startswith(x + "-") for x in allowed)
 
+    def _ladder_mode(self) -> bool:
+        """ladder_mode = 1: price dealer deals for the ladder, not for our values. RULES.md (Scoring): a dealer deal
+        scores the share of that dealer's price range we capture (best three per level, higher levels weigh more);
+        our private values only count in trades with other teams, and collections never score. Sunday 12:50: the
+        CHA-09 buy at Pícaros (52 P, worth 15.8 P to the game) lifted ladder 0.137 -> 0.199 and negotiating 18.6 -> 19.5."""
+        return bool(self.ctx.S.get("ladder_mode", 0))
+
     def _sell_floor(self, ref: str) -> int:
         """Least price for selling one copy of `ref`: what giving it up costs us at our private values (page bonus and
-        the near-complete page option included) plus sell_min_gain. Nothing may sell below it."""
+        the near-complete page option included) plus sell_min_gain. Nothing may sell below it.
+        In ladder mode a sale scores by the dealer's range, not our value: the floor is the range itself (her offers)."""
+        if self._ladder_mode():
+            return 1
         return math.ceil(self.ctx.values.loss_of_removing([ref]) + self.ctx.S.get("sell_min_gain", 3))
 
     def _counts(self, dealer: str) -> dict:
@@ -203,6 +213,8 @@ class Haggler:
                         if ctx.values.cards[ref]["rarity"] == s["rarity"] and (best is None or gain > best[2]):
                             best = (s, ref, gain)
             # the welcome price is ~70% of list: a bargain worth more than the per-item cap, but never past today's budget
+            if best and self._ladder_mode():  # the ladder scores her range: value the item at its list price
+                best = (best[0], best[1], float(best[0].get("list_price", 10)))
             if best and best[0].get("list_price", 99) * 0.75 <= min(cash, ctx.budget_left(), self._value_band(best[2])[1]):
                 s, ref, gain = best
                 return {"buy": {"card": ref}}, {"side": "buy", "key": f"{dealer['id']}:buy:{s['rarity']}", "lo": 1,
@@ -225,6 +237,8 @@ class Haggler:
                 hi = min(math.floor((s.get("list_price") or s.get("opening_ask", 30)) * S["haggle_cap"]), cash, item_cap)
                 pack = next((p for p in (getattr(ctx, "catalog", None) or {}).get("packs", []) if p["id"] == s["pack"]), None)
                 worth = ctx.values.pack_ev(pack) if pack else 0.0  # expected value at our values: the contents are luck
+                if self._ladder_mode():  # the ladder scores her range: value the pack at its list price
+                    worth = float(s.get("list_price") or s.get("opening_ask", 30))
                 v_lo, v_hi = self._value_band(worth)
                 if pack:  # not worth it for us above its value: don't buy, move on
                     hi = min(hi, math.floor(worth - S["trade_min_gain"]), v_hi)
@@ -294,6 +308,8 @@ class Haggler:
                 for ref, gain in ctx.values.wishlist(limit=40):
                     if ctx.values.cards[ref]["rarity"] != s["rarity"]:
                         continue
+                    if self._ladder_mode():  # the ladder scores her range: value the card at its list price
+                        gain = float(s.get("list_price", 10))
                     v_lo, v_hi = self._value_band(gain)
                     # Pay up to what it is worth. trade_min_gain is for team trades; a dealer buy scores
                     # on the ladder, and the best Chato rare (77) is exactly a Lavapiés rare's value.
