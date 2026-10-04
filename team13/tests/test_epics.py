@@ -220,5 +220,18 @@ c.clock["tick"] += epics.FILL_WAIT + 1
 m.step()
 r.append(check("then the ask is taken", 77 in c.api.accepted))
 
+# a dealer offer that also wants one of our cards is never taken, whatever its cash
+c = Ctx()
+c.give("MAL-11"); c.give("LAV-11")
+c.me["cash"] = 220  # no team bid: Picaros for SAL-11
+m = epics.Epics(c)
+m.step()
+h = c.state["epics"]["haggle"]
+c.api.threads[h["thread"]]["standing_offers"] = [{"id": 666, "maker": "picaros", "status": "open", "final": True,
+    "give": {"types": ["card:SAL-11"]}, "want": {"cash": 120, "types": ["card:MAL-11"]}}]
+c.clock["tick"] += 1
+m.step()
+r.append(check("offer wanting cash + our card refused", 666 not in c.api.accepted, c.api.accepted))
+
 print("epics ok" if all(r) else "EPICS FAILED")
 sys.exit(0 if all(r) else 1)

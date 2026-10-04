@@ -733,6 +733,8 @@ class Haggler:
         given += [a.get("ref") for a in g.get("assets") or [] if isinstance(a, dict)]
         if want_card and given != [want_card]:
             return f"offer gives {given or 'no card'}, the thread is for {want_card}"
+        if topic.get("buy") and (w.get("assets") or w.get("types") or w.get("cards")):
+            return f"a purchase that also wants {w.get('assets') or w.get('types') or w.get('cards')} from us: cash only"
         ours = set((topic.get("sell") or {}).get("assets") or [])
         asked = {a.get("id") if isinstance(a, dict) else a for a in w.get("assets") or []}
         if topic.get("sell") and (not asked or not asked <= ours):

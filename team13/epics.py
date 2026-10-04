@@ -260,7 +260,9 @@ class Epics:
             g = o.get("give") or {}
             given = [x[5:] for x in g.get("types") or [] if x.startswith("card:")] + \
                     [x.get("ref") for x in g.get("assets") or [] if isinstance(x, dict)]
-            ask = (o.get("want") or {}).get("cash")
+            w = o.get("want") or {}
+            # cash only: a trickster's offer that also wants one of our cards (or anything else) is never taken
+            ask = w.get("cash") if not (w.get("assets") or w.get("types") or w.get("cards")) else None
             # take it inside our cap once it is close to our own price, or when the talk has run long
             near = ask is not None and (ask <= h["price"] * 1.06 + 2 or h["rounds"] >= 4 or o.get("final"))
             if given == [h["ref"]] and ask is not None and ask <= h["cap"] and near and ctx.take_accept():

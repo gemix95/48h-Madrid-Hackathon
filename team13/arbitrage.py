@@ -189,7 +189,8 @@ class Arbitrage:
             if o:
                 g = o.get("give") or {}
                 given = [x[5:] for x in g.get("types") or [] if x.startswith("card:")] + [x.get("ref") for x in g.get("assets") or [] if isinstance(x, dict)]
-                ask = (o.get("want") or {}).get("cash")
+                w = o.get("want") or {}
+                ask = w.get("cash") if not (w.get("assets") or w.get("types") or w.get("cards")) else None  # cash only
                 if given == [a["ref"]] and ask is not None and ask <= a["cap"] and ctx.take_accept():
                     if not self._bid_open(a):  # the buyer left: do not buy a card we only wanted to pass on
                         ctx.log("arb", "bid_gone_before_buy", ref=a["ref"], bid=a["bid"])
